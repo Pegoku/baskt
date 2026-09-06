@@ -1,0 +1,918 @@
+{
+  "page" : {
+    "size" : 8,
+    "totalElements" : 66,
+    "totalPages" : 9,
+    "number" : 0
+  },
+  "products" : [ {
+    "webshopId" : 450534,
+    "hqId" : 569053,
+    "title" : "AH Houdbare halfvolle melk",
+    "salesUnitSize" : "1 l",
+    "unitPriceDescription" : "prijs per liter €0.85",
+    "images" : [ {
+      "width" : 800,
+      "height" : 800,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130313930353335?revLabel=1&rendition=800x800_WEBP&fileType=binary"
+    }, {
+      "width" : 400,
+      "height" : 400,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130313930353335?revLabel=1&rendition=400x400_WEBP&fileType=binary"
+    }, {
+      "width" : 200,
+      "height" : 200,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130313930353335?revLabel=1&rendition=200x200_WEBP&fileType=binary"
+    }, {
+      "width" : 48,
+      "height" : 48,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130313930353335?revLabel=1&rendition=48x48_GIF&fileType=binary"
+    }, {
+      "width" : 80,
+      "height" : 80,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130313930353335?revLabel=1&rendition=80x80_JPG&fileType=binary"
+    } ],
+    "bonusStartDate" : null,
+    "bonusEndDate" : null,
+    "discountType" : null,
+    "segmentType" : null,
+    "promotionType" : null,
+    "bonusMechanism" : null,
+    "currentPrice" : null,
+    "priceBeforeBonus" : 0.85,
+    "orderAvailabilityStatus" : "IN_ASSORTMENT",
+    "orderAvailabilityDescription" : null,
+    "mainCategory" : "Zuivel, eieren",
+    "subCategory" : "Houdbare melk",
+    "brand" : "AH",
+    "shopType" : "AH",
+    "bonusPeriodDescription" : null,
+    "availableOnline" : true,
+    "isPreviouslyBought" : false,
+    "descriptionHighlights" : "<p>Houdbare halfvolle melk van 100% weidemelk, want de lekkerste melk komt van de gelukkigste koeien.</p><p><ul><li>Bevat calcium</li><li>Hersluitbaar</li><li>Prijsfavorieten: topkwaliteit en altijd laaggeprijsd</li></ul></p>",
+    "propertyIcons" : [ "goedkoopje", "vega" ],
+    "stickers" : null,
+    "nutriscore" : "B",
+    "nix18" : false,
+    "isStapelBonus" : false,
+    "extraDescriptions" : [ ],
+    "bonusSegmentId" : null,
+    "bonusSegmentDescription" : null,
+    "isBonus" : false,
+    "hasListPrice" : null,
+    "descriptionFull" : "<p>  Deze albert heijn zuivel is voor 100% afkomstig van koeien die minimaal 120 dagen per jaar, 6 uur per dag in de wei lopen. De weidegang geeft koeien meer bewegingsruimte en in de wei hebben de koeien ruimte voor hun natuurlijke graasgedrag. </p><p>Dit product is een Prijsfavoriet. Dat zijn onze eigen-merkproducten van topkwaliteit en ze zijn altijd voordelig. Je herkent ze aan het blauwe duimpje.</p>",
+    "isOrderable" : true,
+    "isInfiniteBonus" : false,
+    "isSample" : false,
+    "isBonusPrice" : null,
+    "isSponsored" : false,
+    "auctionId" : null,
+    "isVirtualBundle" : false,
+    "virtualBundleItems" : null,
+    "productCount" : null,
+    "multipleItemPromotion" : null,
+    "labelType" : null,
+    "discountLabels" : [ ],
+    "isFavorite" : null,
+    "externalWebshopUrl" : null,
+    "minBestBeforeDays" : null,
+    "medicalDeviceTypeCode" : null,
+    "medicineTypeCode" : null
+  }, {
+    "webshopId" : 609411,
+    "hqId" : 0,
+    "title" : "Campina Langlekker halfvolle melk 8-pack",
+    "salesUnitSize" : "8 stuks",
+    "unitPriceDescription" : null,
+    "images" : [ {
+      "width" : 800,
+      "height" : 800,
+      "url" : "https://static.ah.nl/dam/product/AHI_5a305768657149625341475f5232344e676e37306f51?revLabel=1&rendition=800x800_WEBP&fileType=binary"
+    }, {
+      "width" : 400,
+      "height" : 400,
+      "url" : "https://static.ah.nl/dam/product/AHI_5a305768657149625341475f5232344e676e37306f51?revLabel=1&rendition=400x400_WEBP&fileType=binary"
+    }, {
+      "width" : 200,
+      "height" : 200,
+      "url" : "https://static.ah.nl/dam/product/AHI_5a305768657149625341475f5232344e676e37306f51?revLabel=1&rendition=200x200_WEBP&fileType=binary"
+    }, {
+      "width" : 48,
+      "height" : 48,
+      "url" : "https://static.ah.nl/dam/product/AHI_5a305768657149625341475f5232344e676e37306f51?revLabel=1&rendition=48x48_GIF&fileType=binary"
+    }, {
+      "width" : 80,
+      "height" : 80,
+      "url" : "https://static.ah.nl/dam/product/AHI_5a305768657149625341475f5232344e676e37306f51?revLabel=1&rendition=80x80_JPG&fileType=binary"
+    } ],
+    "bonusStartDate" : "2026-09-06",
+    "bonusEndDate" : "2999-12-31",
+    "discountType" : "AHOO",
+    "segmentType" : "AHOO",
+    "promotionType" : "AHONLINE",
+    "bonusMechanism" : "10% volume voordeel",
+    "currentPrice" : 12.89,
+    "priceBeforeBonus" : 14.32,
+    "orderAvailabilityStatus" : "IN_ASSORTMENT",
+    "orderAvailabilityDescription" : null,
+    "mainCategory" : "Zuivel, eieren",
+    "subCategory" : "Houdbare melk",
+    "brand" : "Campina",
+    "shopType" : "AH",
+    "bonusPeriodDescription" : "",
+    "availableOnline" : true,
+    "isPreviouslyBought" : false,
+    "descriptionHighlights" : "<p><ul><li>Campina Langlekker halfvolle melk 8x</li></ul></p>",
+    "propertyIcons" : [ ],
+    "stickers" : null,
+    "nutriscore" : null,
+    "nix18" : false,
+    "isStapelBonus" : false,
+    "extraDescriptions" : [ ],
+    "bonusSegmentId" : null,
+    "bonusSegmentDescription" : "",
+    "isBonus" : true,
+    "hasListPrice" : false,
+    "descriptionFull" : "Dit pakket wordt als losse artikelen geleverd.",
+    "isOrderable" : true,
+    "isInfiniteBonus" : false,
+    "isSample" : false,
+    "isBonusPrice" : true,
+    "isSponsored" : false,
+    "auctionId" : null,
+    "isVirtualBundle" : true,
+    "virtualBundleItems" : [ {
+      "productId" : 469397,
+      "quantity" : 8
+    } ],
+    "productCount" : null,
+    "multipleItemPromotion" : false,
+    "labelType" : "ONLINE",
+    "discountLabels" : [ {
+      "code" : "DISCOUNT_BUNDLE_BULK",
+      "defaultDescription" : "10% volume voordeel",
+      "amount" : null,
+      "deliveryType" : null,
+      "count" : null,
+      "freeCount" : null,
+      "actualCount" : null,
+      "price" : null,
+      "percentage" : 10,
+      "unit" : null,
+      "precisePercentage" : 10
+    } ],
+    "isFavorite" : null,
+    "externalWebshopUrl" : null,
+    "minBestBeforeDays" : null,
+    "medicalDeviceTypeCode" : null,
+    "medicineTypeCode" : null
+  }, {
+    "webshopId" : 609662,
+    "hqId" : 0,
+    "title" : "Arla Biologisch halfvolle melk 4-pack",
+    "salesUnitSize" : "4 stuks",
+    "unitPriceDescription" : null,
+    "images" : [ {
+      "width" : 800,
+      "height" : 800,
+      "url" : "https://static.ah.nl/dam/product/AHI_725a76787157334a52695358434b746a384b35425667?revLabel=1&rendition=800x800_WEBP&fileType=binary"
+    }, {
+      "width" : 400,
+      "height" : 400,
+      "url" : "https://static.ah.nl/dam/product/AHI_725a76787157334a52695358434b746a384b35425667?revLabel=1&rendition=400x400_WEBP&fileType=binary"
+    }, {
+      "width" : 200,
+      "height" : 200,
+      "url" : "https://static.ah.nl/dam/product/AHI_725a76787157334a52695358434b746a384b35425667?revLabel=1&rendition=200x200_WEBP&fileType=binary"
+    }, {
+      "width" : 48,
+      "height" : 48,
+      "url" : "https://static.ah.nl/dam/product/AHI_725a76787157334a52695358434b746a384b35425667?revLabel=1&rendition=48x48_GIF&fileType=binary"
+    }, {
+      "width" : 80,
+      "height" : 80,
+      "url" : "https://static.ah.nl/dam/product/AHI_725a76787157334a52695358434b746a384b35425667?revLabel=1&rendition=80x80_JPG&fileType=binary"
+    } ],
+    "bonusStartDate" : "2026-09-06",
+    "bonusEndDate" : "2999-12-31",
+    "discountType" : "AHOO",
+    "segmentType" : "AHOO",
+    "promotionType" : "AHONLINE",
+    "bonusMechanism" : "10% volume voordeel",
+    "currentPrice" : 6.44,
+    "priceBeforeBonus" : 7.16,
+    "orderAvailabilityStatus" : "IN_ASSORTMENT",
+    "orderAvailabilityDescription" : null,
+    "mainCategory" : "Zuivel, eieren",
+    "subCategory" : "Halfvolle melk",
+    "brand" : "Arla",
+    "shopType" : "AH",
+    "bonusPeriodDescription" : "",
+    "availableOnline" : true,
+    "isPreviouslyBought" : false,
+    "descriptionHighlights" : "<p><ul><li>Arla Biologisch halfvolle melk 4x</li></ul></p>",
+    "propertyIcons" : [ ],
+    "stickers" : null,
+    "nutriscore" : null,
+    "nix18" : false,
+    "isStapelBonus" : false,
+    "extraDescriptions" : [ ],
+    "bonusSegmentId" : null,
+    "bonusSegmentDescription" : "",
+    "isBonus" : true,
+    "hasListPrice" : false,
+    "descriptionFull" : "Dit pakket wordt als losse artikelen geleverd.",
+    "isOrderable" : true,
+    "isInfiniteBonus" : false,
+    "isSample" : false,
+    "isBonusPrice" : true,
+    "isSponsored" : false,
+    "auctionId" : null,
+    "isVirtualBundle" : true,
+    "virtualBundleItems" : [ {
+      "productId" : 168925,
+      "quantity" : 4
+    } ],
+    "productCount" : null,
+    "multipleItemPromotion" : false,
+    "labelType" : "ONLINE",
+    "discountLabels" : [ {
+      "code" : "DISCOUNT_BUNDLE_BULK",
+      "defaultDescription" : "10% volume voordeel",
+      "amount" : null,
+      "deliveryType" : null,
+      "count" : null,
+      "freeCount" : null,
+      "actualCount" : null,
+      "price" : null,
+      "percentage" : 10,
+      "unit" : null,
+      "precisePercentage" : 10
+    } ],
+    "isFavorite" : null,
+    "externalWebshopUrl" : null,
+    "minBestBeforeDays" : null,
+    "medicalDeviceTypeCode" : null,
+    "medicineTypeCode" : null
+  }, {
+    "webshopId" : 1525,
+    "hqId" : 11943,
+    "title" : "AH Halfvolle melk",
+    "salesUnitSize" : "1 l",
+    "unitPriceDescription" : "prijs per liter €1.29",
+    "images" : [ {
+      "width" : 800,
+      "height" : 800,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130303337393339?revLabel=1&rendition=800x800_WEBP&fileType=binary"
+    }, {
+      "width" : 400,
+      "height" : 400,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130303337393339?revLabel=1&rendition=400x400_WEBP&fileType=binary"
+    }, {
+      "width" : 200,
+      "height" : 200,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130303337393339?revLabel=1&rendition=200x200_WEBP&fileType=binary"
+    }, {
+      "width" : 48,
+      "height" : 48,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130303337393339?revLabel=1&rendition=48x48_GIF&fileType=binary"
+    }, {
+      "width" : 80,
+      "height" : 80,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130303337393339?revLabel=1&rendition=80x80_JPG&fileType=binary"
+    } ],
+    "bonusStartDate" : null,
+    "bonusEndDate" : null,
+    "discountType" : null,
+    "segmentType" : null,
+    "promotionType" : null,
+    "bonusMechanism" : null,
+    "currentPrice" : null,
+    "priceBeforeBonus" : 1.29,
+    "orderAvailabilityStatus" : "IN_ASSORTMENT",
+    "orderAvailabilityDescription" : null,
+    "mainCategory" : "Zuivel, eieren",
+    "subCategory" : "Halfvolle melk",
+    "brand" : "AH",
+    "shopType" : "AH",
+    "bonusPeriodDescription" : null,
+    "availableOnline" : true,
+    "isPreviouslyBought" : false,
+    "descriptionHighlights" : "<p>Verse halfvolle melk voor iedere dag. Een natuurlijke bron van calcium.</p><p><ul><li>Weidemelk keurmerk: koeien die minimaal 120 dagen, 6 uur per dag in de wei lopen</li><li>Lekker met ontbijtgranen</li></ul></p>",
+    "propertyIcons" : [ "vega", "lokaal" ],
+    "stickers" : null,
+    "nutriscore" : "B",
+    "nix18" : false,
+    "isStapelBonus" : false,
+    "extraDescriptions" : [ ],
+    "bonusSegmentId" : null,
+    "bonusSegmentDescription" : null,
+    "isBonus" : false,
+    "hasListPrice" : null,
+    "descriptionFull" : "",
+    "isOrderable" : true,
+    "isInfiniteBonus" : false,
+    "isSample" : false,
+    "isBonusPrice" : null,
+    "isSponsored" : false,
+    "auctionId" : null,
+    "isVirtualBundle" : false,
+    "virtualBundleItems" : null,
+    "productCount" : null,
+    "multipleItemPromotion" : null,
+    "labelType" : null,
+    "discountLabels" : [ ],
+    "isFavorite" : null,
+    "externalWebshopUrl" : null,
+    "minBestBeforeDays" : null,
+    "medicalDeviceTypeCode" : null,
+    "medicineTypeCode" : null
+  }, {
+    "webshopId" : 382907,
+    "hqId" : 842195,
+    "title" : "AH Biologisch Halfvolle melk",
+    "salesUnitSize" : "1,5 l",
+    "unitPriceDescription" : "prijs per liter €1.30",
+    "images" : [ {
+      "width" : 800,
+      "height" : 800,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130313836303331?revLabel=1&rendition=800x800_WEBP&fileType=binary"
+    }, {
+      "width" : 400,
+      "height" : 400,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130313836303331?revLabel=1&rendition=400x400_WEBP&fileType=binary"
+    }, {
+      "width" : 200,
+      "height" : 200,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130313836303331?revLabel=1&rendition=200x200_WEBP&fileType=binary"
+    }, {
+      "width" : 48,
+      "height" : 48,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130313836303331?revLabel=1&rendition=48x48_GIF&fileType=binary"
+    }, {
+      "width" : 80,
+      "height" : 80,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130313836303331?revLabel=1&rendition=80x80_JPG&fileType=binary"
+    } ],
+    "bonusStartDate" : null,
+    "bonusEndDate" : null,
+    "discountType" : null,
+    "segmentType" : null,
+    "promotionType" : null,
+    "bonusMechanism" : null,
+    "currentPrice" : null,
+    "priceBeforeBonus" : 1.95,
+    "orderAvailabilityStatus" : "IN_ASSORTMENT",
+    "orderAvailabilityDescription" : null,
+    "mainCategory" : "Zuivel, eieren",
+    "subCategory" : "Halfvolle melk",
+    "brand" : "AH Biologisch",
+    "shopType" : "AH",
+    "bonusPeriodDescription" : null,
+    "availableOnline" : true,
+    "isPreviouslyBought" : false,
+    "descriptionHighlights" : "<p>Een lekker glas koude halfvolle melk voor ieder moment van de dag.</p><p><ul><li>Melk van koeien die grazen op weilanden en biologisch voer krijgen</li><li>Om zo te drinken maar ook voor toetjes, bij het bakken of voor havermout</li><li>Voor het hele gezin</li><li>Een lekkere dorstlesser</li></ul></p>",
+    "propertyIcons" : [ "vega", "lokaal", "biologisch" ],
+    "stickers" : null,
+    "nutriscore" : "B",
+    "nix18" : false,
+    "isStapelBonus" : false,
+    "extraDescriptions" : [ ],
+    "bonusSegmentId" : null,
+    "bonusSegmentDescription" : null,
+    "isBonus" : false,
+    "hasListPrice" : null,
+    "descriptionFull" : "<p> Neem het ervan en geniet van het lekkerste dat de natuur te bieden heeft. Van onze biologische producten kun je met een goed gevoel genieten dankzij de aandacht en inspanning van de boeren en producenten die ze voor ons maken. Natuurlijk worden al onze biologische producten onafhankelijk gecontroleerd en daarom verdienen ze het Europese keurmerk. Biologisch van Albert Heijn: dat smaakt naar meer!  </p>",
+    "isOrderable" : true,
+    "isInfiniteBonus" : false,
+    "isSample" : false,
+    "isBonusPrice" : null,
+    "isSponsored" : false,
+    "auctionId" : null,
+    "isVirtualBundle" : false,
+    "virtualBundleItems" : null,
+    "productCount" : null,
+    "multipleItemPromotion" : null,
+    "labelType" : null,
+    "discountLabels" : [ ],
+    "isFavorite" : null,
+    "externalWebshopUrl" : null,
+    "minBestBeforeDays" : 6,
+    "medicalDeviceTypeCode" : null,
+    "medicineTypeCode" : null
+  }, {
+    "webshopId" : 33693,
+    "hqId" : 92154,
+    "title" : "AH Halfvolle melk",
+    "salesUnitSize" : "1,5 l",
+    "unitPriceDescription" : "prijs per liter €1.19",
+    "images" : [ {
+      "width" : 800,
+      "height" : 800,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130303337393338?revLabel=1&rendition=800x800_WEBP&fileType=binary"
+    }, {
+      "width" : 400,
+      "height" : 400,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130303337393338?revLabel=1&rendition=400x400_WEBP&fileType=binary"
+    }, {
+      "width" : 200,
+      "height" : 200,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130303337393338?revLabel=1&rendition=200x200_WEBP&fileType=binary"
+    }, {
+      "width" : 48,
+      "height" : 48,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130303337393338?revLabel=1&rendition=48x48_GIF&fileType=binary"
+    }, {
+      "width" : 80,
+      "height" : 80,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130303337393338?revLabel=1&rendition=80x80_JPG&fileType=binary"
+    } ],
+    "bonusStartDate" : null,
+    "bonusEndDate" : null,
+    "discountType" : null,
+    "segmentType" : null,
+    "promotionType" : null,
+    "bonusMechanism" : null,
+    "currentPrice" : null,
+    "priceBeforeBonus" : 1.79,
+    "orderAvailabilityStatus" : "IN_ASSORTMENT",
+    "orderAvailabilityDescription" : null,
+    "mainCategory" : "Zuivel, eieren",
+    "subCategory" : "Halfvolle melk",
+    "brand" : "AH",
+    "shopType" : "AH",
+    "bonusPeriodDescription" : null,
+    "availableOnline" : true,
+    "isPreviouslyBought" : false,
+    "descriptionHighlights" : "<p>Een koud glas halfvolle melk is op elk moment van de dag heerlijk. En ook nog eens heel gezond.</p><p><ul><li>Gezond</li><li>Vers</li><li>Lekker op elk moment v/d dag</li></ul></p>",
+    "propertyIcons" : [ "vega", "lokaal" ],
+    "stickers" : null,
+    "nutriscore" : "B",
+    "nix18" : false,
+    "isStapelBonus" : false,
+    "extraDescriptions" : [ ],
+    "bonusSegmentId" : null,
+    "bonusSegmentDescription" : null,
+    "isBonus" : false,
+    "hasListPrice" : null,
+    "descriptionFull" : "<p> halfvolle melk zit vol voedingstoffen die je elke dag nodig hebt zoals calcium voor sterke botten en tanden, prote en #x00ef:ne voor de groei en het herstel van je spieren en vitamine B2 en b12 voor extra energie. met elke slok halfvolle melk word je sterker! en #x00a0:door de jarenlange ervaring van onze boeren maken we de beste en de lekkerste producten van oer-hollandse zuivel. Al bijna 150 jaar. We halen de eerlijke en pure kracht uit de natuur. En dat proef je. </p>",
+    "isOrderable" : true,
+    "isInfiniteBonus" : false,
+    "isSample" : false,
+    "isBonusPrice" : null,
+    "isSponsored" : false,
+    "auctionId" : null,
+    "isVirtualBundle" : false,
+    "virtualBundleItems" : null,
+    "productCount" : null,
+    "multipleItemPromotion" : null,
+    "labelType" : null,
+    "discountLabels" : [ ],
+    "isFavorite" : null,
+    "externalWebshopUrl" : null,
+    "minBestBeforeDays" : 6,
+    "medicalDeviceTypeCode" : null,
+    "medicineTypeCode" : null
+  }, {
+    "webshopId" : 33691,
+    "hqId" : 27506,
+    "title" : "AH Halfvolle melk",
+    "salesUnitSize" : "0,5 l",
+    "unitPriceDescription" : "prijs per liter €1.58",
+    "images" : [ {
+      "width" : 800,
+      "height" : 800,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130303337393333?revLabel=1&rendition=800x800_WEBP&fileType=binary"
+    }, {
+      "width" : 400,
+      "height" : 400,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130303337393333?revLabel=1&rendition=400x400_WEBP&fileType=binary"
+    }, {
+      "width" : 200,
+      "height" : 200,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130303337393333?revLabel=1&rendition=200x200_WEBP&fileType=binary"
+    }, {
+      "width" : 48,
+      "height" : 48,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130303337393333?revLabel=1&rendition=48x48_GIF&fileType=binary"
+    }, {
+      "width" : 80,
+      "height" : 80,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130303337393333?revLabel=1&rendition=80x80_JPG&fileType=binary"
+    } ],
+    "bonusStartDate" : null,
+    "bonusEndDate" : null,
+    "discountType" : null,
+    "segmentType" : null,
+    "promotionType" : null,
+    "bonusMechanism" : null,
+    "currentPrice" : null,
+    "priceBeforeBonus" : 0.79,
+    "orderAvailabilityStatus" : "IN_ASSORTMENT",
+    "orderAvailabilityDescription" : null,
+    "mainCategory" : "Zuivel, eieren",
+    "subCategory" : "Halfvolle melk",
+    "brand" : "AH",
+    "shopType" : "AH",
+    "bonusPeriodDescription" : null,
+    "availableOnline" : true,
+    "isPreviouslyBought" : false,
+    "descriptionHighlights" : "<p>Verse halfvolle melk voor iedere dag.</p><p><ul><li>Weidemelk keurmerk: koeien die minimaal 120 dagen, 6 uur per dag in de wei lopen</li><li>Lekker met ontbijtgranen</li></ul></p>",
+    "propertyIcons" : [ "vega", "lokaal" ],
+    "stickers" : null,
+    "nutriscore" : "B",
+    "nix18" : false,
+    "isStapelBonus" : false,
+    "extraDescriptions" : [ ],
+    "bonusSegmentId" : null,
+    "bonusSegmentDescription" : null,
+    "isBonus" : false,
+    "hasListPrice" : null,
+    "descriptionFull" : "",
+    "isOrderable" : true,
+    "isInfiniteBonus" : false,
+    "isSample" : false,
+    "isBonusPrice" : null,
+    "isSponsored" : false,
+    "auctionId" : null,
+    "isVirtualBundle" : false,
+    "virtualBundleItems" : null,
+    "productCount" : null,
+    "multipleItemPromotion" : null,
+    "labelType" : null,
+    "discountLabels" : [ ],
+    "isFavorite" : null,
+    "externalWebshopUrl" : null,
+    "minBestBeforeDays" : 8,
+    "medicalDeviceTypeCode" : null,
+    "medicineTypeCode" : null
+  }, {
+    "webshopId" : 61007,
+    "hqId" : 106375,
+    "title" : "AH Biologisch Halfvolle melk",
+    "salesUnitSize" : "1 l",
+    "unitPriceDescription" : "prijs per liter €1.39",
+    "images" : [ {
+      "width" : 800,
+      "height" : 800,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130313931343832?revLabel=1&rendition=800x800_WEBP&fileType=binary"
+    }, {
+      "width" : 400,
+      "height" : 400,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130313931343832?revLabel=1&rendition=400x400_WEBP&fileType=binary"
+    }, {
+      "width" : 200,
+      "height" : 200,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130313931343832?revLabel=1&rendition=200x200_WEBP&fileType=binary"
+    }, {
+      "width" : 48,
+      "height" : 48,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130313931343832?revLabel=1&rendition=48x48_GIF&fileType=binary"
+    }, {
+      "width" : 80,
+      "height" : 80,
+      "url" : "https://static.ah.nl/dam/product/AHI_4354523130313931343832?revLabel=1&rendition=80x80_JPG&fileType=binary"
+    } ],
+    "bonusStartDate" : null,
+    "bonusEndDate" : null,
+    "discountType" : null,
+    "segmentType" : null,
+    "promotionType" : null,
+    "bonusMechanism" : null,
+    "currentPrice" : null,
+    "priceBeforeBonus" : 1.39,
+    "orderAvailabilityStatus" : "IN_ASSORTMENT",
+    "orderAvailabilityDescription" : null,
+    "mainCategory" : "Zuivel, eieren",
+    "subCategory" : "Halfvolle melk",
+    "brand" : "AH Biologisch",
+    "shopType" : "AH",
+    "bonusPeriodDescription" : null,
+    "availableOnline" : true,
+    "isPreviouslyBought" : false,
+    "descriptionHighlights" : "<p><ul><li>Halfvolle melk van koeien die grazen op weilanden die alleen met natuurlijke middelen worden behandeld en biologisch voer krijgen</li><li>Om zo te drinken maar ook voor toetjes, bij het bakken of voor havermout</li><li>Goed alternatief voor volle melk</li></ul></p>",
+    "propertyIcons" : [ "vega", "lokaal", "biologisch" ],
+    "stickers" : null,
+    "nutriscore" : "B",
+    "nix18" : false,
+    "isStapelBonus" : false,
+    "extraDescriptions" : [ ],
+    "bonusSegmentId" : null,
+    "bonusSegmentDescription" : null,
+    "isBonus" : false,
+    "hasListPrice" : null,
+    "descriptionFull" : "<p> Neem het ervan en geniet van het lekkerste dat de natuur te bieden heeft. Van onze biologische producten kun je met een goed gevoel genieten dankzij de aandacht en inspanning van de boeren en producenten die ze voor ons maken. Natuurlijk worden al onze biologische producten onafhankelijk gecontroleerd en daarom verdienen ze het Europese keurmerk. Biologisch van Albert Heijn: dat smaakt naar meer!  </p>\n  <p>Zie je een weiland volop bloemen en bijen? Grote kans dat je naar een biologisch boerenbedrijf kijkt. De koeien van deze boerderijen zijn veel buiten, grazen op weilanden die alleen met natuurlijke middelen worden behandeld en krijgen biologisch voer. Dat voelt niet alleen goed, dat smaakt ook goed! Gebruik je melk in de keuken, bijvoorbeeld voor toetjes, bij het bakken of voor havermout? Volle melk kun je altijd vervangen door deze halfvolle melk. Scheelt toch aardig als je op vet let.</p>",
+    "isOrderable" : true,
+    "isInfiniteBonus" : false,
+    "isSample" : false,
+    "isBonusPrice" : null,
+    "isSponsored" : false,
+    "auctionId" : null,
+    "isVirtualBundle" : false,
+    "virtualBundleItems" : null,
+    "productCount" : null,
+    "multipleItemPromotion" : null,
+    "labelType" : null,
+    "discountLabels" : [ ],
+    "isFavorite" : null,
+    "externalWebshopUrl" : null,
+    "minBestBeforeDays" : 6,
+    "medicalDeviceTypeCode" : null,
+    "medicineTypeCode" : null
+  } ],
+  "links" : {
+    "first" : {
+      "href" : "https://ms.ah.nl:8080/mobile-services/product/search/v2?application=AHWEBSHOP&availableOnline=true&bonus=NONE&memberId=397923912&orderable=any&query=halfvolle%20melk&sortBy=RELEVANCE&page=0&size=8"
+    },
+    "current" : {
+      "href" : "https://ms.ah.nl:8080/mobile-services/product/search/v2?application=AHWEBSHOP&availableOnline=true&bonus=NONE&memberId=397923912&orderable=any&query=halfvolle%20melk&sortBy=RELEVANCE&page=0&size=8"
+    },
+    "next" : {
+      "href" : "https://ms.ah.nl:8080/mobile-services/product/search/v2?application=AHWEBSHOP&availableOnline=true&bonus=NONE&memberId=397923912&orderable=any&query=halfvolle%20melk&sortBy=RELEVANCE&page=1&size=8"
+    },
+    "prev" : null,
+    "last" : {
+      "href" : "https://ms.ah.nl:8080/mobile-services/product/search/v2?application=AHWEBSHOP&availableOnline=true&bonus=NONE&memberId=397923912&orderable=any&query=halfvolle%20melk&sortBy=RELEVANCE&page=8&size=8"
+    }
+  },
+  "filters" : [ {
+    "id" : "brand",
+    "allLabel" : null,
+    "label" : "Merk",
+    "options" : [ {
+      "id" : "AH",
+      "label" : "AH",
+      "count" : 15,
+      "display" : true
+    }, {
+      "id" : "AH Biologisch",
+      "label" : "AH Biologisch",
+      "count" : 7,
+      "display" : true
+    }, {
+      "id" : "Arla",
+      "label" : "Arla",
+      "count" : 17,
+      "display" : true
+    }, {
+      "id" : "Campina",
+      "label" : "Campina",
+      "count" : 25,
+      "display" : true
+    }, {
+      "id" : "De Zaanse Hoeve",
+      "label" : "De Zaanse Hoeve",
+      "count" : 1,
+      "display" : true
+    }, {
+      "id" : "Kalverliefde",
+      "label" : "Kalverliefde",
+      "count" : 1,
+      "display" : true
+    } ],
+    "type" : "BRAND",
+    "booleanFilter" : false
+  }, {
+    "id" : "taxonomy",
+    "allLabel" : null,
+    "label" : "Soort",
+    "options" : [ {
+      "id" : "18279",
+      "label" : "Chocolademelk",
+      "count" : 2,
+      "display" : true
+    }, {
+      "id" : "8304",
+      "label" : "Drinkpakjes",
+      "count" : 7,
+      "display" : true
+    }, {
+      "id" : "20879",
+      "label" : "Drinkyoghurt, chocolademelk, ontbijtdranken",
+      "count" : 2,
+      "display" : true
+    }, {
+      "id" : "2390",
+      "label" : "Halfvolle melk",
+      "count" : 26,
+      "display" : true
+    }, {
+      "id" : "5923",
+      "label" : "Houdbare melk",
+      "count" : 15,
+      "display" : true
+    }, {
+      "id" : "10135",
+      "label" : "Koffiemelk",
+      "count" : 5,
+      "display" : true
+    }, {
+      "id" : "2765",
+      "label" : "Koffiemelk, koffieroom, koffiecreamer",
+      "count" : 5,
+      "display" : true
+    }, {
+      "id" : "10118",
+      "label" : "Lactosevrije melk",
+      "count" : 11,
+      "display" : true
+    }, {
+      "id" : "18282",
+      "label" : "Lactosevrije zuivel",
+      "count" : 11,
+      "display" : true
+    }, {
+      "id" : "1319",
+      "label" : "Melk",
+      "count" : 59,
+      "display" : true
+    }, {
+      "id" : "10170",
+      "label" : "Melk drinkpakjes",
+      "count" : 7,
+      "display" : true
+    } ],
+    "type" : "TAXONOMY",
+    "booleanFilter" : false
+  }, {
+    "id" : "intolerance",
+    "allLabel" : null,
+    "label" : "Allergie",
+    "options" : [ {
+      "id" : "sp_include_intolerance_geen_eieren",
+      "label" : "eieren",
+      "count" : 39,
+      "display" : true
+    }, {
+      "id" : "sp_include_intolerance_geen_gluten",
+      "label" : "gluten",
+      "count" : 39,
+      "display" : true
+    }, {
+      "id" : "sp_include_intolerance_geen_lactose",
+      "label" : "lactose",
+      "count" : 6,
+      "display" : true
+    }, {
+      "id" : "sp_include_intolerance_geen_lupine",
+      "label" : "lupine",
+      "count" : 39,
+      "display" : true
+    }, {
+      "id" : "sp_include_intolerance_geen_mosterd",
+      "label" : "mosterd",
+      "count" : 39,
+      "display" : true
+    }, {
+      "id" : "sp_include_intolerance_geen_noten",
+      "label" : "noten",
+      "count" : 39,
+      "display" : true
+    }, {
+      "id" : "sp_include_intolerance_geen_pindas",
+      "label" : "pinda's",
+      "count" : 39,
+      "display" : true
+    }, {
+      "id" : "sp_include_intolerance_geen_schelpdieren",
+      "label" : "schelpdieren",
+      "count" : 39,
+      "display" : true
+    }, {
+      "id" : "sp_include_intolerance_geen_selderij",
+      "label" : "selderij",
+      "count" : 39,
+      "display" : true
+    }, {
+      "id" : "sp_include_intolerance_geen_sesam",
+      "label" : "sesam",
+      "count" : 39,
+      "display" : true
+    }, {
+      "id" : "sp_include_intolerance_geen_soja",
+      "label" : "soja",
+      "count" : 39,
+      "display" : true
+    }, {
+      "id" : "sp_include_intolerance_geen_sulfiet",
+      "label" : "sulfiet",
+      "count" : 39,
+      "display" : true
+    }, {
+      "id" : "sp_include_intolerance_geen_vis",
+      "label" : "vis",
+      "count" : 39,
+      "display" : true
+    } ],
+    "type" : "PROPERTY",
+    "booleanFilter" : false
+  }, {
+    "id" : "diet",
+    "allLabel" : null,
+    "label" : "Dieet",
+    "options" : [ {
+      "id" : "sp_include_dieet_laag_suiker",
+      "label" : "Laag suiker",
+      "count" : 2,
+      "display" : true
+    }, {
+      "id" : "sp_include_dieet_laag_vet",
+      "label" : "Laag vet",
+      "count" : 30,
+      "display" : true
+    }, {
+      "id" : "sp_include_dieet_laag_zout",
+      "label" : "Laag zout",
+      "count" : 38,
+      "display" : true
+    }, {
+      "id" : "sp_include_dieet_vegetarisch",
+      "label" : "Vegetarisch",
+      "count" : 32,
+      "display" : true
+    } ],
+    "type" : "PROPERTY",
+    "booleanFilter" : false
+  }, {
+    "id" : "nutriscore",
+    "allLabel" : null,
+    "label" : "Nutri-Score",
+    "options" : [ {
+      "id" : "b",
+      "label" : "Score B",
+      "count" : 31,
+      "display" : true
+    }, {
+      "id" : "c",
+      "label" : "Score C",
+      "count" : 2,
+      "display" : true
+    }, {
+      "id" : "e",
+      "label" : "Score E",
+      "count" : 5,
+      "display" : true
+    } ],
+    "type" : "NUTRISCORE",
+    "booleanFilter" : false
+  }, {
+    "id" : "bonus",
+    "allLabel" : null,
+    "label" : "Bonus",
+    "options" : [ {
+      "id" : "Bonus",
+      "label" : "Bonus",
+      "count" : 25,
+      "display" : true
+    } ],
+    "type" : "BONUS",
+    "booleanFilter" : true
+  }, {
+    "id" : "np_biologisch",
+    "allLabel" : null,
+    "label" : "Biologisch",
+    "options" : [ {
+      "id" : "np_biologisch",
+      "label" : "Biologisch",
+      "count" : 10,
+      "display" : true
+    } ],
+    "type" : "PROPERTY",
+    "booleanFilter" : true
+  }, {
+    "id" : "np_verbluffen",
+    "allLabel" : null,
+    "label" : "Prijsfavoriet",
+    "options" : [ {
+      "id" : "np_verbluffen",
+      "label" : "Prijsfavoriet",
+      "count" : 8,
+      "display" : true
+    } ],
+    "type" : "PROPERTY",
+    "booleanFilter" : true
+  }, {
+    "id" : "sp_include_dieet_vegetarisch",
+    "allLabel" : null,
+    "label" : "Vegetarisch",
+    "options" : [ {
+      "id" : "sp_include_dieet_vegetarisch",
+      "label" : "Vegetarisch",
+      "count" : 32,
+      "display" : true
+    } ],
+    "type" : "PROPERTY",
+    "booleanFilter" : true
+  } ],
+  "sortOn" : [ "RELEVANCE", "PRICEHIGHLOW", "PRICELOWHIGH", "TAXONOMY", "PURCHASE_FREQUENCY", "PURCHASE_DATE", "PURCHASE_DEPARTMENT", "NUTRISCORE" ],
+  "configuration" : {
+    "googleBanners" : {
+      "adUnitMainPath" : "/21888805090/ah.nl_app/zoeken/1",
+      "adUnitSecondaryPath" : "/21888805090/ah.nl_app/zoeken/2",
+      "customTemplateId" : "11894057",
+      "divGptAd" : "1577185579002-0"
+    }
+  },
+  "ads" : [ ],
+  "taxonomyNodes" : [ ]
+}

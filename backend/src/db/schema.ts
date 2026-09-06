@@ -1,0 +1,143 @@
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+
+export const products = sqliteTable(
+  "products",
+  {
+    id: text("id").primaryKey(), // `${store}:${sourceId}`
+    store: text("store").notNull(),
+    sourceId: text("source_id").notNull(),
+    title: text("title").notNull(),
+    brand: text("brand"),
+    quantityText: text("quantity_text").notNull(),
+    unitAmount: real("unit_amount"),
+    unit: text("unit"),
+    priceCents: integer("price_cents").notNull(),
+    regularPriceCents: integer("regular_price_cents"),
+    unitPriceCents: integer("unit_price_cents"),
+    unitPriceUnit: text("unit_price_unit"),
+    dealText: text("deal_text"),
+    isDeal: integer("is_deal", { mode: "boolean" }).notNull().default(false),
+    imageUrl: text("image_url"),
+    sourceUrl: text("source_url"),
+    category: text("category"),
+    available: integer("available", { mode: "boolean" }).notNull().default(true),
+    fetchedAt: integer("fetched_at").notNull(),
+  },
+  (table) => [index("products_store_idx").on(table.store), index("products_title_idx").on(table.title)],
+);
+
+export const priceHistory = sqliteTable(
+  "price_history",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    productId: text("product_id").notNull(),
+    priceCents: integer("price_cents").notNull(),
+    isDeal: integer("is_deal", { mode: "boolean" }).notNull().default(false),
+    capturedAt: integer("captured_at").notNull(),
+  },
+  (table) => [index("price_history_product_idx").on(table.productId, table.capturedAt)],
+);
+
+export const searchCache = sqliteTable(
+  "search_cache",
+  {
+    store: text("store").notNull(),
+    normalizedQuery: text("normalized_query").notNull(),
+    productIds: text("product_ids", { mode: "json" }).$type<string[]>().notNull(),
+    fetchedAt: integer("fetched_at").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.store, table.normalizedQuery] })],
+);
+
+export type ItemStatus = "NEW" | "PARSING" | "MATCHING" | "MATCHED" | "ERROR";
+
+export const basketItems = sqliteTable("basket_items", {
+  id: text("id").primaryKey(),
+  text: text("text").notNull(),
+  quantity: integer("quantity").notNull().default(1),
+  checked: integer("checked", { mode: "boolean" }).notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+  status: text("status").$type<ItemStatus>().notNull().default("NEW"),
+  error: text("error"),
+  parsedJson: text("parsed_json", { mode: "json" }).$type<ParsedIdea | null>(),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export type MatchStatus = "PENDING" | "CHOSEN" | "NONE" | "EXHAUSTED";
+export type ChosenBy = "USER" | "MEMORY" | "AI";
+
+export const basketMatches = sqliteTable(
+  "basket_matches",
+  {
+    id: text("id").primaryKey(),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => basketItems.id, { onDelete: "cascade" }),
+    store: text("store").notNull(),
+    candidateIds: text("candidate_ids", { mode: "json" }).$type<string[]>().notNull(),
+    equivalences: text("equivalences", { mode: "json" }).$type<Record<string, Equivalence>>().notNull(),
+    windowStart: integer("window_start").notNull().default(0),
+    shownCount: integer("shown_count").notNull().default(3),
+    chosenProductId: text("chosen_product_id"),
+    status: text("status").$type<MatchStatus>().notNull().default("PENDING"),
+    chosenBy: text("chosen_by").$type<ChosenBy | null>(),
+    confidence: real("confidence"),
+    reason: text("reason"),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [uniqueIndex("basket_matches_item_store").on(table.itemId, table.store)],
+);
+
+export const choices = sqliteTable(
+  "choices",
+  {
+    id: text("id").primaryKey(),
+    itemText: text("item_text").notNull(),
+    canonical: text("canonical").notNull(),
+    store: text("store").notNull(),
+    chosenProductId: text("chosen_product_id"),
+    chosenTitle: text("chosen_title"),
+    rejectedTitles: text("rejected_titles", { mode: "json" }).$type<string[]>().notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [index("choices_canonical_idx").on(table.canonical)],
+);
+
+export const aiCache = sqliteTable(
+  "ai_cache",
+  {
+    kind: text("kind").notNull(),
+    key: text("key").notNull(),
+    responseJson: text("response_json").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.kind, table.key] })],
+);
+
+export const settings = sqliteTable("settings", {
+  key: text("key").primaryKey(),
+  valueJson: text("value_json").notNull(),
+});
+
+export const tombstones = sqliteTable("tombstones", {
+  collection: text("collection").notNull(),
+  entityId: text("entity_id").notNull(),
+  deletedAt: integer("deleted_at").notNull(),
+}, (table) => [primaryKey({ columns: [table.collection, table.entityId] })]);
+
+export type Equivalence = "EXACT" | "EQUIVALENT" | "SUBSTITUTE";
+
+export type ParsedIdea = {
+  canonicalName: string;
+  attributes: string[];
+  sizeHint: { amount: number; unit: string } | null;
+  queries: Record<string, string>;
+  ambiguous: boolean;
+};
+
+export type ProductRow = typeof products.$inferSelect;
+export type BasketItemRow = typeof basketItems.$inferSelect;
+export type BasketMatchRow = typeof basketMatches.$inferSelect;
+export type ChoiceRow = typeof choices.$inferSelect;

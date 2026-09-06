@@ -1,0 +1,15 @@
+services:
+  baskt:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_PATH: /data/baskt.db
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    volumes:
+      - baskt-data:/data
+    restart: unless-stopped
+
+volumes:
+  baskt-data:
