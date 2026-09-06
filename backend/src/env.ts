@@ -11,6 +11,8 @@ export const env = {
     baseUrl: (process.env.AI_BASE_URL ?? process.env.HACKCLUB_AI_BASE_URL ?? "https://ai.hackclub.com/proxy/v1").replace(/\/$/, ""),
     apiKey: process.env.AI_API_KEY ?? process.env.HACKCLUB_AI_API_KEY ?? "",
     model: process.env.AI_MODEL ?? process.env.HACKCLUB_AI_MODEL ?? "",
+    /** Reasoning models (Qwen3, DeepSeek R1) burn the token budget on hidden thinking; OpenRouter-style proxies accept this switch. */
+    disableReasoning: (process.env.AI_DISABLE_REASONING ?? "true") !== "false",
   },
   storeProxyUrl: process.env.STORE_PROXY_URL?.trim() || undefined,
   storeMinGapMs: num(process.env.STORE_MIN_GAP_MS, 400),

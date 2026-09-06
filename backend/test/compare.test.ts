@@ -27,7 +27,7 @@ function product(id: string, store: string, priceCents: number, unitAmount: numb
   };
 }
 
-const parsedMilk = { canonicalName: "milk", attributes: [], sizeHint: null, queries: {}, ambiguous: false };
+const parsedMilk = { canonicalName: "milk", attributes: [], sizeHint: null, queries: {}, fallbackQuery: null, ambiguous: false };
 
 describe("compareBasket", () => {
   test("ranks stores by comparable total and finds cheapest per item", () => {

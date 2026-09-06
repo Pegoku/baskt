@@ -28,6 +28,7 @@ export async function chatJson<T>(messages: ChatMessage[], options: { maxTokens?
           temperature: 0,
           max_tokens: options.maxTokens ?? 1500,
           response_format: { type: "json_object" },
+          ...(env.ai.disableReasoning ? { reasoning: { enabled: false } } : {}),
         }),
         signal: AbortSignal.timeout(60_000),
       });

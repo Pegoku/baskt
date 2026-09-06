@@ -1,5 +1,5 @@
 import { fetchWithRetry } from "@/lib/http";
-import { normalizeUnit, parseQuantity, unitPriceFrom } from "@/lib/units";
+import { normalizeUnit, parseQuantity, quantityTextFromTitle, unitPriceFrom } from "@/lib/units";
 import { StoreThrottle } from "@/stores/throttle";
 import type { StoreAdapter, StoreProduct } from "@/stores/types";
 
@@ -67,7 +67,7 @@ export function mapJumboProduct(product: JumboProduct): StoreProduct | null {
   const promo = product.prices?.promoPrice;
   const priceCents = promo ?? regular;
   if (priceCents === null || priceCents === undefined || !product.id || !product.title) return null;
-  const quantityText = product.subtitle?.trim() || "per stuk";
+  const quantityText = product.subtitle?.trim() || quantityTextFromTitle(product.title) || "per stuk";
   const quantity = parseQuantity(quantityText);
   const perUnit = product.prices?.pricePerUnit;
   const unitPrice =

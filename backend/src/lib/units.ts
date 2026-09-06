@@ -53,6 +53,13 @@ export function parseUnitPriceDescription(text: string | null | undefined): { ce
   return { cents: Math.round(toNumber(match[2]) * 100), unit: unit.unit };
 }
 
+/** Finds a pack size inside a product title ("Jumbo Scharreleieren 10 Stuks" → "10 stuks") when the store omits it. */
+export function quantityTextFromTitle(title: string | null | undefined): string | null {
+  if (!title) return null;
+  const match = title.match(MULTI) ?? title.match(SINGLE);
+  return match ? match[0].toLowerCase() : null;
+}
+
 export function normalizeUnit(raw: string | null | undefined): Unit | null {
   if (!raw) return null;
   return convert(1, raw.trim())?.unit ?? null;

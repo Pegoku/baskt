@@ -57,13 +57,18 @@ export function isRunning(itemId: string) {
   return running.has(itemId);
 }
 
+const MIN_CANDIDATES = 6;
+
 async function collectCandidates(item: BasketItemRow, parsed: ParsedIdea, store: string): Promise<{ candidates: ProductRow[]; queries: string[] }> {
-  const queries = [parsed.queries[store] ?? item.text];
-  if (normalizeText(item.text) !== normalizeText(queries[0])) queries.push(item.text);
+  const queries: string[] = [];
+  for (const query of [parsed.queries[store] ?? item.text, parsed.fallbackQuery, item.text]) {
+    if (query && !queries.some((known) => normalizeText(known) === normalizeText(query))) queries.push(query);
+  }
   const seen = new Set<string>();
   const candidates: ProductRow[] = [];
-  for (const query of queries) {
-    if (candidates.length >= 6 && query !== queries[0]) break;
+  for (const [index, query] of queries.entries()) {
+    // The store query and the generic fallback always run (both cached); the raw text only when the pool is still thin.
+    if (index >= 2 && candidates.length >= MIN_CANDIDATES) break;
     const result = await searchStore(store, query, { limit: 20 });
     for (const product of result.products) {
       if (!seen.has(product.id)) {
@@ -236,8 +241,8 @@ export async function rejectShown(itemId: string, store: string) {
 }
 
 async function findMoreCandidates(item: BasketItemRow, store: string, known: string[]) {
-  const parsed = item.parsedJson ?? { canonicalName: item.text, attributes: [], sizeHint: null, queries: {}, ambiguous: false };
-  const tried = [parsed.queries[store] ?? item.text, item.text];
+  const parsed = item.parsedJson ?? { canonicalName: item.text, attributes: [], sizeHint: null, queries: {}, fallbackQuery: null, ambiguous: false };
+  const tried = [parsed.queries[store] ?? item.text, parsed.fallbackQuery, item.text].filter((query): query is string => Boolean(query));
   const rejectedTitles = productsByIds(known).map((product) => product.title);
   const attempts: string[] = [];
   if (normalizeText(parsed.canonicalName) !== normalizeText(item.text)) attempts.push(parsed.canonicalName);
@@ -258,7 +263,7 @@ export async function searchMoreCandidates(itemId: string, store: string, query:
   const item = getItem(itemId);
   const match = getMatch(itemId, store);
   if (!item || !match) return null;
-  const parsed = item.parsedJson ?? { canonicalName: item.text, attributes: [], sizeHint: null, queries: {}, ambiguous: false };
+  const parsed = item.parsedJson ?? { canonicalName: item.text, attributes: [], sizeHint: null, queries: {}, fallbackQuery: null, ambiguous: false };
   const result = await searchStore(store, query, { limit: 20 });
   const fresh = lexicalRank(query, { ...parsed, canonicalName: query }, result.products.filter((product) => !match.candidateIds.includes(product.id))).map(
     (entry) => entry.product.id,

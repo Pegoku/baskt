@@ -1,5 +1,5 @@
 import { fetchWithRetry, HttpError } from "@/lib/http";
-import { eurosToCents, parseQuantity, parseUnitPriceDescription, unitPriceFrom } from "@/lib/units";
+import { eurosToCents, parseQuantity, parseUnitPriceDescription, quantityTextFromTitle, unitPriceFrom } from "@/lib/units";
 import { StoreThrottle } from "@/stores/throttle";
 import type { StoreAdapter, StoreProduct } from "@/stores/types";
 
@@ -41,7 +41,7 @@ export function mapAhProduct(product: AhProduct): StoreProduct | null {
   const priceCents = eurosToCents(priceEuros);
   if (priceCents === null || !product.title) return null;
   const isDeal = Boolean(product.isBonus) && product.currentPrice != null && product.priceBeforeBonus != null && product.currentPrice < product.priceBeforeBonus;
-  const quantityText = product.salesUnitSize?.trim() || "per stuk";
+  const quantityText = product.salesUnitSize?.trim() || quantityTextFromTitle(product.title) || "per stuk";
   const quantity = parseQuantity(quantityText);
   const unitPrice = parseUnitPriceDescription(product.unitPriceDescription) ?? unitPriceFrom(priceCents, quantity);
   const image =

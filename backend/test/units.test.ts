@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseQuantity, parseUnitPriceDescription, unitPriceFrom, type Unit } from "@/lib/units";
+import { parseQuantity, parseUnitPriceDescription, quantityTextFromTitle, unitPriceFrom, type Unit } from "@/lib/units";
 
 describe("parseQuantity", () => {
   const cases: Array<[string, { amount: number; unit: Unit } | null]> = [
@@ -26,6 +26,14 @@ describe("parseQuantity", () => {
       }
     });
   }
+});
+
+describe("quantityTextFromTitle", () => {
+  test("extracts pack sizes from titles", () => {
+    expect(quantityTextFromTitle("Jumbo Scharreleieren L-XL 10 Stuks")).toBe("10 stuks");
+    expect(quantityTextFromTitle("Campina Halfvolle Melk 1,5 L")).toBe("1,5 l");
+    expect(quantityTextFromTitle("AH Halfvolle melk")).toBeNull();
+  });
 });
 
 describe("unit prices", () => {

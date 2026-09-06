@@ -56,7 +56,7 @@ export async function aiRankCandidates(input: {
       { role: "system", content: SYSTEM },
       { role: "user", content: user },
     ],
-    { maxTokens: 600 },
+    { maxTokens: 1200 },
   );
   if (!raw?.ranking || !Array.isArray(raw.ranking)) return null;
 

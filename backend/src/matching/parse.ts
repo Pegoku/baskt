@@ -12,7 +12,8 @@ Return ONLY a JSON object:
   "canonicalName": short generic English product name (e.g. "semi-skimmed milk"),
   "attributes": array of Dutch keywords that matter (e.g. ["halfvol"], ["houdbaar"], ["bio"], ["vers"]); [] if none,
   "sizeHint": {"amount": number, "unit": "kg"|"l"|"piece"} describing the total amount wanted, or null when not stated,
-  "queries": object mapping each given store code to the best short Dutch search query for that store's webshop (usually 1-3 words, no brand unless the user named one),
+  "queries": object mapping each given store code to the best short Dutch search query for that store's webshop (1-3 words: product noun plus the attributes that matter, e.g. "halfvolle melk", "scharreleieren", "cola"; NEVER put amounts, sizes or numbers in queries - they go in sizeHint; no brand unless the user named one),
+  "fallbackQuery": one generic Dutch product noun to try when the specific query finds little (e.g. "eieren", "melk", "pastasaus"),
   "ambiguous": true when the idea is vague (e.g. "something for pasta sauce"), else false
 }
 Do not add other keys. Do not explain.`;
@@ -26,6 +27,7 @@ export function fallbackParse(text: string, storeCodes: string[]): ParsedIdea {
     attributes: [],
     sizeHint: null,
     queries: Object.fromEntries(storeCodes.map((code) => [code, clean])),
+    fallbackQuery: null,
     ambiguous: false,
   };
 }
@@ -47,6 +49,7 @@ function sanitize(raw: Partial<ParsedIdea> | null, text: string, storeCodes: str
     attributes: Array.isArray(raw.attributes) ? raw.attributes.filter((value): value is string => typeof value === "string").map((value) => value.toLowerCase()) : [],
     sizeHint,
     queries,
+    fallbackQuery: typeof raw.fallbackQuery === "string" && raw.fallbackQuery.trim() ? raw.fallbackQuery.trim() : null,
     ambiguous: Boolean(raw.ambiguous),
   };
 }
@@ -60,7 +63,7 @@ export async function parseIdea(text: string, storeCodes: string[]): Promise<Par
       { role: "system", content: SYSTEM },
       { role: "user", content: `Store codes: ${storeCodes.join(", ")}\nIdea: ${text}` },
     ],
-    { maxTokens: 400 },
+    { maxTokens: 900 },
   );
   return sanitize(raw, text, storeCodes);
 }
@@ -85,7 +88,7 @@ export async function splitShoppingText(text: string): Promise<Array<{ text: str
       },
       { role: "user", content: text },
     ],
-    { maxTokens: 800 },
+    { maxTokens: 1500 },
   );
   const items = (raw?.items ?? [])
     .filter((item) => typeof item.text === "string" && item.text.trim())
@@ -107,7 +110,7 @@ export async function alternativeQuery(text: string, parsed: ParsedIdea, store: 
         content: `Idea: ${text}\nCanonical: ${parsed.canonicalName}\nStore: ${store}\nQueries already tried: ${triedQueries.join(" | ")}\nProducts the user rejected: ${rejectedTitles.join(" | ") || "none"}`,
       },
     ],
-    { maxTokens: 100 },
+    { maxTokens: 300 },
   );
   const query = raw?.query?.trim();
   if (!query || triedQueries.some((tried) => normalizeText(tried) === normalizeText(query))) return null;

@@ -134,6 +134,8 @@ export type ParsedIdea = {
   attributes: string[];
   sizeHint: { amount: number; unit: string } | null;
   queries: Record<string, string>;
+  /** Generic Dutch product noun used when the store-specific query returns too little. */
+  fallbackQuery: string | null;
   ambiguous: boolean;
 };
 
