@@ -48,6 +48,7 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
     suspend fun refreshServerSettings() = guard { _serverSettings.value = api.serverSettings() }
     suspend fun setSkipInStock(enabled: Boolean) = guard { _serverSettings.value = api.setSkipInStock(enabled) }
     suspend fun setDefaultServings(servings: Int?) = guard { _serverSettings.value = api.setDefaultServings(servings) }
+    suspend fun setRankBy(rankBy: String) = guard { _serverSettings.value = api.setRankBy(rankBy) }
     suspend fun setGroupServings(group: BasketItem, servings: Int) = guard {
         _items.update { list -> list.map { if (it.id == group.id) it.copy(status = "PARSING") else it } }
         api.setGroupServings(group.id, servings)

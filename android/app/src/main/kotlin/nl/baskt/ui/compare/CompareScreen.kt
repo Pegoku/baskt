@@ -72,6 +72,15 @@ fun CompareScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (Stri
                 SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Per store") }
                 SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Per item") }
             }
+            if (tab == 1) {
+                val byUnit = comparison?.rankBy == "unitPrice"
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Cheapest by", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                    androidx.compose.material3.FilterChip(selected = !byUnit, onClick = { viewModel.setRankBy("price") }, label = { Text("pack") })
+                    Spacer(Modifier.width(6.dp))
+                    androidx.compose.material3.FilterChip(selected = byUnit, onClick = { viewModel.setRankBy("unitPrice") }, label = { Text("per kg / l") })
+                }
+            }
             if (comparing) LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
             val data = comparison
             when {
@@ -137,6 +146,7 @@ private fun StoreTab(data: Comparison, stores: List<StoreInfo>) {
 @Composable
 private fun ItemTab(data: Comparison, stores: List<StoreInfo>, onOpenItem: (String) -> Unit) {
     val codes = data.stores.sortedBy { it.rank }.map { it.store }
+    val byUnit = data.rankBy == "unitPrice"
     LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
         item("header") {
             Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
@@ -162,10 +172,11 @@ private fun ItemTab(data: Comparison, stores: List<StoreInfo>, onOpenItem: (Stri
                                 if (line == null) {
                                     Text("—", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 } else {
+                                    val best = if (byUnit) (row.cheapestByUnitPriceStore ?: row.cheapestStore) else row.cheapestStore
                                     Text(
                                         line.lineCents.euros() + if (!line.confirmed) "?" else "",
-                                        fontWeight = if (row.cheapestStore == code) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (row.cheapestStore == code) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = if (best == code) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (best == code) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                     )
                                     val product = data.products[line.productId]
                                     val unit = if (line.unitPriceCents != null && line.unitPriceUnit != null) "${line.unitPriceCents.euros()}/${if (line.unitPriceUnit == "piece") "st" else line.unitPriceUnit}" else null

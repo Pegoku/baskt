@@ -76,6 +76,9 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
         client.delete(url("/stock/$id")) { auth() }.expect<Unit>()
     }
 
+    suspend fun setRankBy(rankBy: String): SettingsResponse =
+        client.patch(url("/settings")) { auth(); contentType(ContentType.Application.Json); setBody(SettingsResponse(rankBy = rankBy)) }.expect()
+
     suspend fun setDefaultServings(servings: Int?): SettingsResponse =
         client.patch(url("/settings")) {
             auth(); contentType(ContentType.Application.Json)

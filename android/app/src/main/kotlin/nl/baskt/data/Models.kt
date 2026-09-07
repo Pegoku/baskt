@@ -191,6 +191,7 @@ data class Comparison(
     val mixAndMatchTotalCents: Int,
     val missingEverywhere: List<String> = emptyList(),
     val computedAt: Long = 0,
+    val rankBy: String = "price",
     val products: Map<String, Product> = emptyMap(),
 )
 
