@@ -25,6 +25,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -125,10 +128,10 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             LaunchedEffect(Unit) { viewModel.refreshStock() }
             Text("Ranking", style = MaterialTheme.typography.titleMedium)
             Text("What counts as the better option when products are equally suitable.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            androidx.compose.material3.SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 val current = serverSettings.rankBy ?: "price"
-                androidx.compose.material3.SegmentedButton(selected = current == "price", onClick = { viewModel.setRankBy("price") }, shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(0, 2)) { Text("Pack price") }
-                androidx.compose.material3.SegmentedButton(selected = current == "unitPrice", onClick = { viewModel.setRankBy("unitPrice") }, shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(1, 2)) { Text("Price per kg / l") }
+                SegmentedButton(selected = current == "price", onClick = { viewModel.setRankBy("price") }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Pack price") }
+                SegmentedButton(selected = current == "unitPrice", onClick = { viewModel.setRankBy("unitPrice") }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Price per kg / l") }
             }
 
             HorizontalDivider()
