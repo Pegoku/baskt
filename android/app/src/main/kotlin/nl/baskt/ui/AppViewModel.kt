@@ -79,8 +79,18 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         // Tell the server which language to use for suggestions and interpretations.
         runCatching { container.api.setLanguage(current.resolvedLanguage) }
         basket.refreshStores()
+        basket.refreshBaskets()
         basket.refresh()
     }
+
+    fun switchBasket(id: String) = viewModelScope.launch { basket.switchBasket(id) }
+    fun createBasket(name: String, emoji: String?, switchTo: Boolean = true) = viewModelScope.launch {
+        val created = basket.createBasket(name, emoji)
+        if (switchTo && created != null) basket.switchBasket(created.id)
+    }
+    fun renameBasket(id: String, name: String, emoji: String?) = viewModelScope.launch { basket.renameBasket(id, name, emoji) }
+    fun deleteBasket(id: String) = viewModelScope.launch { basket.deleteBasket(id) }
+    fun transfer(item: BasketItem, basketId: String, copy: Boolean) = viewModelScope.launch { basket.transfer(item, basketId, copy) }
 
     fun setLanguage(language: String) = viewModelScope.launch {
         container.settingsStore.saveLanguage(language)

@@ -67,22 +67,39 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
             auth(); contentType(ContentType.Application.Json); setBody(SettingsResponse(language = language))
         }.expect<SettingsResponse>().language
 
-    suspend fun basket(): BasketResponse = client.get(url("/basket")) { auth() }.expect()
+    suspend fun basket(basketId: String): BasketResponse = client.get(url("/basket")) { auth(); parameter("basketId", basketId) }.expect()
 
-    suspend fun addItem(text: String, quantity: Int, parentId: String? = null): BasketItem =
+    suspend fun baskets(): List<Basket> = client.get(url("/baskets")) { auth() }.expect<BasketsResponse>().baskets
+
+    suspend fun createBasket(name: String, emoji: String?): Basket =
+        client.post(url("/baskets")) { auth(); contentType(ContentType.Application.Json); setBody(BasketRequest(name, emoji)) }.expect()
+
+    suspend fun renameBasket(id: String, name: String, emoji: String?): Basket =
+        client.patch(url("/baskets/$id")) { auth(); contentType(ContentType.Application.Json); setBody(BasketRequest(name, emoji)) }.expect()
+
+    suspend fun deleteBasket(id: String) {
+        client.delete(url("/baskets/$id")) { auth() }.expect<Unit>()
+    }
+
+    suspend fun transferItem(id: String, basketId: String, copy: Boolean): BasketItem =
+        client.post(url("/basket/items/$id/transfer")) {
+            auth(); contentType(ContentType.Application.Json); setBody(TransferRequest(basketId, copy))
+        }.expect()
+
+    suspend fun addItem(text: String, quantity: Int, basketId: String, parentId: String? = null): BasketItem =
         client.post(url("/basket/items")) {
-            auth(); contentType(ContentType.Application.Json); setBody(AddItemRequest(text, quantity, parentId))
+            auth(); contentType(ContentType.Application.Json); setBody(AddItemRequest(text, quantity, parentId, basketId))
         }.expect()
 
     /** Creates a folder; with [items] the children are given, otherwise the server looks up a recipe. */
-    suspend fun addGroup(text: String, items: List<String>? = null): GroupResponse =
+    suspend fun addGroup(text: String, items: List<String>?, basketId: String): GroupResponse =
         client.post(url("/basket/groups")) {
-            auth(); contentType(ContentType.Application.Json); setBody(AddGroupRequest(text, items))
+            auth(); contentType(ContentType.Application.Json); setBody(AddGroupRequest(text, items, basketId))
         }.expect()
 
-    suspend fun addFromText(text: String): List<BasketItem> =
+    suspend fun addFromText(text: String, basketId: String): List<BasketItem> =
         client.post(url("/basket/from-text")) {
-            auth(); contentType(ContentType.Application.Json); setBody(FromTextRequest(text))
+            auth(); contentType(ContentType.Application.Json); setBody(FromTextRequest(text, basketId))
         }.expect<ItemsResponse>().items
 
     suspend fun updateItem(id: String, text: String? = null, quantity: Int? = null, checked: Boolean? = null): BasketItem =
@@ -99,8 +116,8 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
         client.delete(url("/basket/items/$id")) { auth() }.expect<Unit>()
     }
 
-    suspend fun clearChecked(): Int =
-        client.delete(url("/basket")) { auth(); parameter("checked", "true") }.expect<DeletedResponse>().deleted
+    suspend fun clearChecked(basketId: String): Int =
+        client.delete(url("/basket")) { auth(); parameter("checked", "true"); parameter("basketId", basketId) }.expect<DeletedResponse>().deleted
 
     suspend fun rematch(id: String): BasketItem = client.post(url("/basket/items/$id/rematch")) { auth() }.expect()
 
@@ -118,7 +135,7 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
             auth(); contentType(ContentType.Application.Json); setBody(QueryRequest(query))
         }.expect()
 
-    suspend fun compare(): Comparison = client.get(url("/basket/compare")) { auth() }.expect()
+    suspend fun compare(basketId: String): Comparison = client.get(url("/basket/compare")) { auth(); parameter("basketId", basketId) }.expect()
 
     suspend fun suggest(text: String): SuggestResponse =
         client.get(url("/basket/suggest")) { auth(); parameter("q", text) }.expect()
@@ -136,9 +153,11 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
     })
 }
 
-@Serializable private data class AddItemRequest(val text: String, val quantity: Int, val parentId: String? = null)
-@Serializable private data class AddGroupRequest(val text: String, val items: List<String>? = null)
-@Serializable private data class FromTextRequest(val text: String)
+@Serializable private data class AddItemRequest(val text: String, val quantity: Int, val parentId: String? = null, val basketId: String = "default")
+@Serializable private data class AddGroupRequest(val text: String, val items: List<String>? = null, val basketId: String = "default")
+@Serializable private data class FromTextRequest(val text: String, val basketId: String = "default")
+@Serializable private data class BasketRequest(val name: String, val emoji: String? = null)
+@Serializable private data class TransferRequest(val basketId: String, val copy: Boolean)
 @Serializable private data class QueryRequest(val query: String)
 @Serializable private data class ItemsResponse(val items: List<BasketItem>)
 @Serializable private data class DeletedResponse(val deleted: Int)

@@ -20,6 +20,12 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
     private val _stores = MutableStateFlow<List<StoreInfo>>(emptyList())
     val stores: StateFlow<List<StoreInfo>> = _stores
 
+    private val _baskets = MutableStateFlow<List<Basket>>(emptyList())
+    val baskets: StateFlow<List<Basket>> = _baskets
+
+    private val _currentBasketId = MutableStateFlow("default")
+    val currentBasketId: StateFlow<String> = _currentBasketId
+
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading
 
@@ -30,10 +36,49 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
 
     val enabledStores: List<StoreInfo> get() = _stores.value.filter { it.enabled }
 
+    suspend fun refreshBaskets() {
+        try {
+            val list = api.baskets()
+            _baskets.value = list
+            if (list.none { it.id == _currentBasketId.value } && list.isNotEmpty()) _currentBasketId.value = list.first().id
+        } catch (e: Exception) {
+            _error.value = e.message ?: "Could not load baskets"
+        }
+    }
+
+    suspend fun switchBasket(id: String) {
+        if (_currentBasketId.value == id) return
+        _currentBasketId.value = id
+        _items.value = emptyList()
+        refresh()
+    }
+
+    suspend fun createBasket(name: String, emoji: String?): Basket? = guard {
+        val basket = api.createBasket(name, emoji)
+        refreshBaskets()
+        basket
+    }
+
+    suspend fun renameBasket(id: String, name: String, emoji: String?) = guard { api.renameBasket(id, name, emoji); refreshBaskets() }
+
+    suspend fun deleteBasket(id: String) = guard {
+        api.deleteBasket(id)
+        refreshBaskets()
+        if (_currentBasketId.value == id) refresh()
+    }
+
+    suspend fun transfer(item: BasketItem, basketId: String, copy: Boolean) = guard {
+        api.transferItem(item.id, basketId, copy)
+        if (!copy) _items.update { list -> list.filterNot { it.id == item.id || it.parentId == item.id } }
+        refreshBaskets()
+    }
+
     suspend fun refresh(showSpinner: Boolean = true) {
         if (showSpinner) _loading.value = true
         try {
-            val response = api.basket()
+            val basketId = _currentBasketId.value
+            val response = api.basket(basketId)
+            if (response.basketId != _currentBasketId.value) return
             _items.value = response.items
             if (response.processing || response.items.any { it.isProcessing }) startPolling()
             _error.value = null
@@ -59,7 +104,8 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
             while (isActive && attempts < 60) {
                 delay(1500)
                 attempts += 1
-                val response = runCatching { api.basket() }.getOrNull() ?: continue
+                val response = runCatching { api.basket(_currentBasketId.value) }.getOrNull() ?: continue
+                if (response.basketId != _currentBasketId.value) continue
                 _items.value = response.items
                 if (!response.processing && response.items.none { it.isProcessing }) break
             }
@@ -78,17 +124,17 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
         null
     }
 
-    suspend fun add(text: String, quantity: Int, parentId: String? = null) = guard { replace(api.addItem(text, quantity, parentId)) }
+    suspend fun add(text: String, quantity: Int, parentId: String? = null) = guard { replace(api.addItem(text, quantity, _currentBasketId.value, parentId)) }
 
     suspend fun addGroup(text: String, items: List<String>? = null) = guard {
-        val response = api.addGroup(text, items)
+        val response = api.addGroup(text, items, _currentBasketId.value)
         replace(response.group)
         response.items.forEach(::replace)
         if (response.group.isProcessing || response.items.any { it.isProcessing }) startPolling()
     }
 
     suspend fun addFromText(text: String) = guard {
-        api.addFromText(text).forEach(::replace)
+        api.addFromText(text, _currentBasketId.value).forEach(::replace)
     }
 
     suspend fun setChecked(item: BasketItem, checked: Boolean) = guard {
@@ -106,7 +152,7 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
     }
 
     suspend fun clearChecked() = guard {
-        api.clearChecked()
+        api.clearChecked(_currentBasketId.value)
         refresh(false)
     }
 
@@ -118,7 +164,7 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
 
     suspend fun rematch(item: BasketItem) = guard { replace(api.rematch(item.id)) }
 
-    suspend fun compare(): Comparison? = guard { api.compare() }
+    suspend fun compare(): Comparison? = guard { api.compare(_currentBasketId.value) }
 
     suspend fun setEnabledStores(codes: List<String>) = guard {
         api.setEnabledStores(codes)

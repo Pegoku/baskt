@@ -59,12 +59,15 @@ import nl.baskt.data.euros
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.ProductRow
 import nl.baskt.ui.common.StoreBadge
+import nl.baskt.ui.common.TransferMenu
 import nl.baskt.ui.common.storeName
 
 @Composable
 fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit) {
     val items by viewModel.basket.items.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
+    val baskets by viewModel.basket.baskets.collectAsState()
+    val currentBasketId by viewModel.basket.currentBasketId.collectAsState()
     val item = items.firstOrNull { it.id == itemId }
     var editing by remember { mutableStateOf(false) }
 
@@ -78,6 +81,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
                     if (item != null) {
                         IconButton(onClick = { editing = true }) { Icon(Icons.Default.Edit, contentDescription = "Edit") }
                         IconButton(onClick = { viewModel.rematch(item) }) { Icon(Icons.Default.Autorenew, contentDescription = "Match again") }
+                        TransferMenu(baskets, currentBasketId) { basketId, copy -> viewModel.transfer(item, basketId, copy); if (!copy) onBack() }
                     }
                 },
             )

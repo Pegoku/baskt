@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import nl.baskt.data.euros
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.StoreBadge
+import nl.baskt.ui.common.TransferMenu
 
 /** A folder (e.g. a recipe) showing its child items; each child behaves like a normal basket item. */
 @Composable
@@ -41,6 +42,8 @@ fun GroupScreen(viewModel: AppViewModel, groupId: String, onBack: () -> Unit, on
     val stores by viewModel.basket.stores.collectAsState()
     val suggestions by viewModel.suggestions.collectAsState()
     val recipe by viewModel.recipeSuggestion.collectAsState()
+    val baskets by viewModel.basket.baskets.collectAsState()
+    val currentBasketId by viewModel.basket.currentBasketId.collectAsState()
     val group = items.firstOrNull { it.id == groupId }
     val children = items.filter { it.parentId == groupId }
     val enabledStores = stores.filter { it.enabled }
@@ -60,6 +63,7 @@ fun GroupScreen(viewModel: AppViewModel, groupId: String, onBack: () -> Unit, on
                     }
                     if (group != null) {
                         IconButton(onClick = { viewModel.delete(group); onBack() }) { Icon(Icons.Default.Delete, contentDescription = "Delete folder") }
+                        TransferMenu(baskets, currentBasketId) { basketId, copy -> viewModel.transfer(group, basketId, copy); if (!copy) onBack() }
                     }
                 },
             )

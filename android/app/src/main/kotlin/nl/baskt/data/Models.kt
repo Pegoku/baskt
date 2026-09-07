@@ -66,8 +66,24 @@ data class RecipeInfo(
 )
 
 @Serializable
+data class Basket(
+    val id: String,
+    val name: String,
+    val emoji: String? = null,
+    val sortOrder: Int = 0,
+    val itemCount: Int = 0,
+    val openCount: Int = 0,
+) {
+    val label: String get() = listOfNotNull(emoji, name).joinToString(" ")
+}
+
+@Serializable
+data class BasketsResponse(val baskets: List<Basket>)
+
+@Serializable
 data class BasketItem(
     val id: String,
+    val basketId: String = "default",
     val kind: String = "item", // item | group
     val parentId: String? = null,
     val recipe: RecipeInfo? = null,
@@ -97,6 +113,7 @@ data class RecipeSuggestion(val title: String, val ingredients: List<String> = e
 @Serializable
 data class BasketResponse(
     val serverTime: Long,
+    val basketId: String = "default",
     val items: List<BasketItem>,
     val deletedIds: List<String> = emptyList(),
     val processing: Boolean = false,

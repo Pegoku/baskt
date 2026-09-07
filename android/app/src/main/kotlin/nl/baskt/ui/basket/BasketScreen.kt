@@ -71,12 +71,15 @@ import nl.baskt.data.BasketItem
 import nl.baskt.data.StoreInfo
 import nl.baskt.data.euros
 import nl.baskt.ui.AppViewModel
+import nl.baskt.ui.common.BasketSwitcherTitle
 import nl.baskt.ui.common.StoreBadge
 
 @Composable
 fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit) {
     val items by viewModel.basket.items.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
+    val baskets by viewModel.basket.baskets.collectAsState()
+    val currentBasketId by viewModel.basket.currentBasketId.collectAsState()
     val loading by viewModel.basket.loading.collectAsState()
     val error by viewModel.basket.error.collectAsState()
     val snackbar = remember { SnackbarHostState() }
@@ -92,7 +95,16 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("baskt", fontWeight = FontWeight.Bold) },
+                title = {
+                    BasketSwitcherTitle(
+                        baskets = baskets,
+                        currentId = currentBasketId,
+                        onSwitch = { viewModel.switchBasket(it) },
+                        onCreate = { name, emoji -> viewModel.createBasket(name, emoji) },
+                        onRename = { basket, name, emoji -> viewModel.renameBasket(basket.id, name, emoji) },
+                        onDelete = { viewModel.deleteBasket(it.id) },
+                    )
+                },
                 actions = {
                     IconButton(onClick = { viewModel.reload() }) { Icon(Icons.Default.Refresh, contentDescription = "Refresh") }
                     if (items.any { it.checked }) {
