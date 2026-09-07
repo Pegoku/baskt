@@ -16,6 +16,9 @@ import nl.baskt.data.Deal
 import nl.baskt.data.DealsResponse
 import nl.baskt.data.Product
 import nl.baskt.data.ProductSearchResponse
+import nl.baskt.data.RecipeDetail
+import nl.baskt.data.RecipeFavourite
+import nl.baskt.data.RecipeSummary
 import nl.baskt.data.RecipeSuggestion
 import nl.baskt.data.StockItem
 
@@ -91,6 +94,40 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun addFromProduct(product: Product) = viewModelScope.launch { basket.addFromProduct(product) }
+
+    private val _recipeResults = MutableStateFlow<List<RecipeSummary>>(emptyList())
+    val recipeResults: StateFlow<List<RecipeSummary>> = _recipeResults
+    private val _recipeFavourites = MutableStateFlow<List<RecipeFavourite>>(emptyList())
+    val recipeFavourites: StateFlow<List<RecipeFavourite>> = _recipeFavourites
+    private val _recipeDetail = MutableStateFlow<RecipeDetail?>(null)
+    val recipeDetail: StateFlow<RecipeDetail?> = _recipeDetail
+    private val _recipesBusy = MutableStateFlow(false)
+    val recipesBusy: StateFlow<Boolean> = _recipesBusy
+
+    fun searchRecipes(query: String) = viewModelScope.launch {
+        _recipesBusy.value = true
+        _recipeResults.value = runCatching { container.api.searchRecipes(query).results }.getOrElse { basket.run { }; emptyList() }
+        _recipesBusy.value = false
+    }
+
+    fun loadRecipeFavourites() = viewModelScope.launch { _recipeFavourites.value = runCatching { container.api.recipeFavourites() }.getOrDefault(emptyList()) }
+
+    fun toggleRecipeFavourite(recipe: RecipeSummary) = viewModelScope.launch {
+        val existing = _recipeFavourites.value.firstOrNull { it.url == recipe.url }
+        runCatching { if (existing != null) container.api.removeRecipeFavourite(existing.id) else container.api.addRecipeFavourite(recipe) }
+        loadRecipeFavourites()
+    }
+
+    fun openRecipe(recipeUrl: String) = viewModelScope.launch {
+        _recipeDetail.value = null
+        _recipesBusy.value = true
+        _recipeDetail.value = runCatching { container.api.fetchRecipe(recipeUrl) }.getOrNull()
+        _recipesBusy.value = false
+    }
+
+    fun closeRecipe() { _recipeDetail.value = null }
+
+    fun addRecipeFolder(recipeUrl: String) = viewModelScope.launch { basket.addGroupFromUrl(recipeUrl) }
 
     private val _deals = MutableStateFlow<DealsResponse?>(null)
     val deals: StateFlow<DealsResponse?> = _deals

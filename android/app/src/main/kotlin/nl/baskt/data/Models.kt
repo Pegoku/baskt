@@ -226,6 +226,21 @@ data class Deal(
 data class DealsResponse(val deals: List<Deal> = emptyList(), val computedAt: Long = 0)
 
 @Serializable
+data class RecipeSummary(val title: String, val url: String, val imageUrl: String? = null, val slug: String = "")
+
+@Serializable
+data class RecipeSearchResponse(val query: String = "", val results: List<RecipeSummary> = emptyList())
+
+@Serializable
+data class RecipeFavourite(val id: String, val title: String, val url: String, val imageUrl: String? = null, val createdAt: Long = 0)
+
+@Serializable
+data class RecipeFavouritesResponse(val favourites: List<RecipeFavourite> = emptyList())
+
+@Serializable
+data class RecipeDetail(val title: String, val sourceUrl: String? = null, val servings: String? = null, val ingredientLines: List<String> = emptyList())
+
+@Serializable
 data class HealthResponse(
     val ok: Boolean,
     val version: String = "",

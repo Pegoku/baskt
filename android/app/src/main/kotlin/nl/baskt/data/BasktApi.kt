@@ -179,6 +179,28 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 
     suspend fun refreshPrices(): JsonObject = client.post(url("/admin/refresh")) { auth() }.expect()
 
+    suspend fun searchRecipes(query: String): RecipeSearchResponse = client.get(url("/recipes/search")) { auth(); parameter("q", query) }.expect()
+
+    suspend fun fetchRecipe(recipeUrl: String): RecipeDetail = client.get(url("/recipes/fetch")) { auth(); parameter("url", recipeUrl) }.expect()
+
+    suspend fun recipeFavourites(): List<RecipeFavourite> = client.get(url("/recipes/favourites")) { auth() }.expect<RecipeFavouritesResponse>().favourites
+
+    suspend fun addRecipeFavourite(recipe: RecipeSummary): RecipeFavourite =
+        client.post(url("/recipes/favourites")) {
+            auth(); contentType(ContentType.Application.Json)
+            setBody(JsonObject(mapOf("title" to JsonPrimitive(recipe.title), "url" to JsonPrimitive(recipe.url), "imageUrl" to (recipe.imageUrl?.let { JsonPrimitive(it) } ?: JsonNull))))
+        }.expect()
+
+    suspend fun removeRecipeFavourite(id: String) {
+        client.delete(url("/recipes/favourites/$id")) { auth() }.expect<Unit>()
+    }
+
+    suspend fun addGroupFromUrl(recipeUrl: String, basketId: String): GroupResponse =
+        client.post(url("/basket/groups")) {
+            auth(); contentType(ContentType.Application.Json)
+            setBody(JsonObject(mapOf("url" to JsonPrimitive(recipeUrl), "basketId" to JsonPrimitive(basketId))))
+        }.expect()
+
     suspend fun deals(basketId: String, live: Boolean): DealsResponse =
         client.get(url("/basket/deals")) { auth(); parameter("basketId", basketId); if (live) parameter("live", "true") }.expect()
 
