@@ -98,7 +98,7 @@ data class StoreInfo(
 data class StoresResponse(val stores: List<StoreInfo>)
 
 @Serializable
-data class SettingsResponse(val enabledStores: List<String>)
+data class SettingsResponse(val enabledStores: List<String>? = null, val language: String? = null)
 
 @Serializable
 data class StoreLine(

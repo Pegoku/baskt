@@ -13,6 +13,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import nl.baskt.data.LANGUAGE_OPTIONS
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.StoreBadge
 
@@ -92,6 +95,24 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 OutlinedButton(onClick = { scope.launch { status = viewModel.testConnection().fold({ it }, { "Failed: ${it.message}" }) } }) { Text("Test") }
             }
             if (status != null) Text(status!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            HorizontalDivider()
+            Text("Language", style = MaterialTheme.typography.titleMedium)
+            Text("Used for suggestions and for how the AI describes your ideas.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            var languageMenu by remember { mutableStateOf(false) }
+            val currentLanguage = settings?.language ?: "system"
+            val systemName = java.util.Locale.getDefault().getDisplayLanguage(java.util.Locale.getDefault())
+            OutlinedButton(onClick = { languageMenu = true }) {
+                Text(LANGUAGE_OPTIONS.firstOrNull { it.first == currentLanguage }?.second?.let { if (currentLanguage == "system") "$it ($systemName)" else it } ?: currentLanguage)
+            }
+            DropdownMenu(expanded = languageMenu, onDismissRequest = { languageMenu = false }) {
+                for ((code, label) in LANGUAGE_OPTIONS) {
+                    DropdownMenuItem(
+                        text = { Text(if (code == "system") "$label ($systemName)" else label) },
+                        onClick = { languageMenu = false; viewModel.setLanguage(code) },
+                    )
+                }
+            }
 
             HorizontalDivider()
             Text("Supermarkets", style = MaterialTheme.typography.titleMedium)

@@ -11,16 +11,31 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "baskt-settings")
 
-data class AppSettings(val baseUrl: String, val token: String) {
+data class AppSettings(val baseUrl: String, val token: String, val language: String = "system") {
     val configured: Boolean get() = baseUrl.isNotBlank()
+
+    /** Language code sent to the server: the chosen one, or the device language when set to "system". */
+    val resolvedLanguage: String
+        get() = if (language == "system") java.util.Locale.getDefault().language.ifBlank { "en" } else language
 }
+
+val LANGUAGE_OPTIONS = listOf(
+    "system" to "System default",
+    "en" to "English",
+    "nl" to "Nederlands",
+    "es" to "Español",
+    "ca" to "Català",
+    "de" to "Deutsch",
+    "fr" to "Français",
+)
 
 class SettingsStore(private val context: Context) {
     private val baseUrlKey = stringPreferencesKey("baseUrl")
     private val tokenKey = stringPreferencesKey("token")
+    private val languageKey = stringPreferencesKey("language")
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
-        AppSettings(baseUrl = prefs[baseUrlKey] ?: DEFAULT_BASE_URL, token = prefs[tokenKey] ?: "")
+        AppSettings(baseUrl = prefs[baseUrlKey] ?: DEFAULT_BASE_URL, token = prefs[tokenKey] ?: "", language = prefs[languageKey] ?: "system")
     }
 
     suspend fun save(baseUrl: String, token: String) {
@@ -28,6 +43,10 @@ class SettingsStore(private val context: Context) {
             prefs[baseUrlKey] = baseUrl.trim().trimEnd('/')
             prefs[tokenKey] = token.trim()
         }
+    }
+
+    suspend fun saveLanguage(language: String) {
+        context.dataStore.edit { prefs -> prefs[languageKey] = language }
     }
 
     companion object {

@@ -59,8 +59,13 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 
     suspend fun setEnabledStores(codes: List<String>): List<String> =
         client.patch(url("/settings")) {
-            auth(); contentType(ContentType.Application.Json); setBody(SettingsResponse(codes))
-        }.expect<SettingsResponse>().enabledStores
+            auth(); contentType(ContentType.Application.Json); setBody(SettingsResponse(enabledStores = codes))
+        }.expect<SettingsResponse>().enabledStores ?: codes
+
+    suspend fun setLanguage(language: String): String? =
+        client.patch(url("/settings")) {
+            auth(); contentType(ContentType.Application.Json); setBody(SettingsResponse(language = language))
+        }.expect<SettingsResponse>().language
 
     suspend fun basket(): BasketResponse = client.get(url("/basket")) { auth() }.expect()
 

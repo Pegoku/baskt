@@ -37,7 +37,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
             return
         }
         suggestJob = viewModelScope.launch {
-            delay(400)
+            delay(250)
             val result = runCatching { container.api.suggest(query) }.getOrDefault(emptyList())
             _suggestions.value = result.filter { it.trim().lowercase() != query.lowercase() }
         }
@@ -57,9 +57,17 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun reload() = viewModelScope.launch {
-        container.awaitSettings()
+        val current = container.awaitSettings()
+        // Tell the server which language to use for suggestions and interpretations.
+        runCatching { container.api.setLanguage(current.resolvedLanguage) }
         basket.refreshStores()
         basket.refresh()
+    }
+
+    fun setLanguage(language: String) = viewModelScope.launch {
+        container.settingsStore.saveLanguage(language)
+        val current = container.awaitSettings()
+        runCatching { container.api.setLanguage(current.resolvedLanguage) }
     }
 
     fun add(text: String, quantity: Int) = viewModelScope.launch {
