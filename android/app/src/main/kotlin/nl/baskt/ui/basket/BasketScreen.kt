@@ -111,6 +111,8 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
         }
         runCatching { speech.launch(intent) }.onFailure { android.widget.Toast.makeText(context, "Speech recognition is not available", android.widget.Toast.LENGTH_SHORT).show() }
     }
+    val dictateRequest by viewModel.dictateRequest.collectAsState()
+    LaunchedEffect(dictateRequest) { if (dictateRequest) { viewModel.dictateRequest.value = false; startDictation() } }
     val proposal by viewModel.voiceProposal.collectAsState()
     val interpreting by viewModel.interpreting.collectAsState()
     if (proposal != null || interpreting) {
@@ -182,6 +184,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                 onAddGroup = { title, picked -> viewModel.addGroup(title, picked) },
                 onAddMany = { picked -> viewModel.addMany(picked) },
                 onVoice = { startDictation() },
+                focusRequest = viewModel.focusInputRequest,
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },

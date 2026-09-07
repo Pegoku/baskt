@@ -27,11 +27,14 @@ class AppContainer(app: Application) {
         private set
 
     val api = BasktApi { currentSettings }
-    val basket = BasketRepository(api, scope)
+    val basket = BasketRepository(api, scope, onBasketSwitched = { id -> settingsStore.saveCurrentBasket(id); nl.baskt.widget.BasketWidget.refreshAll(app) })
 
     init {
         scope.launch {
-            settingsStore.settings.collect { currentSettings = it }
+            settingsStore.settings.collect { settings ->
+                currentSettings = settings
+                basket.restoreBasket(settings.currentBasketId)
+            }
         }
     }
 

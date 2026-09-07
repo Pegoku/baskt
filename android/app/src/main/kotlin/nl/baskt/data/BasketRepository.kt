@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
  * Holds the basket state for the whole app. The backend is the source of truth; this class
  * refreshes it on demand and polls while any item is still being matched.
  */
-class BasketRepository(private val api: BasktApi, private val scope: CoroutineScope) {
+class BasketRepository(private val api: BasktApi, private val scope: CoroutineScope, private val onBasketSwitched: suspend (String) -> Unit = {}) {
     private val _items = MutableStateFlow<List<BasketItem>>(emptyList())
     val items: StateFlow<List<BasketItem>> = _items
 
@@ -73,7 +73,12 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
         if (_currentBasketId.value == id) return
         _currentBasketId.value = id
         _items.value = emptyList()
+        onBasketSwitched(id)
         refresh()
+    }
+
+    fun restoreBasket(id: String) {
+        _currentBasketId.value = id
     }
 
     suspend fun createBasket(name: String, emoji: String?): Basket? = guard {

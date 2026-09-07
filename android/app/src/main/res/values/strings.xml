@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">baskt</string>
+    <string name="widget_basket_description">Your current basket: tap a line to check it off</string>
+    <string name="widget_quick_description">Add an idea or dictate your list</string>
 </resources>

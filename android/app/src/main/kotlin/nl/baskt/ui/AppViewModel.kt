@@ -41,6 +41,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     private val _settings = MutableStateFlow<AppSettings?>(null)
     val settings: StateFlow<AppSettings?> = _settings
 
+    /** One-shot requests coming from widgets / intents. */
+    val focusInputRequest = MutableStateFlow(false)
+    val dictateRequest = MutableStateFlow(false)
+
     private val _suggestions = MutableStateFlow<List<String>>(emptyList())
     val suggestions: StateFlow<List<String>> = _suggestions
 
