@@ -28,7 +28,8 @@ export async function chatJson<T>(messages: ChatMessage[], options: { maxTokens?
           temperature: 0,
           max_tokens: options.maxTokens ?? 1500,
           response_format: { type: "json_object" },
-          ...(env.ai.disableReasoning ? { reasoning: { enabled: false } } : {}),
+          ...reasoningField(),
+          ...providerField(),
         }),
         signal: AbortSignal.timeout(60_000),
       });
@@ -50,6 +51,23 @@ export async function chatJson<T>(messages: ChatMessage[], options: { maxTokens?
     }
   }
   return null;
+}
+
+function reasoningField() {
+  if (env.ai.reasoning === "off") return { reasoning: { enabled: false } };
+  if (env.ai.reasoning === "none") return {};
+  return { reasoning: { effort: env.ai.reasoning } };
+}
+
+function providerField() {
+  if (!env.ai.providerOrder.length && !env.ai.providerQuantizations.length) return {};
+  return {
+    provider: {
+      ...(env.ai.providerOrder.length ? { order: env.ai.providerOrder } : {}),
+      ...(env.ai.providerQuantizations.length ? { quantizations: env.ai.providerQuantizations } : {}),
+      allow_fallbacks: true,
+    },
+  };
 }
 
 function stripFences(content: string) {

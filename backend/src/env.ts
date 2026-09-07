@@ -11,8 +11,14 @@ export const env = {
     baseUrl: (process.env.AI_BASE_URL ?? process.env.HACKCLUB_AI_BASE_URL ?? "https://ai.hackclub.com/proxy/v1").replace(/\/$/, ""),
     apiKey: process.env.AI_API_KEY ?? process.env.HACKCLUB_AI_API_KEY ?? "",
     model: process.env.AI_MODEL ?? process.env.HACKCLUB_AI_MODEL ?? "",
-    /** Reasoning models (Qwen3, DeepSeek R1) burn the token budget on hidden thinking; OpenRouter-style proxies accept this switch. */
-    disableReasoning: (process.env.AI_DISABLE_REASONING ?? "true") !== "false",
+    /**
+     * How to steer thinking models (OpenRouter-style `reasoning` field):
+     * "off" sends {enabled:false} (Qwen3), "low"/"medium"/"high" sends {effort} (gpt-oss), "none" sends nothing.
+     */
+    reasoning: (process.env.AI_REASONING ?? "off") as "off" | "low" | "medium" | "high" | "none",
+    /** Optional OpenRouter provider routing, e.g. AI_PROVIDER_ORDER=coreweave AI_PROVIDER_QUANTIZATIONS=fp4. */
+    providerOrder: (process.env.AI_PROVIDER_ORDER ?? "").split(",").map((value) => value.trim()).filter(Boolean),
+    providerQuantizations: (process.env.AI_PROVIDER_QUANTIZATIONS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
   },
   storeProxyUrl: process.env.STORE_PROXY_URL?.trim() || undefined,
   storeMinGapMs: num(process.env.STORE_MIN_GAP_MS, 400),
