@@ -34,6 +34,13 @@ export function appLanguageName(): string {
   return LANGUAGE_NAMES[code] ?? code;
 }
 
+export type RankBy = "price" | "unitPrice";
+
+/** Whether options and cheapest-store hints favour the pack price or the price per kg/l/piece. */
+export function rankBy(): RankBy {
+  return getSetting<string>("rankBy", "price") === "unitPrice" ? "unitPrice" : "price";
+}
+
 /** Default number of servings recipe folders are scaled to (null = as written). */
 export function defaultServings(): number | null {
   const value = getSetting<number | null>("defaultServings", null);

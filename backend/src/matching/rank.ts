@@ -1,4 +1,5 @@
 import type { ParsedIdea, ProductRow } from "@/db/schema";
+import { rankBy } from "@/db/settings";
 import { expandTokens, tokenize, tokenSimilarity } from "@/lib/text";
 
 const POSITION_BONUS = 0.3;
@@ -47,7 +48,15 @@ export function lexicalScore(text: string, parsed: ParsedIdea, product: ProductR
 /** Ranks candidates by lexical score; the store's own result order acts as a tie-breaker. */
 export function lexicalRank(text: string, parsed: ParsedIdea, candidates: ProductRow[]) {
   const count = Math.max(candidates.length, 1);
+  const byUnitPrice = rankBy() === "unitPrice";
+  const unitPrices = candidates.map((product) => product.unitPriceCents ?? Number.POSITIVE_INFINITY).filter(Number.isFinite);
+  const cheapestUnit = unitPrices.length ? Math.min(...unitPrices) : null;
   return candidates
-    .map((product, index) => ({ product, score: lexicalScore(text, parsed, product) + ((count - index) / count) * POSITION_BONUS }))
+    .map((product, index) => {
+      let score = lexicalScore(text, parsed, product) + ((count - index) / count) * POSITION_BONUS;
+      // In unit-price mode the best €/kg or €/l among the candidates gets a nudge (never overriding a wrong product type).
+      if (byUnitPrice && cheapestUnit && product.unitPriceCents) score += Math.max(0, 0.5 * (cheapestUnit / product.unitPriceCents));
+      return { product, score };
+    })
     .sort((a, b) => b.score - a.score);
 }

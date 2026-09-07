@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { db, newId, now } from "@/db";
 import { basketItems, basketMatches, tombstones, DEFAULT_BASKET_ID, type BasketItemRow } from "@/db/schema";
 import { basketExists, transferItem } from "@/routes/baskets";
-import { defaultServings, skipInStock } from "@/db/settings";
+import { defaultServings, rankBy, skipInStock } from "@/db/settings";
 import { inStock, listStock } from "@/stock";
 import { enabledStoreCodes } from "@/db/settings";
 import { compareBasket, type CompareMatch } from "@/matching/compare";
@@ -386,5 +386,5 @@ basket.get("/compare", (c) => {
     stores,
   );
   const products = new Map(views.flatMap((view) => view.matches.flatMap((match) => [match.chosen, match.provisional])).filter(Boolean).map((product) => [product!.id, product!]));
-  return c.json({ ...comparison, products: Object.fromEntries(products) });
+  return c.json({ ...comparison, rankBy: rankBy(), products: Object.fromEntries(products) });
 });

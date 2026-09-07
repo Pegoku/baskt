@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { aiStats } from "@/ai/client";
 import { db, now } from "@/db";
 import { aiCache, basketItems, basketMatches, priceHistory, products, searchCache } from "@/db/schema";
-import { appLanguage, defaultServings, enabledStoreCodes, setSetting, skipInStock } from "@/db/settings";
+import { appLanguage, defaultServings, enabledStoreCodes, rankBy, setSetting, skipInStock } from "@/db/settings";
 import { addStock, listStock, removeStock } from "@/stock";
 import { deleteChoice, listChoices } from "@/matching/memory";
 import { allStores, hasStore, storeHealth } from "@/stores/registry";
@@ -19,13 +19,14 @@ meta.get("/stores", (c) => {
 });
 
 function settingsView() {
-  return { enabledStores: enabledStoreCodes(), language: appLanguage(), recipeSkipInStock: skipInStock(), defaultServings: defaultServings() };
+  return { enabledStores: enabledStoreCodes(), language: appLanguage(), recipeSkipInStock: skipInStock(), defaultServings: defaultServings(), rankBy: rankBy() };
 }
 
 meta.get("/settings", (c) => c.json(settingsView()));
 
 meta.patch("/settings", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { enabledStores?: string[]; language?: string; recipeSkipInStock?: boolean; defaultServings?: number | null };
+  const body = (await c.req.json().catch(() => ({}))) as { enabledStores?: string[]; language?: string; recipeSkipInStock?: boolean; defaultServings?: number | null; rankBy?: string };
+  if (body.rankBy === "price" || body.rankBy === "unitPrice") setSetting("rankBy", body.rankBy);
   if (typeof body.recipeSkipInStock === "boolean") setSetting("recipeSkipInStock", body.recipeSkipInStock);
   if (body.defaultServings === null || (typeof body.defaultServings === "number" && body.defaultServings > 0 && body.defaultServings <= 50)) {
     setSetting("defaultServings", body.defaultServings);

@@ -1,4 +1,5 @@
 import { cachedChatJson } from "@/ai/client";
+import { rankBy } from "@/db/settings";
 import type { Equivalence, ParsedIdea, ProductRow } from "@/db/schema";
 import { normalizeText, sha256 } from "@/lib/text";
 
@@ -36,10 +37,11 @@ export async function aiRankCandidates(input: {
 }): Promise<RankedCandidates | null> {
   if (!input.candidates.length) return null;
   const key = await sha256(
-    [PICK_PROMPT_VERSION, input.store, normalizeText(input.text), input.candidates.map((product) => `${product.id}@${product.priceCents}`).join(","), input.memory].join("|"),
+    [PICK_PROMPT_VERSION, rankBy(), input.store, normalizeText(input.text), input.candidates.map((product) => `${product.id}@${product.priceCents}`).join(","), input.memory].join("|"),
   );
   const user = [
     `Idea: ${input.text}`,
+    rankBy() === "unitPrice" ? "Preference: when products are equally suitable, prefer the lowest price per kg/l/piece (bigger packs are fine)." : "Preference: when products are equally suitable, prefer plain single packs at a sensible price.",
     `Canonical: ${input.parsed.canonicalName}`,
     `Attributes: ${input.parsed.attributes.join(", ") || "none"}`,
     `Size hint: ${input.parsed.sizeHint ? `${input.parsed.sizeHint.amount} ${input.parsed.sizeHint.unit}` : "none"}`,

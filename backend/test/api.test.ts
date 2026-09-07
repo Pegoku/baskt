@@ -194,6 +194,13 @@ describe("api", () => {
     expect(match.chosen.id).toBe("JUMBO:b");
   });
 
+  test("rankBy setting is stored and echoed by compare", async () => {
+    const updated = (await (await api("/settings", { method: "PATCH", body: JSON.stringify({ rankBy: "unitPrice" }) })).json()) as any;
+    expect(updated.rankBy).toBe("unitPrice");
+    expect(((await (await api("/basket/compare")).json()) as any).rankBy).toBe("unitPrice");
+    await api("/settings", { method: "PATCH", body: JSON.stringify({ rankBy: "price" }) });
+  });
+
   test("language setting is stored and normalized", async () => {
     const response = await api("/settings", { method: "PATCH", body: JSON.stringify({ language: "nl-NL" }) });
     expect(((await response.json()) as { language: string }).language).toBe("nl");
