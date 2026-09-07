@@ -129,11 +129,21 @@ private fun Header(item: BasketItem, onQuantity: (Int) -> Unit) {
         }
         val parsed = item.parsed
         if (parsed != null) {
+            Text(
+                "Understood as",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 SuggestionChip(onClick = {}, label = { Text(parsed.canonicalName) })
                 for (attribute in parsed.attributes.take(3)) SuggestionChip(onClick = {}, label = { Text(attribute) })
-                parsed.sizeHint?.let { SuggestionChip(onClick = {}, label = { Text("${it.amount} ${it.unit}") }) }
+                parsed.sizeHint?.let { SuggestionChip(onClick = {}, label = { Text("${it.amount.toString().removeSuffix(".0")} ${if (it.unit == "piece") "stuks" else it.unit}") }) }
             }
+            Text(
+                "The product name and the properties the AI read from your idea. It searches the stores with these.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
