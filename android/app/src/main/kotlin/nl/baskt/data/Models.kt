@@ -241,6 +241,21 @@ data class RecipeFavouritesResponse(val favourites: List<RecipeFavourite> = empt
 data class RecipeDetail(val title: String, val sourceUrl: String? = null, val servings: String? = null, val ingredientLines: List<String> = emptyList())
 
 @Serializable
+data class PricePoint(val capturedAt: Long, val priceCents: Int, val isDeal: Boolean = false)
+
+@Serializable
+data class PriceHistoryResponse(val points: List<PricePoint> = emptyList())
+
+@Serializable
+data class PriceChange(val product: Product, val previousCents: Int, val currentCents: Int, val changedAt: Long, val diffCents: Int)
+
+@Serializable
+data class ScanStatus(val lastRunAt: Long? = null, val nextRunAt: Long? = null, val running: Boolean = false)
+
+@Serializable
+data class PriceChangesResponse(val changes: List<PriceChange> = emptyList(), val scan: ScanStatus = ScanStatus())
+
+@Serializable
 data class HealthResponse(
     val ok: Boolean,
     val version: String = "",

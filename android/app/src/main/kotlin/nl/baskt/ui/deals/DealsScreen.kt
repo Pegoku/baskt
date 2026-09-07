@@ -41,7 +41,9 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
     val deals by viewModel.deals.collectAsState()
     val loading by viewModel.loadingDeals.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
-    LaunchedEffect(Unit) { viewModel.findDeals(live = false) }
+    val changes by viewModel.priceChanges.collectAsState()
+    var tab by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { viewModel.findDeals(live = false); viewModel.loadPriceChanges() }
 
     Scaffold(
         topBar = {
@@ -53,6 +55,42 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            androidx.compose.material3.SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                androidx.compose.material3.SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(0, 2)) { Text("Promotions") }
+                androidx.compose.material3.SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(1, 2)) { Text("Price changes") }
+            }
+            if (tab == 1) {
+                val data = changes
+                val format = java.text.SimpleDateFormat("d MMM HH:mm", java.util.Locale.getDefault())
+                Text(
+                    data?.scan?.let { scan -> "Nightly scan: " + (scan.lastRunAt?.let { "last ${format.format(java.util.Date(it))}" } ?: "not run yet") + (scan.nextRunAt?.let { ", next ${format.format(java.util.Date(it))}" } ?: "") } ?: "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+                if (data != null && data.changes.isEmpty()) {
+                    Text("No price changes in the last week for the products in your baskets.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(data?.changes ?: emptyList(), key = { it.product.id }) { change ->
+                        Card {
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    StoreBadge(change.product.store, stores)
+                                    Text(
+                                        (if (change.diffCents < 0) "↓ " else "↑ ") + kotlin.math.abs(change.diffCents).euros(),
+                                        color = if (change.diffCents < 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    Text("was ${change.previousCents.euros()}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                ProductRow(change.product)
+                            }
+                        }
+                    }
+                }
+                return@Column
+            }
             if (loading) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     LoadingIndicator()

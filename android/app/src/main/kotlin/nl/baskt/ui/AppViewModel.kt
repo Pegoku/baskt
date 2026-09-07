@@ -16,6 +16,8 @@ import nl.baskt.data.Deal
 import nl.baskt.data.DealsResponse
 import nl.baskt.data.Product
 import nl.baskt.data.ProductSearchResponse
+import nl.baskt.data.PriceChangesResponse
+import nl.baskt.data.PricePoint
 import nl.baskt.data.RecipeDetail
 import nl.baskt.data.RecipeFavourite
 import nl.baskt.data.RecipeSummary
@@ -128,6 +130,12 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun closeRecipe() { _recipeDetail.value = null }
 
     fun addRecipeFolder(recipeUrl: String) = viewModelScope.launch { basket.addGroupFromUrl(recipeUrl) }
+
+    private val _priceChanges = MutableStateFlow<PriceChangesResponse?>(null)
+    val priceChanges: StateFlow<PriceChangesResponse?> = _priceChanges
+    fun loadPriceChanges() = viewModelScope.launch { _priceChanges.value = runCatching { container.api.priceChanges() }.getOrNull() }
+
+    suspend fun priceHistory(productId: String): List<PricePoint> = runCatching { container.api.priceHistory(productId) }.getOrDefault(emptyList())
 
     private val _deals = MutableStateFlow<DealsResponse?>(null)
     val deals: StateFlow<DealsResponse?> = _deals

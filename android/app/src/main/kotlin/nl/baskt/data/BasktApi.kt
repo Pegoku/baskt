@@ -201,6 +201,11 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
             setBody(JsonObject(mapOf("url" to JsonPrimitive(recipeUrl), "basketId" to JsonPrimitive(basketId))))
         }.expect()
 
+    suspend fun priceHistory(productId: String, days: Int = 90): List<PricePoint> =
+        client.get(url("/products/$productId/price-history")) { auth(); parameter("days", days) }.expect<PriceHistoryResponse>().points
+
+    suspend fun priceChanges(days: Int = 7): PriceChangesResponse = client.get(url("/prices/changes")) { auth(); parameter("days", days) }.expect()
+
     suspend fun deals(basketId: String, live: Boolean): DealsResponse =
         client.get(url("/basket/deals")) { auth(); parameter("basketId", basketId); if (live) parameter("live", "true") }.expect()
 

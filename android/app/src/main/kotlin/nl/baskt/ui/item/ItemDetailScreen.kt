@@ -60,6 +60,7 @@ import nl.baskt.data.StoreInfo
 import nl.baskt.data.StoreMatch
 import nl.baskt.data.euros
 import nl.baskt.ui.AppViewModel
+import nl.baskt.ui.common.PriceSparkline
 import nl.baskt.ui.common.ProductRow
 import nl.baskt.ui.common.StoreBadge
 import nl.baskt.ui.common.TransferMenu
@@ -120,6 +121,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
                         onReject = { viewModel.reject(item, store.code) },
                         onSearch = { query -> viewModel.searchMore(item, store.code, query) },
                         onFeedback = { productId, up -> viewModel.feedback(item, store.code, productId, up) },
+                        loadHistory = { productId -> viewModel.priceHistory(productId) },
                     )
                 }
             }
@@ -167,6 +169,7 @@ private fun StoreCard(
     onReject: () -> Unit,
     onSearch: (String) -> Unit,
     onFeedback: (String, Boolean) -> Unit,
+    loadHistory: suspend (String) -> List<nl.baskt.data.PricePoint> = { emptyList() },
 ) {
     var showOptions by remember(match?.status, match?.updatedAt) { mutableStateOf(match?.status == "PENDING") }
     var searchText by remember { mutableStateOf("") }
@@ -201,6 +204,7 @@ private fun StoreCard(
                 ProductRow(chosen) {
                     IconButton(onClick = { onFeedback(chosen.id, false) }) { Icon(Icons.Default.ThumbDown, contentDescription = "Not this one", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
+                PriceSparkline(chosen.id, loadHistory)
                 if (match.reason != null && match.chosenBy != "USER") Text(match.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
