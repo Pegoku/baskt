@@ -23,6 +23,7 @@ import nl.baskt.data.RecipeFavourite
 import nl.baskt.data.RecipeSummary
 import nl.baskt.data.RecipeSuggestion
 import nl.baskt.data.StockItem
+import nl.baskt.data.VoiceItem
 
 class AppViewModel(val container: AppContainer) : ViewModel() {
     val basket = container.basket
@@ -136,6 +137,25 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun loadPriceChanges() = viewModelScope.launch { _priceChanges.value = runCatching { container.api.priceChanges() }.getOrNull() }
 
     suspend fun priceHistory(productId: String): List<PricePoint> = runCatching { container.api.priceHistory(productId) }.getOrDefault(emptyList())
+
+    /** Proposal from dictation, shown on the confirm sheet until the user accepts or dismisses it. */
+    private val _voiceProposal = MutableStateFlow<List<VoiceItem>?>(null)
+    val voiceProposal: StateFlow<List<VoiceItem>?> = _voiceProposal
+    private val _interpreting = MutableStateFlow(false)
+    val interpreting: StateFlow<Boolean> = _interpreting
+
+    fun interpret(transcript: String) = viewModelScope.launch {
+        _interpreting.value = true
+        _voiceProposal.value = basket.interpret(transcript) ?: emptyList()
+        _interpreting.value = false
+    }
+
+    fun confirmProposal(items: List<VoiceItem>) = viewModelScope.launch {
+        _voiceProposal.value = null
+        if (items.isNotEmpty()) basket.confirm(items)
+    }
+
+    fun dismissProposal() { _voiceProposal.value = null }
 
     private val _deals = MutableStateFlow<DealsResponse?>(null)
     val deals: StateFlow<DealsResponse?> = _deals

@@ -206,6 +206,14 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 
     suspend fun priceChanges(days: Int = 7): PriceChangesResponse = client.get(url("/prices/changes")) { auth(); parameter("days", days) }.expect()
 
+    suspend fun interpret(text: String): List<VoiceItem> =
+        client.post(url("/basket/interpret")) { auth(); contentType(ContentType.Application.Json); setBody(FromTextRequest(text)) }.expect<InterpretResponse>().items
+
+    suspend fun confirm(items: List<VoiceItem>, basketId: String): List<BasketItem> =
+        client.post(url("/basket/confirm")) {
+            auth(); contentType(ContentType.Application.Json); setBody(ConfirmRequest(items, basketId))
+        }.expect<ItemsResponse>().items
+
     suspend fun deals(basketId: String, live: Boolean): DealsResponse =
         client.get(url("/basket/deals")) { auth(); parameter("basketId", basketId); if (live) parameter("live", "true") }.expect()
 
@@ -241,6 +249,7 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 @Serializable private data class FromTextRequest(val text: String, val basketId: String = "default")
 @Serializable private data class BasketRequest(val name: String, val emoji: String? = null)
 @Serializable private data class StockRequest(val text: String)
+@Serializable private data class ConfirmRequest(val items: List<VoiceItem>, val basketId: String)
 @Serializable private data class TransferRequest(val basketId: String, val copy: Boolean)
 @Serializable private data class QueryRequest(val query: String)
 @Serializable private data class ItemsResponse(val items: List<BasketItem>)

@@ -256,6 +256,12 @@ data class ScanStatus(val lastRunAt: Long? = null, val nextRunAt: Long? = null, 
 data class PriceChangesResponse(val changes: List<PriceChange> = emptyList(), val scan: ScanStatus = ScanStatus())
 
 @Serializable
+data class VoiceItem(val text: String, val quantity: Int = 1, val wanted: Boolean = true, val kind: String = "item", val note: String? = null)
+
+@Serializable
+data class InterpretResponse(val items: List<VoiceItem> = emptyList())
+
+@Serializable
 data class HealthResponse(
     val ok: Boolean,
     val version: String = "",

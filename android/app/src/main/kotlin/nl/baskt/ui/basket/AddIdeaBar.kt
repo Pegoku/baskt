@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledIconButton
@@ -59,6 +60,7 @@ fun AddIdeaBar(
     onAddMany: (List<String>) -> Unit,
     placeholder: String = "Add an idea… e.g. halfvolle milk",
     allowFolders: Boolean = true,
+    onVoice: (() -> Unit)? = null,
 ) {
     var text by remember { mutableStateOf("") }
     var quantity by remember { mutableIntStateOf(1) }
@@ -161,8 +163,12 @@ fun AddIdeaBar(
                     Text("$quantity", style = MaterialTheme.typography.labelLarge)
                     IconButton(onClick = { if (quantity > 1) quantity -= 1 }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Remove, contentDescription = "Less") }
                 }
-                FilledIconButton(onClick = { submit() }, enabled = text.isNotBlank()) {
-                    Icon(if (recipe != null && allowFolders) Icons.Default.CreateNewFolder else Icons.Default.Add, contentDescription = "Add")
+                if (text.isBlank() && onVoice != null) {
+                    FilledIconButton(onClick = onVoice) { Icon(Icons.Default.Mic, contentDescription = "Dictate") }
+                } else {
+                    FilledIconButton(onClick = { submit() }, enabled = text.isNotBlank()) {
+                        Icon(if (recipe != null && allowFolders) Icons.Default.CreateNewFolder else Icons.Default.Add, contentDescription = "Add")
+                    }
                 }
             }
         }

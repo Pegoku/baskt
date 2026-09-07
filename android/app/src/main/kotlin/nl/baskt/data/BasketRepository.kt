@@ -195,6 +195,13 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
 
     suspend fun deals(live: Boolean): DealsResponse? = guard { api.deals(_currentBasketId.value, live) }
 
+    suspend fun interpret(text: String): List<VoiceItem>? = guard { api.interpret(text) }
+
+    suspend fun confirm(items: List<VoiceItem>) = guard {
+        api.confirm(items, _currentBasketId.value).forEach(::replace)
+        startPolling()
+    }
+
     suspend fun addGroupFromUrl(recipeUrl: String) = guard {
         val response = api.addGroupFromUrl(recipeUrl, _currentBasketId.value)
         replace(response.group)

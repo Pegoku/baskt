@@ -92,6 +92,26 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
     val snackbar = remember { SnackbarHostState() }
     val enabledStores = stores.filter { it.enabled }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val settings by viewModel.settings.collectAsState()
+    val speech = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+        val spoken = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (!spoken.isNullOrBlank()) viewModel.interpret(spoken)
+    }
+    fun startDictation() {
+        val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, settings?.resolvedLanguage ?: java.util.Locale.getDefault().language)
+            putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "What do you need?")
+        }
+        runCatching { speech.launch(intent) }.onFailure { android.widget.Toast.makeText(context, "Speech recognition is not available", android.widget.Toast.LENGTH_SHORT).show() }
+    }
+    val proposal by viewModel.voiceProposal.collectAsState()
+    val interpreting by viewModel.interpreting.collectAsState()
+    if (proposal != null || interpreting) {
+        VoiceConfirmSheet(proposal ?: emptyList(), interpreting, onDismiss = { viewModel.dismissProposal() }, onConfirm = { viewModel.confirmProposal(it) })
+    }
+
     LaunchedEffect(error) {
         val message = error ?: return@LaunchedEffect
         val result = snackbar.showSnackbar(message, actionLabel = "Settings")
@@ -150,6 +170,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                 onAdd = { text, quantity -> viewModel.clearSuggestions(); viewModel.add(text, quantity) },
                 onAddGroup = { title, picked -> viewModel.addGroup(title, picked) },
                 onAddMany = { picked -> viewModel.addMany(picked) },
+                onVoice = { startDictation() },
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
