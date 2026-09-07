@@ -155,6 +155,12 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
             setBody(JsonObject(mapOf("productId" to (productId?.let { JsonPrimitive(it) } ?: JsonNull))))
         }.expect()
 
+    suspend fun feedback(id: String, store: String, productId: String, up: Boolean): BasketItem =
+        client.post(url("/basket/items/$id/matches/$store/feedback")) {
+            auth(); contentType(ContentType.Application.Json)
+            setBody(JsonObject(mapOf("productId" to JsonPrimitive(productId), "up" to JsonPrimitive(up))))
+        }.expect()
+
     suspend fun reject(id: String, store: String): BasketItem =
         client.post(url("/basket/items/$id/matches/$store/reject")) { auth() }.expect()
 

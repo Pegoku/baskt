@@ -25,6 +25,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -117,6 +119,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
                         onChoose = { productId -> viewModel.choose(item, store.code, productId) },
                         onReject = { viewModel.reject(item, store.code) },
                         onSearch = { query -> viewModel.searchMore(item, store.code, query) },
+                        onFeedback = { productId, up -> viewModel.feedback(item, store.code, productId, up) },
                     )
                 }
             }
@@ -163,6 +166,7 @@ private fun StoreCard(
     onChoose: (String?) -> Unit,
     onReject: () -> Unit,
     onSearch: (String) -> Unit,
+    onFeedback: (String, Boolean) -> Unit,
 ) {
     var showOptions by remember(match?.status, match?.updatedAt) { mutableStateOf(match?.status == "PENDING") }
     var searchText by remember { mutableStateOf("") }
@@ -194,7 +198,9 @@ private fun StoreCard(
 
             val chosen = match.chosen
             if (match.status == "CHOSEN" && chosen != null) {
-                ProductRow(chosen)
+                ProductRow(chosen) {
+                    IconButton(onClick = { onFeedback(chosen.id, false) }) { Icon(Icons.Default.ThumbDown, contentDescription = "Not this one", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
                 if (match.reason != null && match.chosenBy != "USER") Text(match.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
@@ -206,7 +212,13 @@ private fun StoreCard(
                     if (options.isNotEmpty()) {
                         Text("Option ${match.page} of suggestions", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         for (product in options) {
-                            OptionRow(product, match.equivalences[product.id], selected = product.id == chosen?.id, onChoose = { onChoose(product.id) })
+                            OptionRow(
+                                product,
+                                match.equivalences[product.id],
+                                selected = product.id == chosen?.id,
+                                onChoose = { onChoose(product.id) },
+                                onFeedback = { up -> onFeedback(product.id, up) },
+                            )
                         }
                         if (match.reason != null && match.status == "PENDING") {
                             Text(match.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -249,13 +261,19 @@ private fun StoreCard(
 }
 
 @Composable
-private fun OptionRow(product: Product, equivalence: String?, selected: Boolean, onChoose: () -> Unit) {
+private fun OptionRow(product: Product, equivalence: String?, selected: Boolean, onChoose: () -> Unit, onFeedback: (Boolean) -> Unit) {
     Column {
         ProductRow(product) {
-            if (selected) {
-                Icon(Icons.Default.Check, contentDescription = "Chosen", tint = MaterialTheme.colorScheme.primary)
-            } else {
-                Button(onClick = onChoose) { Text("This") }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                if (selected) {
+                    Icon(Icons.Default.Check, contentDescription = "Chosen", tint = MaterialTheme.colorScheme.primary)
+                } else {
+                    Button(onClick = onChoose, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text("This") }
+                }
+                Row {
+                    IconButton(onClick = { onFeedback(true) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.ThumbUp, contentDescription = "Good match", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    IconButton(onClick = { onFeedback(false) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.ThumbDown, contentDescription = "Bad match", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
             }
         }
         if (equivalence != null && equivalence != "EQUIVALENT") {

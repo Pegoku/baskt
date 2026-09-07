@@ -182,6 +182,8 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
 
     suspend fun reject(item: BasketItem, store: String) = guard { replace(api.reject(item.id, store)) }
 
+    suspend fun feedback(item: BasketItem, store: String, productId: String, up: Boolean) = guard { replace(api.feedback(item.id, store, productId, up)) }
+
     suspend fun searchMore(item: BasketItem, store: String, query: String) = guard { replace(api.searchMore(item.id, store, query)) }
 
     suspend fun rematch(item: BasketItem) = guard { replace(api.rematch(item.id)) }
