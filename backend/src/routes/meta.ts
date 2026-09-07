@@ -7,7 +7,8 @@ import { appLanguage, defaultServings, enabledStoreCodes, rankBy, setSetting, sk
 import { addStock, listStock, removeStock } from "@/stock";
 import { deleteChoice, listChoices } from "@/matching/memory";
 import { allStores, hasStore, storeHealth } from "@/stores/registry";
-import { lookupBarcode, refreshQueriesFor, searchStore } from "@/stores/search";
+import { lookupBarcode, searchStore } from "@/stores/search";
+import { priceHistoryFor, recentPriceChanges, runPriceScan, scanStatus } from "@/prices";
 
 export const meta = new Hono();
 
@@ -88,16 +89,11 @@ meta.get("/products/:id", (c) => {
 
 meta.get("/products/:id/price-history", (c) => {
   const days = Math.min(Number(c.req.query("days") ?? 90) || 90, 365);
-  const since = now() - days * 24 * 60 * 60 * 1000;
-  const points = db()
-    .select({ capturedAt: priceHistory.capturedAt, priceCents: priceHistory.priceCents, isDeal: priceHistory.isDeal })
-    .from(priceHistory)
-    .where(eq(priceHistory.productId, c.req.param("id")))
-    .orderBy(asc(priceHistory.capturedAt))
-    .all()
-    .filter((point) => point.capturedAt >= since);
-  return c.json({ points });
+  return c.json({ points: priceHistoryFor(c.req.param("id"), days) });
 });
+
+/** Watched products whose price changed recently (drops first). */
+meta.get("/prices/changes", (c) => c.json({ changes: recentPriceChanges(Math.min(Number(c.req.query("days") ?? 7) || 7, 90)), scan: scanStatus() }));
 
 meta.get("/memory", (c) => c.json({ choices: listChoices(Number(c.req.query("limit") ?? 200) || 200) }));
 
@@ -116,16 +112,10 @@ meta.get("/admin/stats", (c) => {
   });
 });
 
-/** Re-prices every product currently referenced by the basket by re-running its cached queries. */
-meta.post("/admin/refresh", async (c) => {
-  const referenced = new Set<string>();
-  for (const match of db().select().from(basketMatches).all()) {
-    if (match.chosenProductId) referenced.add(match.chosenProductId);
-    if (match.candidateIds[0]) referenced.add(match.candidateIds[0]);
-  }
-  const result = await refreshQueriesFor(referenced);
-  return c.json({ ...result, products: referenced.size });
-});
+/** Re-prices every product referenced by the baskets now (same job as the nightly scan). */
+meta.post("/admin/refresh", async (c) => c.json({ ...(await runPriceScan()), scan: scanStatus() }));
+
+meta.get("/admin/scan", (c) => c.json(scanStatus()));
 
 meta.post("/admin/clear-cache", (c) => {
   const database = db();

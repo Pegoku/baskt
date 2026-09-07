@@ -1,12 +1,14 @@
 import { createApp } from "@/app";
 import { db } from "@/db";
 import { aiConfigured, env } from "@/env";
+import { startPriceScheduler } from "@/prices";
 
 db();
 if (!env.apiToken) console.warn("[baskt] APP_API_TOKEN is empty: the API is unauthenticated");
 if (!aiConfigured()) console.warn("[baskt] AI_API_KEY/AI_MODEL not set: matching falls back to text similarity");
 
 const app = createApp();
+startPriceScheduler();
 
 export default {
   port: env.port,

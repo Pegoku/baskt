@@ -291,6 +291,14 @@ describe("api", () => {
     expect((await api(`/recipes/favourites/${id}`, { method: "DELETE" })).status).toBe(204);
   });
 
+  test("price changes endpoint reports watched products and scan status", async () => {
+    const body = (await (await api("/prices/changes")).json()) as any;
+    expect(Array.isArray(body.changes)).toBe(true);
+    expect(body.scan.nextRunAt).toBeNull(); // PRICE_SCAN=off in tests
+    const refreshed = (await (await api("/admin/refresh", { method: "POST" })).json()) as any;
+    expect(typeof refreshed.products).toBe("number");
+  });
+
   test("deals lists promoted candidates of the same kind", async () => {
     const created = await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "bio melk" }) });
     const id = ((await created.json()) as { id: string }).id;

@@ -23,6 +23,9 @@ export const env = {
   storeProxyUrl: process.env.STORE_PROXY_URL?.trim() || undefined,
   /** Set RECIPE_LOOKUP=off to skip fetching recipe pages (tests, offline). */
   recipeLookup: process.env.RECIPE_LOOKUP !== "off",
+  /** Nightly re-pricing of products referenced by baskets. */
+  priceScanEnabled: process.env.PRICE_SCAN !== "off",
+  priceScanTime: process.env.PRICE_SCAN_TIME ?? "03:30",
   storeMinGapMs: num(process.env.STORE_MIN_GAP_MS, 400),
   searchCacheTtlMs: num(process.env.SEARCH_CACHE_TTL_HOURS, 24) * 60 * 60 * 1000,
 };
