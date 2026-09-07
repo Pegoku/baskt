@@ -1,6 +1,7 @@
 package nl.baskt.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -102,15 +103,18 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             var languageMenu by remember { mutableStateOf(false) }
             val currentLanguage = settings?.language ?: "system"
             val systemName = java.util.Locale.getDefault().getDisplayLanguage(java.util.Locale.getDefault())
-            OutlinedButton(onClick = { languageMenu = true }) {
-                Text(LANGUAGE_OPTIONS.firstOrNull { it.first == currentLanguage }?.second?.let { if (currentLanguage == "system") "$it ($systemName)" else it } ?: currentLanguage)
-            }
-            DropdownMenu(expanded = languageMenu, onDismissRequest = { languageMenu = false }) {
-                for ((code, label) in LANGUAGE_OPTIONS) {
-                    DropdownMenuItem(
-                        text = { Text(if (code == "system") "$label ($systemName)" else label) },
-                        onClick = { languageMenu = false; viewModel.setLanguage(code) },
-                    )
+            // The menu must share a Box with its anchor; as a Column child it would reserve layout space and push content down.
+            Box {
+                OutlinedButton(onClick = { languageMenu = true }) {
+                    Text(LANGUAGE_OPTIONS.firstOrNull { it.first == currentLanguage }?.second?.let { if (currentLanguage == "system") "$it ($systemName)" else it } ?: currentLanguage)
+                }
+                DropdownMenu(expanded = languageMenu, onDismissRequest = { languageMenu = false }) {
+                    for ((code, label) in LANGUAGE_OPTIONS) {
+                        DropdownMenuItem(
+                            text = { Text(if (code == "system") "$label ($systemName)" else label) },
+                            onClick = { languageMenu = false; viewModel.setLanguage(code) },
+                        )
+                    }
                 }
             }
 
