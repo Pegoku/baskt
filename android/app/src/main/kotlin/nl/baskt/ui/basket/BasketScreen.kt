@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Settings
@@ -77,7 +78,7 @@ import nl.baskt.ui.common.BasketSwitcherTitle
 import nl.baskt.ui.common.StoreBadge
 
 @Composable
-fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit, onStock: () -> Unit, onSearch: () -> Unit) {
+fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit, onStock: () -> Unit, onSearch: () -> Unit, onDeals: () -> Unit) {
     val items by viewModel.basket.items.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
     val baskets by viewModel.basket.baskets.collectAsState()
@@ -109,6 +110,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                 },
                 actions = {
                     IconButton(onClick = onSearch) { Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan or search products") }
+                    if (items.any { !it.checked && !it.isGroup }) IconButton(onClick = onDeals) { Icon(Icons.Default.LocalOffer, contentDescription = "Find deals") }
                     IconButton(onClick = onStock) { Icon(Icons.Default.Kitchen, contentDescription = "Stock") }
                     IconButton(onClick = { viewModel.reload() }) { Icon(Icons.Default.Refresh, contentDescription = "Refresh") }
                     if (items.any { it.checked }) {

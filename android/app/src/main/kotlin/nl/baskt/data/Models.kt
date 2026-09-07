@@ -211,6 +211,21 @@ data class BarcodeResult(val store: String, val product: Product? = null, val er
 data class BarcodeResponse(val gtin: String, val results: List<BarcodeResult> = emptyList())
 
 @Serializable
+data class Deal(
+    val itemId: String,
+    val itemText: String,
+    val store: String,
+    val product: Product,
+    val currentProductId: String? = null,
+    val currentPriceCents: Int? = null,
+    val savingCents: Int? = null,
+    val equivalence: String = "EQUIVALENT",
+)
+
+@Serializable
+data class DealsResponse(val deals: List<Deal> = emptyList(), val computedAt: Long = 0)
+
+@Serializable
 data class HealthResponse(
     val ok: Boolean,
     val version: String = "",

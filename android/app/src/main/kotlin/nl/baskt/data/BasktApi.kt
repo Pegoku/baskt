@@ -179,6 +179,9 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 
     suspend fun refreshPrices(): JsonObject = client.post(url("/admin/refresh")) { auth() }.expect()
 
+    suspend fun deals(basketId: String, live: Boolean): DealsResponse =
+        client.get(url("/basket/deals")) { auth(); parameter("basketId", basketId); if (live) parameter("live", "true") }.expect()
+
     suspend fun searchProducts(query: String, store: String? = null, force: Boolean = false): ProductSearchResponse =
         client.get(url("/products/search")) {
             auth(); parameter("q", query); if (store != null) parameter("store", store); if (force) parameter("force", "true")

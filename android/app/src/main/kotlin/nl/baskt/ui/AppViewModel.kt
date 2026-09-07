@@ -12,6 +12,8 @@ import nl.baskt.data.AppSettings
 import nl.baskt.data.BasketItem
 import nl.baskt.data.Comparison
 import nl.baskt.data.BarcodeResponse
+import nl.baskt.data.Deal
+import nl.baskt.data.DealsResponse
 import nl.baskt.data.Product
 import nl.baskt.data.ProductSearchResponse
 import nl.baskt.data.RecipeSuggestion
@@ -89,6 +91,24 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun addFromProduct(product: Product) = viewModelScope.launch { basket.addFromProduct(product) }
+
+    private val _deals = MutableStateFlow<DealsResponse?>(null)
+    val deals: StateFlow<DealsResponse?> = _deals
+    private val _loadingDeals = MutableStateFlow(false)
+    val loadingDeals: StateFlow<Boolean> = _loadingDeals
+
+    fun findDeals(live: Boolean) = viewModelScope.launch {
+        _loadingDeals.value = true
+        _deals.value = basket.deals(live)
+        _loadingDeals.value = false
+    }
+
+    /** Switches the item at that store to the promoted product. */
+    fun takeDeal(deal: Deal) = viewModelScope.launch {
+        val item = basket.items.value.firstOrNull { it.id == deal.itemId } ?: return@launch
+        basket.choose(item, deal.store, deal.product.id)
+        _deals.value = _deals.value?.let { current -> current.copy(deals = current.deals.filterNot { it.itemId == deal.itemId && it.store == deal.store }) }
+    }
 
     /** Adds a recipe folder; with [items] the selected ingredients, otherwise the server looks the recipe up. */
     fun addGroup(title: String, items: List<String>? = null) = viewModelScope.launch { clearSuggestions(); basket.addGroup(title, items) }
