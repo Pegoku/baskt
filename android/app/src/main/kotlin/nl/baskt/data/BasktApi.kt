@@ -109,6 +109,9 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 
     suspend fun compare(): Comparison = client.get(url("/basket/compare")) { auth() }.expect()
 
+    suspend fun suggest(text: String): List<String> =
+        client.get(url("/basket/suggest")) { auth(); parameter("q", text) }.expect<SuggestResponse>().suggestions
+
     suspend fun refreshPrices(): JsonObject = client.post(url("/admin/refresh")) { auth() }.expect()
 
     private fun Map<String, Any?>.toJsonObject() = JsonObject(mapValues { (_, value) ->

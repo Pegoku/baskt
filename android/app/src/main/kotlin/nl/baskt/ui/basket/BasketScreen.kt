@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -41,6 +43,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -107,7 +110,14 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onCompar
                 )
             }
         },
-        bottomBar = { AddIdeaBar(onAdd = { text, quantity -> viewModel.add(text, quantity) }) },
+        bottomBar = {
+            val suggestions by viewModel.suggestions.collectAsState()
+            AddIdeaBar(
+                suggestions = suggestions,
+                onTextChanged = { viewModel.onIdeaTextChanged(it) },
+                onAdd = { text, quantity -> viewModel.clearSuggestions(); viewModel.add(text, quantity) },
+            )
+        },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
@@ -227,7 +237,7 @@ fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Uni
 }
 
 @Composable
-private fun AddIdeaBar(onAdd: (String, Int) -> Unit) {
+private fun AddIdeaBar(suggestions: List<String>, onTextChanged: (String) -> Unit, onAdd: (String, Int) -> Unit) {
     var text by remember { mutableStateOf("") }
     var quantity by remember { mutableIntStateOf(1) }
     fun submit() {
@@ -239,6 +249,18 @@ private fun AddIdeaBar(onAdd: (String, Int) -> Unit) {
     }
     // safeDrawing = system bars + keyboard, so the bar rises above the IME without double padding.
     Surface(tonalElevation = 3.dp, modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))) {
+      Column {
+        if (suggestions.isNotEmpty() && text.isNotBlank()) {
+            // Autocomplete row: history matches and AI interpretations of what was typed.
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                for (suggestion in suggestions) {
+                    SuggestionChip(onClick = { text = suggestion; onTextChanged(suggestion) }, label = { Text(suggestion) })
+                }
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -246,7 +268,7 @@ private fun AddIdeaBar(onAdd: (String, Int) -> Unit) {
         ) {
             OutlinedTextField(
                 value = text,
-                onValueChange = { text = it },
+                onValueChange = { text = it; onTextChanged(it) },
                 modifier = Modifier.weight(1f),
                 placeholder = { Text("Add an idea… e.g. halfvolle milk") },
                 singleLine = false,
@@ -261,5 +283,6 @@ private fun AddIdeaBar(onAdd: (String, Int) -> Unit) {
             }
             FilledIconButton(onClick = { submit() }, enabled = text.isNotBlank()) { Icon(Icons.Default.Add, contentDescription = "Add") }
         }
+      }
     }
 }

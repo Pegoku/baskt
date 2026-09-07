@@ -142,6 +142,9 @@ data class Comparison(
 )
 
 @Serializable
+data class SuggestResponse(val suggestions: List<String> = emptyList(), val source: String = "none")
+
+@Serializable
 data class HealthResponse(
     val ok: Boolean,
     val version: String = "",

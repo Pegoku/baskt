@@ -2,6 +2,8 @@ package nl.baskt.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -21,6 +23,30 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     private val _settings = MutableStateFlow<AppSettings?>(null)
     val settings: StateFlow<AppSettings?> = _settings
+
+    private val _suggestions = MutableStateFlow<List<String>>(emptyList())
+    val suggestions: StateFlow<List<String>> = _suggestions
+    private var suggestJob: Job? = null
+
+    /** Debounced autocomplete for the idea input; history answers instantly, AI interpretations follow. */
+    fun onIdeaTextChanged(text: String) {
+        suggestJob?.cancel()
+        val query = text.trim()
+        if (query.length < 2) {
+            _suggestions.value = emptyList()
+            return
+        }
+        suggestJob = viewModelScope.launch {
+            delay(400)
+            val result = runCatching { container.api.suggest(query) }.getOrDefault(emptyList())
+            _suggestions.value = result.filter { it.trim().lowercase() != query.lowercase() }
+        }
+    }
+
+    fun clearSuggestions() {
+        suggestJob?.cancel()
+        _suggestions.value = emptyList()
+    }
 
     init {
         viewModelScope.launch {
