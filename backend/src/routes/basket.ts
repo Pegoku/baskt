@@ -7,7 +7,7 @@ import { defaultServings, skipInStock } from "@/db/settings";
 import { inStock, listStock } from "@/stock";
 import { enabledStoreCodes } from "@/db/settings";
 import { compareBasket, type CompareMatch } from "@/matching/compare";
-import { chooseMatch, enqueue, getItem, getMatches, isRunning, rejectShown, rematchItem, searchMoreCandidates } from "@/matching/pipeline";
+import { chooseMatch, enqueue, feedback, getItem, getMatches, isRunning, rejectShown, rematchItem, searchMoreCandidates } from "@/matching/pipeline";
 import { splitShoppingText } from "@/matching/parse";
 import { suggest } from "@/matching/suggest";
 import { buildRecipeGroup, itemsForServings, looksLikeRecipe, type RecipeItem } from "@/matching/recipes";
@@ -326,6 +326,17 @@ basket.post("/items/:id/matches/:store/choose", async (c) => {
   if (invalid) return c.json(invalid, 400);
   const body = (await c.req.json().catch(() => ({}))) as { productId?: string | null };
   const match = chooseMatch(c.req.param("id"), store, body.productId ?? null);
+  if (!match) return c.json({ error: { code: "NOT_FOUND", message: "item, store or product not found" } }, 404);
+  return c.json(viewOf(c.req.param("id")));
+});
+
+basket.post("/items/:id/matches/:store/feedback", async (c) => {
+  const store = c.req.param("store");
+  const invalid = storeGuard(store);
+  if (invalid) return c.json(invalid, 400);
+  const body = (await c.req.json().catch(() => ({}))) as { productId?: string; up?: boolean };
+  if (!body.productId || typeof body.up !== "boolean") return c.json({ error: { code: "BAD_REQUEST", message: "productId and up are required" } }, 400);
+  const match = feedback(c.req.param("id"), store, body.productId, body.up);
   if (!match) return c.json({ error: { code: "NOT_FOUND", message: "item, store or product not found" } }, 404);
   return c.json(viewOf(c.req.param("id")));
 });

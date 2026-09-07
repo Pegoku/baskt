@@ -213,6 +213,45 @@ export function chooseMatch(itemId: string, store: string, productId: string | n
   });
 }
 
+/**
+ * Thumbs up/down on a product. Up confirms it (and teaches memory); down records a rejection,
+ * removes it from the options and, if it was the pick, falls back to the next best candidate.
+ */
+export function feedback(itemId: string, store: string, productId: string, up: boolean) {
+  const item = getItem(itemId);
+  const match = getMatch(itemId, store);
+  if (!item || !match || !match.candidateIds.includes(productId)) return null;
+  const product = productsByIds([productId])[0];
+  if (!product) return null;
+  const canonical = item.parsedJson?.canonicalName ?? item.text;
+  if (up) {
+    recordChoice({ itemText: item.text, canonical, store, chosenProductId: productId, chosenTitle: product.title, rejectedTitles: [] });
+    return saveMatch({
+      ...match,
+      candidateIds: [productId, ...match.candidateIds.filter((id) => id !== productId)],
+      chosenProductId: productId,
+      status: "CHOSEN",
+      chosenBy: "USER",
+      windowStart: 0,
+      shownCount: Math.min(OPTIONS_PER_PAGE, match.candidateIds.length),
+      updatedAt: now(),
+    });
+  }
+  recordChoice({ itemText: item.text, canonical, store, chosenProductId: null, chosenTitle: null, rejectedTitles: [product.title] });
+  const candidateIds = match.candidateIds.filter((id) => id !== productId);
+  const wasChosen = match.chosenProductId === productId;
+  return saveMatch({
+    ...match,
+    candidateIds,
+    chosenProductId: wasChosen ? null : match.chosenProductId,
+    status: candidateIds.length ? (wasChosen ? "PENDING" : match.status) : "EXHAUSTED",
+    chosenBy: wasChosen ? "AI" : match.chosenBy,
+    windowStart: wasChosen ? 0 : Math.min(match.windowStart, Math.max(0, candidateIds.length - 1)),
+    shownCount: wasChosen ? Math.min(OPTIONS_PER_PAGE, candidateIds.length) : Math.min(match.shownCount, candidateIds.length),
+    updatedAt: now(),
+  });
+}
+
 /** "None of them fit": remember the rejection and show the next options, searching wider when needed. */
 export async function rejectShown(itemId: string, store: string) {
   const item = getItem(itemId);

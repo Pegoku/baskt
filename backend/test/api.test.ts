@@ -159,6 +159,30 @@ describe("api", () => {
     expect(jumboStore.unconfirmedCount).toBe(0);
   });
 
+  test("thumbs down drops a product from the options, thumbs up confirms it", async () => {
+    const created = await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "melk" }) });
+    const id = ((await created.json()) as { id: string }).id;
+    await waitForMatched(id);
+    let item = ((await (await api("/basket")).json()) as any).items.find((entry: any) => entry.id === id);
+    let ah = item.matches.find((match: any) => match.store === "AH");
+    const first = ah.provisional.id;
+    const before = ah.totalCandidates;
+    item = (await (await api(`/basket/items/${id}/matches/AH/feedback`, { method: "POST", body: JSON.stringify({ productId: first, up: false }) })).json()) as any;
+    ah = item.matches.find((match: any) => match.store === "AH");
+    expect(ah.totalCandidates).toBe(before - 1);
+    expect(ah.options.map((option: any) => option.id)).not.toContain(first);
+    expect(ah.status).toBe("PENDING");
+    const memory = (await (await api("/memory")).json()) as any;
+    expect(memory.choices.some((choice: any) => choice.rejectedTitles.length === 1 && choice.chosenProductId === null)).toBe(true);
+
+    const liked = ah.options[0].id;
+    item = (await (await api(`/basket/items/${id}/matches/AH/feedback`, { method: "POST", body: JSON.stringify({ productId: liked, up: true }) })).json()) as any;
+    ah = item.matches.find((match: any) => match.store === "AH");
+    expect(ah.status).toBe("CHOSEN");
+    expect(ah.chosen.id).toBe(liked);
+    await api(`/basket/items/${id}`, { method: "DELETE" });
+  });
+
   test("a new identical idea is auto-matched from memory", async () => {
     const created = await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "halfvolle melk" }) });
     const id = ((await created.json()) as { id: string }).id;
