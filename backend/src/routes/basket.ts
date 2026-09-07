@@ -12,6 +12,7 @@ import { splitShoppingText } from "@/matching/parse";
 import { suggest } from "@/matching/suggest";
 import { buildRecipeGroup, itemsForServings, looksLikeRecipe, type RecipeItem } from "@/matching/recipes";
 import { findDeals } from "@/matching/deals";
+import { interpretVoice } from "@/matching/voice";
 import { fetchRecipe } from "@/routes/recipes";
 import { detectRecipeIntent, parseServings } from "@/matching/recipes";
 import { collectProductIds, itemView } from "@/serialize";
@@ -318,6 +319,28 @@ basket.post("/groups/:id/items", async (c) => {
   if (!body.text?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "text is required" } }, 400);
   const item = createItem(body.text, body.quantity ?? 1, group.id);
   return c.json(viewOf(item.id), 201);
+});
+
+/** Voice/dictation: returns a proposal (wanted + retracted items) for the confirm screen. */
+basket.post("/interpret", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { text?: string };
+  if (!body.text?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "text is required" } }, 400);
+  return c.json({ items: await interpretVoice(body.text) });
+});
+
+/** Adds a confirmed proposal: plain items and recipe folders in one go. */
+basket.post("/confirm", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { items?: Array<{ text?: string; quantity?: number; kind?: string }>; basketId?: string };
+  const basketId = body.basketId ?? DEFAULT_BASKET_ID;
+  if (!basketExists(basketId)) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
+  const entries = (body.items ?? []).filter((entry) => typeof entry.text === "string" && entry.text.trim());
+  if (!entries.length) return c.json({ error: { code: "BAD_REQUEST", message: "items are required" } }, 400);
+  const created = entries.map((entry) =>
+    entry.kind === "recipe" || looksLikeRecipe(entry.text!)
+      ? createGroup(entry.text!.trim(), undefined, basketId)
+      : createItem(entry.text!.trim(), Number.isInteger(entry.quantity) && entry.quantity! > 0 ? entry.quantity! : 1, null, "item", basketId),
+  );
+  return c.json({ items: loadViews(created) }, 201);
 });
 
 basket.post("/from-text", async (c) => {

@@ -299,6 +299,18 @@ describe("api", () => {
     expect(typeof refreshed.products).toBe("number");
   });
 
+  test("voice interpretation proposes items and confirm adds them", async () => {
+    const proposal = (await (await api("/basket/interpret", { method: "POST", body: JSON.stringify({ text: "melk, rijst en suiker" }) })).json()) as any;
+    expect(proposal.items.map((item: any) => item.text)).toEqual(["melk", "rijst", "suiker"]);
+    expect(proposal.items.every((item: any) => item.wanted)).toBe(true);
+    const confirmed = await api("/basket/confirm", { method: "POST", body: JSON.stringify({ items: [{ text: "melk" }, { text: "ingredients for soup", kind: "recipe" }] }) });
+    expect(confirmed.status).toBe(201);
+    const items = ((await confirmed.json()) as any).items;
+    expect(items).toHaveLength(2);
+    expect(items[1].kind).toBe("group");
+    for (const item of items) await api(`/basket/items/${item.id}`, { method: "DELETE" });
+  });
+
   test("deals lists promoted candidates of the same kind", async () => {
     const created = await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "bio melk" }) });
     const id = ((await created.json()) as { id: string }).id;
