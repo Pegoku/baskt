@@ -259,6 +259,21 @@ describe("api", () => {
     await api(`/basket/items/${copied.id}`, { method: "DELETE" });
   });
 
+  test("stock entries are matched against ingredient texts", async () => {
+    const added = await api("/stock", { method: "POST", body: JSON.stringify({ text: "salt" }) });
+    expect(added.status).toBe(201);
+    const list = (await (await api("/stock")).json()) as any;
+    expect(list.items.map((row: any) => row.text)).toEqual(["salt"]);
+    const { inStock } = await import("@/stock");
+    expect(inStock("salt 1 pinch")?.text).toBe("salt");
+    expect(inStock("sea salt flakes")?.text).toBe("salt");
+    expect(inStock("sugar 100 g")).toBeNull();
+    expect((await api(`/stock/${list.items[0].id}`, { method: "DELETE" })).status).toBe(204);
+    const settings = (await (await api("/settings", { method: "PATCH", body: JSON.stringify({ recipeSkipInStock: false }) })).json()) as any;
+    expect(settings.recipeSkipInStock).toBe(false);
+    await api("/settings", { method: "PATCH", body: JSON.stringify({ recipeSkipInStock: true }) });
+  });
+
   test("delete leaves a tombstone", async () => {
     expect((await api(`/basket/items/${itemId}`, { method: "DELETE" })).status).toBe(204);
     const body = (await (await api("/basket?since=1")).json()) as any;

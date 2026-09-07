@@ -3,6 +3,8 @@ import { Hono } from "hono";
 import { db, newId, now } from "@/db";
 import { basketItems, basketMatches, tombstones, DEFAULT_BASKET_ID, type BasketItemRow } from "@/db/schema";
 import { basketExists, transferItem } from "@/routes/baskets";
+import { skipInStock } from "@/db/settings";
+import { inStock, listStock } from "@/stock";
 import { enabledStoreCodes } from "@/db/settings";
 import { compareBasket, type CompareMatch } from "@/matching/compare";
 import { chooseMatch, enqueue, getItem, getMatches, isRunning, rejectShown, rematchItem, searchMoreCandidates } from "@/matching/pipeline";
@@ -87,13 +89,26 @@ function createGroup(text: string, itemTexts?: string[], basketId = DEFAULT_BASK
   void buildRecipeGroup(text)
     .then(({ intent, recipe, items }) => {
       if (!getItem(group.id)) return;
-      for (const child of items) createItem(child.text, child.quantity, group.id);
+      // Ingredients already in stock are left out but remembered so the folder can add them later.
+      const stockRows = skipInStock() ? listStock() : [];
+      const skipped: Array<{ text: string; quantity: number; reason: string }> = [];
+      for (const child of items) {
+        const have = stockRows.length ? inStock(child.text, stockRows) : null;
+        if (have) skipped.push({ text: child.text, quantity: child.quantity, reason: `in stock: ${have.text}` });
+        else createItem(child.text, child.quantity, group.id);
+      }
       db()
         .update(basketItems)
         .set({
           // Folder name in the user's language; the recipe's own title stays in recipeJson.
           text: intent.dish,
-          recipeJson: recipe ? { title: recipe.title, sourceUrl: recipe.sourceUrl, servings: recipe.servings, ingredientLines: recipe.ingredientLines } : null,
+          recipeJson: {
+            title: recipe?.title ?? intent.dish,
+            sourceUrl: recipe?.sourceUrl ?? null,
+            servings: recipe?.servings ?? null,
+            ingredientLines: recipe?.ingredientLines ?? items.map((item) => item.text),
+            skipped,
+          },
           status: items.length ? "MATCHED" : "ERROR",
           error: items.length ? null : "No ingredients found for this dish",
           updatedAt: now(),
@@ -160,6 +175,16 @@ basket.post("/groups", async (c) => {
   const items = Array.isArray(body.items) ? body.items.filter((value): value is string => typeof value === "string" && value.trim().length > 0) : undefined;
   const group = createGroup(body.text, items, basketId);
   return c.json({ group: viewOf(group.id), items: loadViews(childrenOf(group.id)) }, 201);
+});
+
+/** Adds the ingredients that were skipped because they were in stock. */
+basket.post("/groups/:id/add-skipped", (c) => {
+  const group = getItem(c.req.param("id"));
+  if (!group || group.kind !== "group") return c.json({ error: { code: "NOT_FOUND", message: "folder not found" } }, 404);
+  const skipped = group.recipeJson?.skipped ?? [];
+  const created = skipped.map((entry) => createItem(entry.text, entry.quantity, group.id));
+  db().update(basketItems).set({ recipeJson: { ...group.recipeJson!, skipped: [] }, updatedAt: now() }).where(eq(basketItems.id, group.id)).run();
+  return c.json({ items: loadViews(created) });
 });
 
 basket.post("/groups/:id/items", async (c) => {

@@ -3,7 +3,8 @@ import { Hono } from "hono";
 import { aiStats } from "@/ai/client";
 import { db, now } from "@/db";
 import { aiCache, basketItems, basketMatches, priceHistory, products, searchCache } from "@/db/schema";
-import { appLanguage, enabledStoreCodes, setSetting } from "@/db/settings";
+import { appLanguage, enabledStoreCodes, setSetting, skipInStock } from "@/db/settings";
+import { addStock, listStock, removeStock } from "@/stock";
 import { deleteChoice, listChoices } from "@/matching/memory";
 import { allStores, hasStore, storeHealth } from "@/stores/registry";
 import { refreshQueriesFor, searchStore } from "@/stores/search";
@@ -17,10 +18,11 @@ meta.get("/stores", (c) => {
   return c.json({ stores: allStores().map((store) => ({ ...store, enabled: enabled.includes(store.code) })) });
 });
 
-meta.get("/settings", (c) => c.json({ enabledStores: enabledStoreCodes(), language: appLanguage() }));
+meta.get("/settings", (c) => c.json({ enabledStores: enabledStoreCodes(), language: appLanguage(), recipeSkipInStock: skipInStock() }));
 
 meta.patch("/settings", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { enabledStores?: string[]; language?: string };
+  const body = (await c.req.json().catch(() => ({}))) as { enabledStores?: string[]; language?: string; recipeSkipInStock?: boolean };
+  if (typeof body.recipeSkipInStock === "boolean") setSetting("recipeSkipInStock", body.recipeSkipInStock);
   if (Array.isArray(body.enabledStores)) {
     const valid = body.enabledStores.filter((code) => typeof code === "string" && hasStore(code));
     if (!valid.length) return c.json({ error: { code: "BAD_REQUEST", message: "at least one known store must stay enabled" } }, 400);
@@ -29,8 +31,18 @@ meta.patch("/settings", async (c) => {
   if (typeof body.language === "string" && /^[a-zA-Z]{2,3}([-_][a-zA-Z0-9]+)?$/.test(body.language.trim())) {
     setSetting("language", body.language.trim().toLowerCase().split(/[-_]/)[0]);
   }
-  return c.json({ enabledStores: enabledStoreCodes(), language: appLanguage() });
+  return c.json({ enabledStores: enabledStoreCodes(), language: appLanguage(), recipeSkipInStock: skipInStock() });
 });
+
+meta.get("/stock", (c) => c.json({ items: listStock() }));
+
+meta.post("/stock", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { text?: string; quantityText?: string | null };
+  if (!body.text?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "text is required" } }, 400);
+  return c.json(addStock(body.text, body.quantityText ?? null), 201);
+});
+
+meta.delete("/stock/:id", (c) => (removeStock(c.req.param("id")) ? c.body(null, 204) : c.json({ error: { code: "NOT_FOUND", message: "not in stock" } }, 404)));
 
 meta.get("/products/search", async (c) => {
   const query = c.req.query("q")?.trim();

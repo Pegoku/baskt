@@ -62,6 +62,16 @@ export const baskets = sqliteTable("baskets", {
   updatedAt: integer("updated_at").notNull(),
 });
 
+/** Things the user already has at home; recipe folders skip them. */
+export const stock = sqliteTable("stock", {
+  id: text("id").primaryKey(),
+  text: text("text").notNull(),
+  canonical: text("canonical").notNull(),
+  quantityText: text("quantity_text"),
+  addedAt: integer("added_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 export type ItemStatus = "NEW" | "PARSING" | "MATCHING" | "MATCHED" | "ERROR";
 export type ItemKind = "item" | "group";
 
@@ -70,6 +80,8 @@ export type RecipeInfo = {
   sourceUrl: string | null;
   servings: string | null;
   ingredientLines: string[];
+  /** Ingredients left out because they are in stock (can be added later from the folder). */
+  skipped?: Array<{ text: string; quantity: number; reason: string }>;
 };
 
 export const basketItems = sqliteTable("basket_items", {
@@ -165,6 +177,7 @@ export type ParsedIdea = {
 };
 
 export type BasketRow = typeof baskets.$inferSelect;
+export type StockRow = typeof stock.$inferSelect;
 export type ProductRow = typeof products.$inferSelect;
 export type BasketItemRow = typeof basketItems.$inferSelect;
 export type BasketMatchRow = typeof basketMatches.$inferSelect;

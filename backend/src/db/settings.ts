@@ -34,6 +34,11 @@ export function appLanguageName(): string {
   return LANGUAGE_NAMES[code] ?? code;
 }
 
+/** Recipe folders leave out ingredients that are in stock (default on). */
+export function skipInStock(): boolean {
+  return getSetting<boolean>("recipeSkipInStock", true);
+}
+
 export function enabledStoreCodes(): string[] {
   const known = allStores().map((store) => store.code);
   const enabled = getSetting<string[] | null>("enabledStores", null);
