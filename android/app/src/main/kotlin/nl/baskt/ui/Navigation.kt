@@ -15,6 +15,7 @@ import nl.baskt.ui.stock.StockScreen
 import nl.baskt.ui.search.SearchScreen
 import nl.baskt.ui.deals.DealsScreen
 import nl.baskt.ui.recipes.RecipesScreen
+import nl.baskt.ui.shop.ShopModeScreen
 
 @Serializable data object BasketRoute : NavKey
 @Serializable data class ItemRoute(val itemId: String) : NavKey
@@ -25,6 +26,7 @@ import nl.baskt.ui.recipes.RecipesScreen
 @Serializable data object SearchRoute : NavKey
 @Serializable data object DealsRoute : NavKey
 @Serializable data object RecipesRoute : NavKey
+@Serializable data class ShopRoute(val store: String) : NavKey
 
 @Composable
 fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
@@ -45,8 +47,10 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
                     onSearch = { backStack.add(SearchRoute) },
                     onDeals = { backStack.add(DealsRoute) },
                     onRecipes = { backStack.add(RecipesRoute) },
+                    onShop = { backStack.add(ShopRoute(it)) },
                 )
             }
+            entry<ShopRoute> { route -> ShopModeScreen(viewModel, route.store, onBack = { backStack.removeLastOrNull() }) }
             entry<RecipesRoute> { RecipesScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onFolderAdded = { backStack.removeLastOrNull() }) }
             entry<DealsRoute> { DealsScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) }) }
             entry<SearchRoute> { SearchScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) }) }
