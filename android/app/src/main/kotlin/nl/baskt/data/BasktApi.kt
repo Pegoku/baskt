@@ -69,9 +69,15 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 
     suspend fun basket(): BasketResponse = client.get(url("/basket")) { auth() }.expect()
 
-    suspend fun addItem(text: String, quantity: Int): BasketItem =
+    suspend fun addItem(text: String, quantity: Int, parentId: String? = null): BasketItem =
         client.post(url("/basket/items")) {
-            auth(); contentType(ContentType.Application.Json); setBody(AddItemRequest(text, quantity))
+            auth(); contentType(ContentType.Application.Json); setBody(AddItemRequest(text, quantity, parentId))
+        }.expect()
+
+    /** Creates a folder; with [items] the children are given, otherwise the server looks up a recipe. */
+    suspend fun addGroup(text: String, items: List<String>? = null): GroupResponse =
+        client.post(url("/basket/groups")) {
+            auth(); contentType(ContentType.Application.Json); setBody(AddGroupRequest(text, items))
         }.expect()
 
     suspend fun addFromText(text: String): List<BasketItem> =
@@ -114,8 +120,8 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 
     suspend fun compare(): Comparison = client.get(url("/basket/compare")) { auth() }.expect()
 
-    suspend fun suggest(text: String): List<String> =
-        client.get(url("/basket/suggest")) { auth(); parameter("q", text) }.expect<SuggestResponse>().suggestions
+    suspend fun suggest(text: String): SuggestResponse =
+        client.get(url("/basket/suggest")) { auth(); parameter("q", text) }.expect()
 
     suspend fun refreshPrices(): JsonObject = client.post(url("/admin/refresh")) { auth() }.expect()
 
@@ -130,7 +136,8 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
     })
 }
 
-@Serializable private data class AddItemRequest(val text: String, val quantity: Int)
+@Serializable private data class AddItemRequest(val text: String, val quantity: Int, val parentId: String? = null)
+@Serializable private data class AddGroupRequest(val text: String, val items: List<String>? = null)
 @Serializable private data class FromTextRequest(val text: String)
 @Serializable private data class QueryRequest(val query: String)
 @Serializable private data class ItemsResponse(val items: List<BasketItem>)

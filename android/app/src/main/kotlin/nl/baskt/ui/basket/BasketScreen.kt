@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Settings
@@ -73,7 +74,7 @@ import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.StoreBadge
 
 @Composable
-fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit) {
+fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit) {
     val items by viewModel.basket.items.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
     val loading by viewModel.basket.loading.collectAsState()
@@ -112,10 +113,14 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onCompar
         },
         bottomBar = {
             val suggestions by viewModel.suggestions.collectAsState()
+            val recipe by viewModel.recipeSuggestion.collectAsState()
             AddIdeaBar(
                 suggestions = suggestions,
+                recipe = recipe,
                 onTextChanged = { viewModel.onIdeaTextChanged(it) },
                 onAdd = { text, quantity -> viewModel.clearSuggestions(); viewModel.add(text, quantity) },
+                onAddGroup = { title, picked -> viewModel.addGroup(title, picked) },
+                onAddMany = { picked -> viewModel.addMany(picked) },
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -145,10 +150,15 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onCompar
                     }
                 }
             } else {
+                val topLevel = items.filter { it.parentId == null }
                 LazyColumn(contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(items, key = { it.id }) { item ->
+                    items(topLevel, key = { it.id }) { item ->
                         DismissibleItem(item, onDelete = { viewModel.delete(item) }) {
-                            BasketItemCard(item, enabledStores, onClick = { onOpenItem(item.id) }, onToggle = { viewModel.toggleChecked(item) })
+                            if (item.isGroup) {
+                                GroupCard(item, items.filter { it.parentId == item.id }, enabledStores, onClick = { onOpenGroup(item.id) }, onToggle = { viewModel.toggleChecked(item) })
+                            } else {
+                                BasketItemCard(item, enabledStores, onClick = { onOpenItem(item.id) }, onToggle = { viewModel.toggleChecked(item) })
+                            }
                         }
                     }
                 }
@@ -236,53 +246,59 @@ fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Uni
     }
 }
 
+/** A folder row: title, child count and per-store totals summed over the children. */
 @Composable
-private fun AddIdeaBar(suggestions: List<String>, onTextChanged: (String) -> Unit, onAdd: (String, Int) -> Unit) {
-    var text by remember { mutableStateOf("") }
-    var quantity by remember { mutableIntStateOf(1) }
-    fun submit() {
-        val value = text.trim()
-        if (value.isEmpty()) return
-        onAdd(value, quantity)
-        text = ""
-        quantity = 1
-    }
-    // safeDrawing = system bars + keyboard, so the bar rises above the IME without double padding.
-    Surface(tonalElevation = 3.dp, modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))) {
-      Column {
-        if (suggestions.isNotEmpty() && text.isNotBlank()) {
-            // Autocomplete row: history matches and AI interpretations of what was typed.
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                for (suggestion in suggestions) {
-                    SuggestionChip(onClick = { text = suggestion; onTextChanged(suggestion) }, label = { Text(suggestion) })
+fun GroupCard(group: BasketItem, children: List<BasketItem>, stores: List<StoreInfo>, onClick: () -> Unit, onToggle: () -> Unit) {
+    val allChecked = children.isNotEmpty() && children.all { it.checked }
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = if (allChecked) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Row(modifier = Modifier.padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = allChecked, onCheckedChange = { onToggle() }, enabled = children.isNotEmpty())
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Text(
+                        group.text,
+                        style = MaterialTheme.typography.titleMedium,
+                        textDecoration = if (allChecked) TextDecoration.LineThrough else null,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                when {
+                    group.isProcessing -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LoadingIndicator(modifier = Modifier.size(20.dp))
+                        Text("Looking up the recipe…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    group.status == "ERROR" -> Text(group.error ?: "Could not build this folder", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    else -> {
+                        val open = children.filter { !it.checked }
+                        val busy = children.count { it.isProcessing }
+                        Text(
+                            listOfNotNull("${children.size} items", if (busy > 0) "$busy searching" else null, if (group.needsChoice) "choices to make" else null).joinToString(" · "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (group.needsChoice) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            for (store in stores) {
+                                val total = open.sumOf { child -> (child.match(store.code)?.effective?.priceCents ?: 0) * child.quantity }
+                                val missing = open.count { it.match(store.code)?.effective == null }
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    StoreBadge(store.code, stores)
+                                    Text(
+                                        if (open.isEmpty()) "—" else total.euros() + if (missing > 0) " (−$missing)" else "",
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it; onTextChanged(it) },
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Add an idea… e.g. halfvolle milk") },
-                singleLine = false,
-                maxLines = 3,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { submit() }),
-            )
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(onClick = { quantity += 1 }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Add, contentDescription = "More") }
-                Text("$quantity", style = MaterialTheme.typography.labelLarge)
-                IconButton(onClick = { if (quantity > 1) quantity -= 1 }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Remove, contentDescription = "Less") }
-            }
-            FilledIconButton(onClick = { submit() }, enabled = text.isNotBlank()) { Icon(Icons.Default.Add, contentDescription = "Add") }
-        }
-      }
     }
 }

@@ -78,13 +78,23 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
         null
     }
 
-    suspend fun add(text: String, quantity: Int) = guard { replace(api.addItem(text, quantity)) }
+    suspend fun add(text: String, quantity: Int, parentId: String? = null) = guard { replace(api.addItem(text, quantity, parentId)) }
+
+    suspend fun addGroup(text: String, items: List<String>? = null) = guard {
+        val response = api.addGroup(text, items)
+        replace(response.group)
+        response.items.forEach(::replace)
+        if (response.group.isProcessing || response.items.any { it.isProcessing }) startPolling()
+    }
 
     suspend fun addFromText(text: String) = guard {
         api.addFromText(text).forEach(::replace)
     }
 
-    suspend fun setChecked(item: BasketItem, checked: Boolean) = guard { replace(api.updateItem(item.id, checked = checked)) }
+    suspend fun setChecked(item: BasketItem, checked: Boolean) = guard {
+        replace(api.updateItem(item.id, checked = checked))
+        if (item.isGroup) _items.update { list -> list.map { if (it.parentId == item.id) it.copy(checked = checked) else it } }
+    }
 
     suspend fun setQuantity(item: BasketItem, quantity: Int) = guard { replace(api.updateItem(item.id, quantity = quantity)) }
 
@@ -92,12 +102,12 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
 
     suspend fun delete(item: BasketItem) = guard {
         api.deleteItem(item.id)
-        _items.update { list -> list.filterNot { it.id == item.id } }
+        _items.update { list -> list.filterNot { it.id == item.id || it.parentId == item.id } }
     }
 
     suspend fun clearChecked() = guard {
         api.clearChecked()
-        _items.update { list -> list.filterNot { it.checked } }
+        refresh(false)
     }
 
     suspend fun choose(item: BasketItem, store: String, productId: String?) = guard { replace(api.choose(item.id, store, productId)) }

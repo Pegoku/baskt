@@ -11,6 +11,7 @@ import nl.baskt.AppContainer
 import nl.baskt.data.AppSettings
 import nl.baskt.data.BasketItem
 import nl.baskt.data.Comparison
+import nl.baskt.data.RecipeSuggestion
 
 class AppViewModel(val container: AppContainer) : ViewModel() {
     val basket = container.basket
@@ -26,6 +27,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     private val _suggestions = MutableStateFlow<List<String>>(emptyList())
     val suggestions: StateFlow<List<String>> = _suggestions
+
+    /** When the typed text asks for a dish, the full ingredient list the AI proposes. */
+    private val _recipeSuggestion = MutableStateFlow<RecipeSuggestion?>(null)
+    val recipeSuggestion: StateFlow<RecipeSuggestion?> = _recipeSuggestion
     private var suggestJob: Job? = null
 
     /** Debounced autocomplete for the idea input; history answers instantly, AI interpretations follow. */
@@ -34,18 +39,31 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         val query = text.trim()
         if (query.length < 2) {
             _suggestions.value = emptyList()
+            _recipeSuggestion.value = null
             return
         }
         suggestJob = viewModelScope.launch {
             delay(250)
-            val result = runCatching { container.api.suggest(query) }.getOrDefault(emptyList())
-            _suggestions.value = result.filter { it.trim().lowercase() != query.lowercase() }
+            val result = runCatching { container.api.suggest(query) }.getOrNull()
+            _suggestions.value = result?.suggestions?.filter { it.trim().lowercase() != query.lowercase() } ?: emptyList()
+            _recipeSuggestion.value = result?.recipe
         }
     }
 
     fun clearSuggestions() {
         suggestJob?.cancel()
         _suggestions.value = emptyList()
+        _recipeSuggestion.value = null
+    }
+
+    fun addToGroup(groupId: String, text: String, quantity: Int) = viewModelScope.launch { basket.add(text, quantity, groupId) }
+
+    /** Adds a recipe folder; with [items] the selected ingredients, otherwise the server looks the recipe up. */
+    fun addGroup(title: String, items: List<String>? = null) = viewModelScope.launch { clearSuggestions(); basket.addGroup(title, items) }
+
+    fun addMany(items: List<String>) = viewModelScope.launch {
+        clearSuggestions()
+        for (item in items) basket.add(item, 1)
     }
 
     init {

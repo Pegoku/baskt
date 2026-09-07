@@ -58,8 +58,19 @@ data class StoreMatch(
 }
 
 @Serializable
+data class RecipeInfo(
+    val title: String,
+    val sourceUrl: String? = null,
+    val servings: String? = null,
+    val ingredientLines: List<String> = emptyList(),
+)
+
+@Serializable
 data class BasketItem(
     val id: String,
+    val kind: String = "item", // item | group
+    val parentId: String? = null,
+    val recipe: RecipeInfo? = null,
     val text: String,
     val quantity: Int = 1,
     val checked: Boolean = false,
@@ -73,8 +84,15 @@ data class BasketItem(
     val updatedAt: Long = 0,
 ) {
     val isProcessing: Boolean get() = status == "NEW" || status == "PARSING" || status == "MATCHING"
+    val isGroup: Boolean get() = kind == "group"
     fun match(store: String) = matches.firstOrNull { it.store == store }
 }
+
+@Serializable
+data class GroupResponse(val group: BasketItem, val items: List<BasketItem> = emptyList())
+
+@Serializable
+data class RecipeSuggestion(val title: String, val ingredients: List<String> = emptyList())
 
 @Serializable
 data class BasketResponse(
@@ -142,7 +160,7 @@ data class Comparison(
 )
 
 @Serializable
-data class SuggestResponse(val suggestions: List<String> = emptyList(), val source: String = "none")
+data class SuggestResponse(val suggestions: List<String> = emptyList(), val source: String = "none", val recipe: RecipeSuggestion? = null)
 
 @Serializable
 data class HealthResponse(
