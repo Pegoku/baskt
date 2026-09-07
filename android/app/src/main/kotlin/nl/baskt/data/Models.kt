@@ -67,6 +67,8 @@ data class RecipeInfo(
     val servings: String? = null,
     val ingredientLines: List<String> = emptyList(),
     val skipped: List<SkippedIngredient> = emptyList(),
+    val baseServings: Double? = null,
+    val currentServings: Double? = null,
 )
 
 @Serializable
@@ -143,7 +145,13 @@ data class StoreInfo(
 data class StoresResponse(val stores: List<StoreInfo>)
 
 @Serializable
-data class SettingsResponse(val enabledStores: List<String>? = null, val language: String? = null, val recipeSkipInStock: Boolean? = null)
+data class SettingsResponse(
+    val enabledStores: List<String>? = null,
+    val language: String? = null,
+    val recipeSkipInStock: Boolean? = null,
+    val defaultServings: Int? = null,
+    val rankBy: String? = null,
+)
 
 @Serializable
 data class StoreLine(

@@ -76,6 +76,17 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
         client.delete(url("/stock/$id")) { auth() }.expect<Unit>()
     }
 
+    suspend fun setDefaultServings(servings: Int?): SettingsResponse =
+        client.patch(url("/settings")) {
+            auth(); contentType(ContentType.Application.Json)
+            setBody(JsonObject(mapOf("defaultServings" to (servings?.let { JsonPrimitive(it) } ?: JsonNull))))
+        }.expect()
+
+    suspend fun setGroupServings(groupId: String, servings: Int): GroupResponse =
+        client.post(url("/basket/groups/$groupId/servings")) {
+            auth(); contentType(ContentType.Application.Json); setBody(JsonObject(mapOf("servings" to JsonPrimitive(servings))))
+        }.expect()
+
     suspend fun addSkipped(groupId: String): List<BasketItem> =
         client.post(url("/basket/groups/$groupId/add-skipped")) { auth() }.expect<ItemsResponse>().items
 

@@ -13,7 +13,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -102,6 +104,19 @@ fun GroupScreen(viewModel: AppViewModel, groupId: String, onBack: () -> Unit, on
                                         .joinToString(" · "),
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
+                            }
+                        }
+                        val info = group.recipe
+                        if (info != null && !group.isProcessing && group.status != "ERROR") {
+                            val current = (info.currentServings ?: info.baseServings)?.toInt()
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Servings", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                                IconButton(onClick = { if ((current ?: 2) > 1) viewModel.setGroupServings(group, (current ?: 2) - 1) }) { Icon(Icons.Default.Remove, contentDescription = "Fewer") }
+                                Text(current?.toString() ?: "as written", style = MaterialTheme.typography.titleMedium)
+                                IconButton(onClick = { viewModel.setGroupServings(group, (current ?: 2) + 1) }) { Icon(Icons.Default.Add, contentDescription = "More") }
+                            }
+                            if (info.baseServings != null && current != null && info.baseServings.toInt() != current) {
+                                Text("Recipe written for ${info.baseServings.toInt()}; amounts scaled.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                         val skipped = group.recipe?.skipped ?: emptyList()

@@ -91,6 +91,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun removeStock(item: StockItem) = viewModelScope.launch { basket.removeStock(item) }
     fun setSkipInStock(enabled: Boolean) = viewModelScope.launch { basket.setSkipInStock(enabled) }
     fun addSkipped(group: BasketItem) = viewModelScope.launch { basket.addSkipped(group) }
+    fun setDefaultServings(servings: Int?) = viewModelScope.launch { basket.setDefaultServings(servings) }
+    fun setGroupServings(group: BasketItem, servings: Int) = viewModelScope.launch { basket.setGroupServings(group, servings) }
     fun createBasket(name: String, emoji: String?, switchTo: Boolean = true) = viewModelScope.launch {
         val created = basket.createBasket(name, emoji)
         if (switchTo && created != null) basket.switchBasket(created.id)

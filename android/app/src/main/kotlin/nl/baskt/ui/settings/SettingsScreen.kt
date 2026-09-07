@@ -13,6 +13,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -128,6 +130,16 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                     Text("Recipe folders leave out what is in your stock list; you can add them back per folder.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Switch(checked = serverSettings.recipeSkipInStock ?: true, onCheckedChange = { viewModel.setSkipInStock(it) })
+            }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Default servings")
+                    Text("Recipe folders are scaled to this many people. Change it per folder any time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                val servings = serverSettings.defaultServings
+                IconButton(onClick = { viewModel.setDefaultServings(if (servings == null) null else if (servings <= 1) null else servings - 1) }) { Icon(Icons.Default.Remove, contentDescription = "Fewer") }
+                Text(servings?.toString() ?: "as written", style = MaterialTheme.typography.titleMedium)
+                IconButton(onClick = { viewModel.setDefaultServings((servings ?: 1) + 1) }) { Icon(Icons.Default.Add, contentDescription = "More") }
             }
 
             HorizontalDivider()
