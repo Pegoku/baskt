@@ -1,6 +1,12 @@
 package nl.baskt
 
 import android.app.Application
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import coil3.request.crossfade
+import okhttp3.OkHttpClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,12 +38,34 @@ class AppContainer(app: Application) {
     suspend fun awaitSettings(): AppSettings = settingsStore.settings.first().also { currentSettings = it }
 }
 
-class BasktApp : Application() {
+class BasktApp : Application(), SingletonImageLoader.Factory {
     lateinit var container: AppContainer
         private set
 
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+    }
+
+    /** Jumbo's CDN rejects the default "okhttp/x" user agent, so product images are fetched with a browser UA. */
+    override fun newImageLoader(context: PlatformContext): ImageLoader {
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                chain.proceed(
+                    chain.request().newBuilder()
+                        .header("User-Agent", BROWSER_USER_AGENT)
+                        .header("Accept", "image/avif,image/webp,image/png,image/*;q=0.8,*/*;q=0.5")
+                        .build(),
+                )
+            }
+            .build()
+        return ImageLoader.Builder(context)
+            .components { add(OkHttpNetworkFetcherFactory(callFactory = { client })) }
+            .crossfade(true)
+            .build()
+    }
+
+    companion object {
+        const val BROWSER_USER_AGENT = "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Mobile Safari/537.36"
     }
 }
