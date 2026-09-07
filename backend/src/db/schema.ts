@@ -72,6 +72,15 @@ export const stock = sqliteTable("stock", {
   updatedAt: integer("updated_at").notNull(),
 });
 
+/** Saved recipes from the meal browser. */
+export const recipeFavourites = sqliteTable("recipe_favourites", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  url: text("url").notNull(),
+  imageUrl: text("image_url"),
+  createdAt: integer("created_at").notNull(),
+});
+
 export type ItemStatus = "NEW" | "PARSING" | "MATCHING" | "MATCHED" | "ERROR";
 export type ItemKind = "item" | "group";
 

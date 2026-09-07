@@ -29,6 +29,13 @@
       "when": 1788822122621,
       "tag": "0003_hesitant_morlocks",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788822771525,
+      "tag": "0004_purple_spot",
+      "breakpoints": true
     }
   ]
 }

@@ -12,6 +12,8 @@ import { splitShoppingText } from "@/matching/parse";
 import { suggest } from "@/matching/suggest";
 import { buildRecipeGroup, itemsForServings, looksLikeRecipe, type RecipeItem } from "@/matching/recipes";
 import { findDeals } from "@/matching/deals";
+import { fetchRecipe } from "@/routes/recipes";
+import { detectRecipeIntent, parseServings } from "@/matching/recipes";
 import { collectProductIds, itemView } from "@/serialize";
 import { hasStore } from "@/stores/registry";
 import { productsByIds } from "@/stores/search";
@@ -90,6 +92,37 @@ function createChildren(groupId: string, items: RecipeItem[]) {
     else createItem(child.text, child.quantity, groupId);
   }
   return skipped;
+}
+
+/** Folder from a known recipe page (meal browser, favourites, pasted URL). */
+function createGroupFromUrl(url: string, basketId = DEFAULT_BASKET_ID, servings: number | null = null) {
+  const group = createItem(url, 1, null, "group", basketId);
+  db().update(basketItems).set({ status: "PARSING" }).where(eq(basketItems.id, group.id)).run();
+  void (async () => {
+    const recipe = await fetchRecipe(url);
+    if (!recipe) throw new Error("No recipe data found on that page");
+    const intent = await detectRecipeIntent(recipe.title);
+    const baseServings = parseServings(recipe.servings);
+    const target = servings ?? defaultServings() ?? baseServings;
+    const items = await itemsForServings(recipe, intent.dish || recipe.title, baseServings, target);
+    if (!getItem(group.id)) return;
+    const skipped = createChildren(group.id, items);
+    db()
+      .update(basketItems)
+      .set({
+        text: intent.dish || recipe.title,
+        recipeJson: { title: recipe.title, sourceUrl: recipe.sourceUrl, servings: recipe.servings, ingredientLines: recipe.ingredientLines, skipped, baseServings, currentServings: target },
+        status: items.length ? "MATCHED" : "ERROR",
+        error: items.length ? null : "No ingredients found in this recipe",
+        updatedAt: now(),
+      })
+      .where(eq(basketItems.id, group.id))
+      .run();
+  })().catch((error) => {
+    console.error(`[recipes] group from url ${url} failed:`, error);
+    db().update(basketItems).set({ status: "ERROR", error: error instanceof Error ? error.message : String(error), updatedAt: now() }).where(eq(basketItems.id, group.id)).run();
+  });
+  return group;
 }
 
 /** Creates a folder; with `items` the children are given, otherwise a recipe is looked up in the background. */
@@ -230,10 +263,14 @@ basket.post("/items/from-product", async (c) => {
 });
 
 basket.post("/groups", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { text?: string; items?: string[]; basketId?: string };
-  if (!body.text?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "text is required" } }, 400);
+  const body = (await c.req.json().catch(() => ({}))) as { text?: string; items?: string[]; basketId?: string; url?: string; servings?: number };
   const basketId = body.basketId ?? DEFAULT_BASKET_ID;
   if (!basketExists(basketId)) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
+  if (body.url?.trim() && /^https?:\/\//.test(body.url.trim())) {
+    const group = createGroupFromUrl(body.url.trim(), basketId, typeof body.servings === "number" && body.servings > 0 ? body.servings : null);
+    return c.json({ group: viewOf(group.id), items: [] }, 201);
+  }
+  if (!body.text?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "text or url is required" } }, 400);
   const items = Array.isArray(body.items) ? body.items.filter((value): value is string => typeof value === "string" && value.trim().length > 0) : undefined;
   const group = createGroup(body.text, items, basketId);
   return c.json({ group: viewOf(group.id), items: loadViews(childrenOf(group.id)) }, 201);

@@ -281,6 +281,16 @@ describe("api", () => {
     await api(`/basket/items/${item.id}`, { method: "DELETE" });
   });
 
+  test("recipe favourites can be saved and removed", async () => {
+    const saved = await api("/recipes/favourites", { method: "POST", body: JSON.stringify({ title: "Pannenkoeken", url: "https://www.ah.nl/allerhande/recept/R-R1/pannenkoeken" }) });
+    expect(saved.status).toBe(201);
+    const id = ((await saved.json()) as any).id;
+    const again = await api("/recipes/favourites", { method: "POST", body: JSON.stringify({ title: "Pannenkoeken", url: "https://www.ah.nl/allerhande/recept/R-R1/pannenkoeken" }) });
+    expect(((await again.json()) as any).id).toBe(id);
+    expect(((await (await api("/recipes/favourites")).json()) as any).favourites).toHaveLength(1);
+    expect((await api(`/recipes/favourites/${id}`, { method: "DELETE" })).status).toBe(204);
+  });
+
   test("deals lists promoted candidates of the same kind", async () => {
     const created = await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "bio melk" }) });
     const id = ((await created.json()) as { id: string }).id;
