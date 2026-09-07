@@ -1,15 +1,16 @@
 import { cachedChatJson, chatJson } from "@/ai/client";
 import type { ParsedIdea } from "@/db/schema";
+import { appLanguage, appLanguageName } from "@/db/settings";
 import { normalizeText, sha256 } from "@/lib/text";
 import type { Unit } from "@/lib/units";
 
-export const PARSE_PROMPT_VERSION = "v1";
+export const PARSE_PROMPT_VERSION = "v2";
 
 const SYSTEM = `You turn loose grocery "ideas" written by someone living in the Netherlands into search data for Dutch supermarkets.
 The idea may be Dutch, English, Spanish or a mix (e.g. "halfvolle milk" = semi-skimmed milk).
 Return ONLY a JSON object:
 {
-  "canonicalName": short generic English product name (e.g. "semi-skimmed milk"),
+  "canonicalName": short generic product name written in LANGUAGE (e.g. "semi-skimmed milk" in English),
   "attributes": array of Dutch keywords that matter (e.g. ["halfvol"], ["houdbaar"], ["bio"], ["vers"]); [] if none,
   "sizeHint": {"amount": number, "unit": "kg"|"l"|"piece"} describing the total amount wanted, or null when not stated,
   "queries": object mapping each given store code to the best short Dutch search query for that store's webshop (1-3 words: product noun plus the attributes that matter, e.g. "halfvolle melk", "scharreleieren", "cola"; NEVER put amounts, sizes or numbers in queries - they go in sizeHint; no brand unless the user named one),
@@ -55,12 +56,12 @@ function sanitize(raw: Partial<ParsedIdea> | null, text: string, storeCodes: str
 }
 
 export async function parseIdea(text: string, storeCodes: string[]): Promise<ParsedIdea> {
-  const key = await sha256(`${PARSE_PROMPT_VERSION}|${normalizeText(text)}|${storeCodes.join(",")}`);
+  const key = await sha256(`${PARSE_PROMPT_VERSION}|${appLanguage()}|${normalizeText(text)}|${storeCodes.join(",")}`);
   const raw = await cachedChatJson<Partial<ParsedIdea>>(
     "parse",
     key,
     [
-      { role: "system", content: SYSTEM },
+      { role: "system", content: SYSTEM.replaceAll("LANGUAGE", appLanguageName()) },
       { role: "user", content: `Store codes: ${storeCodes.join(", ")}\nIdea: ${text}` },
     ],
     { maxTokens: 900 },

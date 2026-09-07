@@ -2,14 +2,16 @@ import { desc } from "drizzle-orm";
 import { cachedChatJson } from "@/ai/client";
 import { db } from "@/db";
 import { basketItems, choices } from "@/db/schema";
+import { appLanguage, appLanguageName } from "@/db/settings";
 import { aiConfigured } from "@/env";
 import { normalizeText, sha256, tokenize } from "@/lib/text";
 
-export const SUGGEST_PROMPT_VERSION = "v1";
+export const SUGGEST_PROMPT_VERSION = "v3";
 
 const SYSTEM = `The user is typing a grocery item into a shopping list app for Dutch supermarkets. The text may be incomplete, misspelled, in Dutch/English/Spanish, or a description instead of a name (e.g. "the olive liquid used to fry things" = olive oil).
 Return ONLY {"suggestions": [up to 3 short concrete item names, best first]}.
-Rules: each suggestion is 1-4 words naming a real grocery product type (e.g. "olive oil", "halfvolle melk", "scharreleieren"); keep the user's language when they typed a product name, use English when they wrote a description; fix typos; no brands unless typed; no explanations; return [] when the text is not about groceries.`;
+Rules: return 3 suggestions when the text is about groceries (fewer only if nothing else fits); each is 1-4 words naming a real grocery product type (e.g. "olive oil", "semi-skimmed milk", "free-range eggs"); ALWAYS write suggestions in LANGUAGE, whatever language the user typed in; fix typos (never repeat a misspelling); no brands unless typed; no explanations; return [] when the text is not about groceries.
+Dutch dairy terms: halfvol/halfvolle = semi-skimmed, vol/volle = whole, mager/magere = skimmed, houdbaar = long-life, karnemelk = buttermilk.`;
 
 /** Items typed or chosen before that start with / contain the same tokens: instant, no AI. */
 export function historySuggestions(text: string, limit = 3): string[] {
@@ -38,12 +40,12 @@ export function historySuggestions(text: string, limit = 3): string[] {
 
 export async function aiSuggestions(text: string): Promise<string[]> {
   if (!aiConfigured() || normalizeText(text).length < 3) return [];
-  const key = await sha256(`${SUGGEST_PROMPT_VERSION}|${normalizeText(text)}`);
+  const key = await sha256(`${SUGGEST_PROMPT_VERSION}|${appLanguage()}|${normalizeText(text)}`);
   const raw = await cachedChatJson<{ suggestions?: unknown }>(
     "suggest",
     key,
     [
-      { role: "system", content: SYSTEM },
+      { role: "system", content: SYSTEM.replaceAll("LANGUAGE", appLanguageName()) },
       { role: "user", content: text },
     ],
     { maxTokens: 200 },

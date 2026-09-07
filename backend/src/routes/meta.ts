@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { aiStats } from "@/ai/client";
 import { db, now } from "@/db";
 import { aiCache, basketItems, basketMatches, priceHistory, products, searchCache } from "@/db/schema";
-import { enabledStoreCodes, setSetting } from "@/db/settings";
+import { appLanguage, enabledStoreCodes, setSetting } from "@/db/settings";
 import { deleteChoice, listChoices } from "@/matching/memory";
 import { allStores, hasStore, storeHealth } from "@/stores/registry";
 import { refreshQueriesFor, searchStore } from "@/stores/search";
@@ -17,16 +17,19 @@ meta.get("/stores", (c) => {
   return c.json({ stores: allStores().map((store) => ({ ...store, enabled: enabled.includes(store.code) })) });
 });
 
-meta.get("/settings", (c) => c.json({ enabledStores: enabledStoreCodes() }));
+meta.get("/settings", (c) => c.json({ enabledStores: enabledStoreCodes(), language: appLanguage() }));
 
 meta.patch("/settings", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { enabledStores?: string[] };
+  const body = (await c.req.json().catch(() => ({}))) as { enabledStores?: string[]; language?: string };
   if (Array.isArray(body.enabledStores)) {
     const valid = body.enabledStores.filter((code) => typeof code === "string" && hasStore(code));
     if (!valid.length) return c.json({ error: { code: "BAD_REQUEST", message: "at least one known store must stay enabled" } }, 400);
     setSetting("enabledStores", valid);
   }
-  return c.json({ enabledStores: enabledStoreCodes() });
+  if (typeof body.language === "string" && /^[a-zA-Z]{2,3}([-_][a-zA-Z0-9]+)?$/.test(body.language.trim())) {
+    setSetting("language", body.language.trim().toLowerCase().split(/[-_]/)[0]);
+  }
+  return c.json({ enabledStores: enabledStoreCodes(), language: appLanguage() });
 });
 
 meta.get("/products/search", async (c) => {

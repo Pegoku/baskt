@@ -170,6 +170,14 @@ describe("api", () => {
     expect(match.chosen.id).toBe("JUMBO:b");
   });
 
+  test("language setting is stored and normalized", async () => {
+    const response = await api("/settings", { method: "PATCH", body: JSON.stringify({ language: "nl-NL" }) });
+    expect(((await response.json()) as { language: string }).language).toBe("nl");
+    const current = (await (await api("/settings")).json()) as { language: string; enabledStores: string[] };
+    expect(current.language).toBe("nl");
+    expect(current.enabledStores).toEqual(["AH", "JUMBO"]);
+  });
+
   test("suggest returns history matches without AI", async () => {
     const body = (await (await api("/basket/suggest?q=halfv")).json()) as { suggestions: string[]; source: string };
     expect(body.suggestions).toContain("halfvolle melk");
