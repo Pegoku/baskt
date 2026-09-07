@@ -19,6 +19,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -26,6 +29,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -42,7 +48,7 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
     val loading by viewModel.loadingDeals.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
     val changes by viewModel.priceChanges.collectAsState()
-    var tab by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    var tab by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { viewModel.findDeals(live = false); viewModel.loadPriceChanges() }
 
     Scaffold(
@@ -55,9 +61,9 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            androidx.compose.material3.SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                androidx.compose.material3.SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(0, 2)) { Text("Promotions") }
-                androidx.compose.material3.SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(1, 2)) { Text("Price changes") }
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Promotions") }
+                SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Price changes") }
             }
             if (tab == 1) {
                 val data = changes
