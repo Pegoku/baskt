@@ -311,6 +311,24 @@ describe("api", () => {
     for (const item of items) await api(`/basket/items/${item.id}`, { method: "DELETE" });
   });
 
+  test("purchases can be saved, listed, summarised and deleted", async () => {
+    const created = await api("/purchases", {
+      method: "POST",
+      body: JSON.stringify({ store: "AH", purchasedAt: "2026-09-01", lines: [{ name: "AH HALFVOLLE MELK", quantity: 2, unitPriceCents: 129, totalPriceCents: 258, dealText: null, productId: "AH:1" }, { name: "BROOD", quantity: 1, totalPriceCents: 199 }] }),
+    });
+    expect(created.status).toBe(201);
+    const saved = (await created.json()) as any;
+    expect(saved.purchase.totalCents).toBe(457);
+    expect(saved.lines).toHaveLength(2);
+    const list = (await (await api("/purchases")).json()) as any;
+    expect(list.purchases[0].lineCount).toBe(2);
+    const summary = (await (await api("/purchases/summary")).json()) as any;
+    expect(summary.totalCents).toBe(457);
+    expect(summary.months[0].perStore.AH).toBe(457);
+    expect(summary.topProducts[0].name).toBe("AH HALFVOLLE MELK");
+    expect((await api(`/purchases/${saved.purchase.id}`, { method: "DELETE" })).status).toBe(204);
+  });
+
   test("deals lists promoted candidates of the same kind", async () => {
     const created = await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "bio melk" }) });
     const id = ((await created.json()) as { id: string }).id;

@@ -11,6 +11,8 @@ export const env = {
     baseUrl: (process.env.AI_BASE_URL ?? process.env.HACKCLUB_AI_BASE_URL ?? "https://ai.hackclub.com/proxy/v1").replace(/\/$/, ""),
     apiKey: process.env.AI_API_KEY ?? process.env.HACKCLUB_AI_API_KEY ?? "",
     model: process.env.AI_MODEL ?? process.env.HACKCLUB_AI_MODEL ?? "",
+    /** Image-capable model for receipt photos. */
+    visionModel: process.env.AI_VISION_MODEL ?? "google/gemini-2.5-flash-lite",
     /**
      * How to steer thinking models (OpenRouter-style `reasoning` field):
      * "off" sends {enabled:false} (Qwen3), "low"/"medium"/"high" sends {effort} (gpt-oss), "none" sends nothing.

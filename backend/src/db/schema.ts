@@ -81,6 +81,32 @@ export const recipeFavourites = sqliteTable("recipe_favourites", {
   createdAt: integer("created_at").notNull(),
 });
 
+/** Real purchases, from scanned receipts (or manual entry). */
+export const purchases = sqliteTable("purchases", {
+  id: text("id").primaryKey(),
+  store: text("store").notNull(),
+  purchasedAt: integer("purchased_at").notNull(),
+  totalCents: integer("total_cents").notNull(),
+  source: text("source").notNull().default("receipt"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const purchaseLines = sqliteTable(
+  "purchase_lines",
+  {
+    id: text("id").primaryKey(),
+    purchaseId: text("purchase_id").notNull(),
+    name: text("name").notNull(),
+    productId: text("product_id"),
+    quantity: real("quantity").notNull().default(1),
+    unitPriceCents: integer("unit_price_cents"),
+    totalPriceCents: integer("total_price_cents").notNull(),
+    dealText: text("deal_text"),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => [index("purchase_lines_purchase_idx").on(table.purchaseId)],
+);
+
 export type ItemStatus = "NEW" | "PARSING" | "MATCHING" | "MATCHED" | "ERROR";
 export type ItemKind = "item" | "group";
 
@@ -190,6 +216,8 @@ export type ParsedIdea = {
 
 export type BasketRow = typeof baskets.$inferSelect;
 export type StockRow = typeof stock.$inferSelect;
+export type PurchaseRow = typeof purchases.$inferSelect;
+export type PurchaseLineRow = typeof purchaseLines.$inferSelect;
 export type ProductRow = typeof products.$inferSelect;
 export type BasketItemRow = typeof basketItems.$inferSelect;
 export type BasketMatchRow = typeof basketMatches.$inferSelect;
