@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -81,6 +82,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
                     if (item != null) {
                         IconButton(onClick = { editing = true }) { Icon(Icons.Default.Edit, contentDescription = "Edit") }
                         IconButton(onClick = { viewModel.rematch(item) }) { Icon(Icons.Default.Autorenew, contentDescription = "Match again") }
+                        IconButton(onClick = { viewModel.addToStockFromItem(item) }) { Icon(Icons.Default.Kitchen, contentDescription = "Add to stock") }
                         TransferMenu(baskets, currentBasketId) { basketId, copy -> viewModel.transfer(item, basketId, copy); if (!copy) onBack() }
                     }
                 },

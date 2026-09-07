@@ -58,12 +58,22 @@ data class StoreMatch(
 }
 
 @Serializable
+data class SkippedIngredient(val text: String, val quantity: Int = 1, val reason: String = "")
+
+@Serializable
 data class RecipeInfo(
     val title: String,
     val sourceUrl: String? = null,
     val servings: String? = null,
     val ingredientLines: List<String> = emptyList(),
+    val skipped: List<SkippedIngredient> = emptyList(),
 )
+
+@Serializable
+data class StockItem(val id: String, val text: String, val canonical: String = "", val quantityText: String? = null, val addedAt: Long = 0, val updatedAt: Long = 0)
+
+@Serializable
+data class StockResponse(val items: List<StockItem>)
 
 @Serializable
 data class Basket(
@@ -133,7 +143,7 @@ data class StoreInfo(
 data class StoresResponse(val stores: List<StoreInfo>)
 
 @Serializable
-data class SettingsResponse(val enabledStores: List<String>? = null, val language: String? = null)
+data class SettingsResponse(val enabledStores: List<String>? = null, val language: String? = null, val recipeSkipInStock: Boolean? = null)
 
 @Serializable
 data class StoreLine(

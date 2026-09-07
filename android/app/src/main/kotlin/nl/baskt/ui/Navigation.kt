@@ -11,12 +11,14 @@ import nl.baskt.ui.compare.CompareScreen
 import nl.baskt.ui.basket.GroupScreen
 import nl.baskt.ui.item.ItemDetailScreen
 import nl.baskt.ui.settings.SettingsScreen
+import nl.baskt.ui.stock.StockScreen
 
 @Serializable data object BasketRoute : NavKey
 @Serializable data class ItemRoute(val itemId: String) : NavKey
 @Serializable data class GroupRoute(val groupId: String) : NavKey
 @Serializable data object CompareRoute : NavKey
 @Serializable data object SettingsRoute : NavKey
+@Serializable data object StockRoute : NavKey
 
 @Composable
 fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
@@ -33,8 +35,10 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
                     onOpenGroup = { backStack.add(GroupRoute(it)) },
                     onCompare = { backStack.add(CompareRoute) },
                     onSettings = { backStack.add(SettingsRoute) },
+                    onStock = { backStack.add(StockRoute) },
                 )
             }
+            entry<StockRoute> { StockScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
             entry<GroupRoute> { route ->
                 GroupScreen(viewModel, route.groupId, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) })
             }

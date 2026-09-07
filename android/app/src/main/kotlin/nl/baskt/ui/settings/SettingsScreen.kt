@@ -119,6 +119,18 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             }
 
             HorizontalDivider()
+            Text("Recipes", style = MaterialTheme.typography.titleMedium)
+            val serverSettings by viewModel.basket.serverSettings.collectAsState()
+            LaunchedEffect(Unit) { viewModel.refreshStock() }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Skip ingredients I have in stock")
+                    Text("Recipe folders leave out what is in your stock list; you can add them back per folder.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = serverSettings.recipeSkipInStock ?: true, onCheckedChange = { viewModel.setSkipInStock(it) })
+            }
+
+            HorizontalDivider()
             Text("Supermarkets", style = MaterialTheme.typography.titleMedium)
             if (stores.isEmpty()) Text("Connect to the server to load the store list.", style = MaterialTheme.typography.bodySmall)
             for (store in stores) {

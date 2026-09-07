@@ -62,6 +62,23 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
             auth(); contentType(ContentType.Application.Json); setBody(SettingsResponse(enabledStores = codes))
         }.expect<SettingsResponse>().enabledStores ?: codes
 
+    suspend fun serverSettings(): SettingsResponse = client.get(url("/settings")) { auth() }.expect()
+
+    suspend fun setSkipInStock(enabled: Boolean): SettingsResponse =
+        client.patch(url("/settings")) { auth(); contentType(ContentType.Application.Json); setBody(SettingsResponse(recipeSkipInStock = enabled)) }.expect()
+
+    suspend fun stock(): List<StockItem> = client.get(url("/stock")) { auth() }.expect<StockResponse>().items
+
+    suspend fun addStock(text: String): StockItem =
+        client.post(url("/stock")) { auth(); contentType(ContentType.Application.Json); setBody(StockRequest(text)) }.expect()
+
+    suspend fun removeStock(id: String) {
+        client.delete(url("/stock/$id")) { auth() }.expect<Unit>()
+    }
+
+    suspend fun addSkipped(groupId: String): List<BasketItem> =
+        client.post(url("/basket/groups/$groupId/add-skipped")) { auth() }.expect<ItemsResponse>().items
+
     suspend fun setLanguage(language: String): String? =
         client.patch(url("/settings")) {
             auth(); contentType(ContentType.Application.Json); setBody(SettingsResponse(language = language))
@@ -157,6 +174,7 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 @Serializable private data class AddGroupRequest(val text: String, val items: List<String>? = null, val basketId: String = "default")
 @Serializable private data class FromTextRequest(val text: String, val basketId: String = "default")
 @Serializable private data class BasketRequest(val name: String, val emoji: String? = null)
+@Serializable private data class StockRequest(val text: String)
 @Serializable private data class TransferRequest(val basketId: String, val copy: Boolean)
 @Serializable private data class QueryRequest(val query: String)
 @Serializable private data class ItemsResponse(val items: List<BasketItem>)

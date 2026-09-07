@@ -26,6 +26,12 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
     private val _currentBasketId = MutableStateFlow("default")
     val currentBasketId: StateFlow<String> = _currentBasketId
 
+    private val _stock = MutableStateFlow<List<StockItem>>(emptyList())
+    val stock: StateFlow<List<StockItem>> = _stock
+
+    private val _serverSettings = MutableStateFlow(SettingsResponse())
+    val serverSettings: StateFlow<SettingsResponse> = _serverSettings
+
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading
 
@@ -35,6 +41,16 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
     private var pollJob: Job? = null
 
     val enabledStores: List<StoreInfo> get() = _stores.value.filter { it.enabled }
+
+    suspend fun refreshStock() = guard { _stock.value = api.stock() }
+    suspend fun addStock(text: String) = guard { api.addStock(text); refreshStock() }
+    suspend fun removeStock(item: StockItem) = guard { api.removeStock(item.id); _stock.update { list -> list.filterNot { it.id == item.id } } }
+    suspend fun refreshServerSettings() = guard { _serverSettings.value = api.serverSettings() }
+    suspend fun setSkipInStock(enabled: Boolean) = guard { _serverSettings.value = api.setSkipInStock(enabled) }
+    suspend fun addSkipped(group: BasketItem) = guard {
+        api.addSkipped(group.id).forEach(::replace)
+        refresh(false)
+    }
 
     suspend fun refreshBaskets() {
         try {

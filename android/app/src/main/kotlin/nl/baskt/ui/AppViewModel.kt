@@ -12,6 +12,7 @@ import nl.baskt.data.AppSettings
 import nl.baskt.data.BasketItem
 import nl.baskt.data.Comparison
 import nl.baskt.data.RecipeSuggestion
+import nl.baskt.data.StockItem
 
 class AppViewModel(val container: AppContainer) : ViewModel() {
     val basket = container.basket
@@ -84,6 +85,12 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun switchBasket(id: String) = viewModelScope.launch { basket.switchBasket(id) }
+    fun refreshStock() = viewModelScope.launch { basket.refreshStock(); basket.refreshServerSettings() }
+    fun addStock(text: String) = viewModelScope.launch { basket.addStock(text) }
+    fun addToStockFromItem(item: BasketItem) = viewModelScope.launch { basket.addStock(item.parsed?.canonicalName ?: item.text) }
+    fun removeStock(item: StockItem) = viewModelScope.launch { basket.removeStock(item) }
+    fun setSkipInStock(enabled: Boolean) = viewModelScope.launch { basket.setSkipInStock(enabled) }
+    fun addSkipped(group: BasketItem) = viewModelScope.launch { basket.addSkipped(group) }
     fun createBasket(name: String, emoji: String?, switchTo: Boolean = true) = viewModelScope.launch {
         val created = basket.createBasket(name, emoji)
         if (switchTo && created != null) basket.switchBasket(created.id)

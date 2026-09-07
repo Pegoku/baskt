@@ -104,6 +104,15 @@ fun GroupScreen(viewModel: AppViewModel, groupId: String, onBack: () -> Unit, on
                                 )
                             }
                         }
+                        val skipped = group.recipe?.skipped ?: emptyList()
+                        if (skipped.isNotEmpty()) {
+                            Text(
+                                "Left out because in stock: ${skipped.joinToString { it.text }}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            androidx.compose.material3.TextButton(onClick = { viewModel.addSkipped(group) }) { Text("Add them anyway") }
+                        }
                         if (children.isNotEmpty()) {
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                 for (store in enabledStores) {
