@@ -11,6 +11,7 @@ import { chooseMatch, enqueue, feedback, getItem, getMatches, isRunning, rejectS
 import { splitShoppingText } from "@/matching/parse";
 import { suggest } from "@/matching/suggest";
 import { buildRecipeGroup, itemsForServings, looksLikeRecipe, type RecipeItem } from "@/matching/recipes";
+import { findDeals } from "@/matching/deals";
 import { collectProductIds, itemView } from "@/serialize";
 import { hasStore } from "@/stores/registry";
 import { productsByIds } from "@/stores/search";
@@ -413,6 +414,14 @@ basket.post("/items/:id/matches/:store/search", async (c) => {
   const match = await searchMoreCandidates(c.req.param("id"), store, body.query.trim());
   if (!match) return c.json({ error: { code: "NOT_FOUND", message: "item or store not found" } }, 404);
   return c.json(viewOf(c.req.param("id")));
+});
+
+/** Promotions for the open items; `live=true` also re-searches the stores. */
+basket.get("/deals", async (c) => {
+  const basketId = requestedBasket(c);
+  if (!basketId) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
+  const deals = await findDeals(basketId, { live: c.req.query("live") === "true" });
+  return c.json({ deals, computedAt: now() });
 });
 
 basket.get("/compare", (c) => {

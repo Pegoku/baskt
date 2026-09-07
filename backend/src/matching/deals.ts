@@ -1,0 +1,77 @@
+import { and, asc, eq, inArray } from "drizzle-orm";
+import { db } from "@/db";
+import { basketItems, basketMatches, type ProductRow } from "@/db/schema";
+import { enabledStoreCodes } from "@/db/settings";
+import { lexicalScore } from "@/matching/rank";
+import { productsByIds, searchStore } from "@/stores/search";
+
+export type Deal = {
+  itemId: string;
+  itemText: string;
+  store: string;
+  product: ProductRow;
+  /** The product currently picked/suggested for this item at this store, if any. */
+  currentProductId: string | null;
+  currentPriceCents: number | null;
+  savingCents: number | null;
+  equivalence: string;
+};
+
+/**
+ * Finds promotions for the open items of a basket: candidates already known for the item plus a fresh
+ * store search, keeping products that are on a deal and look like the same kind of product.
+ */
+export async function findDeals(basketId: string, options: { live?: boolean } = {}): Promise<Deal[]> {
+  const stores = enabledStoreCodes();
+  const items = db()
+    .select()
+    .from(basketItems)
+    .where(and(eq(basketItems.basketId, basketId), eq(basketItems.kind, "item"), eq(basketItems.checked, false)))
+    .orderBy(asc(basketItems.sortOrder))
+    .all();
+  if (!items.length) return [];
+  const matches = db().select().from(basketMatches).where(inArray(basketMatches.itemId, items.map((item) => item.id))).all();
+  const deals: Deal[] = [];
+
+  for (const item of items) {
+    const parsed = item.parsedJson ?? { canonicalName: item.text, attributes: [], sizeHint: null, queries: {}, fallbackQuery: null, ambiguous: false };
+    for (const store of stores) {
+      const match = matches.find((entry) => entry.itemId === item.id && entry.store === store);
+      if (match?.status === "NONE") continue;
+      const currentId = match?.chosenProductId ?? match?.candidateIds[0] ?? null;
+      const known = productsByIds(match?.candidateIds ?? []);
+      let pool = known;
+      if (options.live) {
+        try {
+          const fresh = await searchStore(store, parsed.queries[store] ?? item.text, { limit: 20 });
+          const seen = new Set(pool.map((product) => product.id));
+          pool = [...pool, ...fresh.products.filter((product) => !seen.has(product.id))];
+        } catch {
+          // keep what we have
+        }
+      }
+      const current = currentId ? productsByIds([currentId])[0] : undefined;
+      const seenIds = new Set<string>();
+      for (const product of pool) {
+        if (!product.isDeal || seenIds.has(product.id) || !product.available) continue;
+        // Must still be the same kind of product as the idea.
+        if (lexicalScore(item.text, parsed, product) < 2) continue;
+        seenIds.add(product.id);
+        const currentLine = current ? current.priceCents * item.quantity : null;
+        const dealLine = product.priceCents * item.quantity;
+        deals.push({
+          itemId: item.id,
+          itemText: item.text,
+          store,
+          product,
+          currentProductId: current?.id ?? null,
+          currentPriceCents: current?.priceCents ?? null,
+          savingCents: currentLine !== null ? currentLine - dealLine : null,
+          equivalence: match?.equivalences[product.id] ?? "EQUIVALENT",
+        });
+      }
+    }
+  }
+  // Best savings first; unknown savings (no current pick) after.
+  return deals.sort((a, b) => (b.savingCents ?? -1) - (a.savingCents ?? -1));
+}

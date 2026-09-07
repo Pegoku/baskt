@@ -47,7 +47,7 @@ const ah = fake("AH", "Albert Heijn", {
   melk: [
     sp("AH", "1", "AH Halfvolle melk", 95),
     sp("AH", "2", "Campina Halfvolle melk", 149),
-    sp("AH", "3", "AH Biologisch halfvolle melk", 139),
+    { ...sp("AH", "3", "AH Biologisch halfvolle melk", 139), isDeal: true, dealText: "2 voor 2.50", regularPriceCents: 159 },
     sp("AH", "4", "Arla Halfvolle melk", 159),
   ],
   chocolade: [sp("AH", "9", "AH Chocolademelk", 199)],
@@ -279,6 +279,18 @@ describe("api", () => {
     expect(after.matches.find((m: any) => m.store === "JUMBO").chosen.id).toBe("JUMBO:a");
     expect(after.matches.find((m: any) => m.store === "AH").options.length).toBeGreaterThan(0);
     await api(`/basket/items/${item.id}`, { method: "DELETE" });
+  });
+
+  test("deals lists promoted candidates of the same kind", async () => {
+    const created = await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "bio melk" }) });
+    const id = ((await created.json()) as { id: string }).id;
+    await waitForMatched(id);
+    const body = (await (await api("/basket/deals")).json()) as any;
+    const forItem = body.deals.filter((deal: any) => deal.itemId === id);
+    expect(forItem.length).toBeGreaterThan(0);
+    expect(forItem.every((deal: any) => deal.product.isDeal)).toBe(true);
+    expect(forItem[0].store).toBe("AH");
+    await api(`/basket/items/${id}`, { method: "DELETE" });
   });
 
   test("multiple baskets: create, add into, move and copy items, delete", async () => {
