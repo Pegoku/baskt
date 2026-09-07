@@ -170,6 +170,14 @@ describe("api", () => {
     expect(match.chosen.id).toBe("JUMBO:b");
   });
 
+  test("suggest returns history matches without AI", async () => {
+    const body = (await (await api("/basket/suggest?q=halfv")).json()) as { suggestions: string[]; source: string };
+    expect(body.suggestions).toContain("halfvolle melk");
+    expect(body.source).toBe("history");
+    const short = (await (await api("/basket/suggest?q=h")).json()) as { suggestions: string[] };
+    expect(short.suggestions).toEqual([]);
+  });
+
   test("delete leaves a tombstone", async () => {
     expect((await api(`/basket/items/${itemId}`, { method: "DELETE" })).status).toBe(204);
     const body = (await (await api("/basket?since=1")).json()) as any;

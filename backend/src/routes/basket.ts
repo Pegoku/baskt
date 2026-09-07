@@ -6,6 +6,7 @@ import { enabledStoreCodes } from "@/db/settings";
 import { compareBasket, type CompareMatch } from "@/matching/compare";
 import { chooseMatch, enqueue, getItem, getMatches, isRunning, rejectShown, rematchItem, searchMoreCandidates } from "@/matching/pipeline";
 import { splitShoppingText } from "@/matching/parse";
+import { suggest } from "@/matching/suggest";
 import { collectProductIds, itemView } from "@/serialize";
 import { hasStore } from "@/stores/registry";
 import { productsByIds } from "@/stores/search";
@@ -72,6 +73,13 @@ basket.get("/", (c) => {
     .map((row) => row.entityId);
   const anyRunning = items.some((item) => isRunning(item.id) || item.status === "NEW" || item.status === "PARSING" || item.status === "MATCHING");
   return c.json({ serverTime: now(), items: loadViews(items), deletedIds: deleted, processing: anyRunning, stores: enabledStoreCodes() });
+});
+
+/** Autocomplete for the idea input: personal history plus AI interpretations of descriptions. */
+basket.get("/suggest", async (c) => {
+  const text = c.req.query("q")?.trim() ?? "";
+  if (text.length < 2) return c.json({ suggestions: [], source: "none" });
+  return c.json(await suggest(text));
 });
 
 basket.post("/items", async (c) => {
