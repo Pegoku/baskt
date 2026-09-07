@@ -32,6 +32,8 @@ function updateItem(itemId: string, patch: Partial<BasketItemRow>) {
 }
 
 function saveMatch(match: BasketMatchRow) {
+  // The item may have been deleted while its stores were being searched.
+  if (!getItem(match.itemId)) return match;
   db()
     .insert(basketMatches)
     .values(match)
@@ -97,6 +99,10 @@ async function rankCandidates(item: BasketItemRow, parsed: ParsedIdea, store: st
 export async function processItem(itemId: string, options: { keepUserChoices?: boolean } = { keepUserChoices: true }) {
   const item = getItem(itemId);
   if (!item) return;
+  if (item.kind === "group") {
+    updateItem(itemId, { status: "MATCHED", error: null });
+    return;
+  }
   const stores = enabledStoreCodes();
   updateItem(itemId, { status: "PARSING", error: null });
   const parsed = await parseIdea(item.text, stores);

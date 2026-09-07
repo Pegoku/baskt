@@ -21,6 +21,8 @@ export const env = {
     providerQuantizations: (process.env.AI_PROVIDER_QUANTIZATIONS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
   },
   storeProxyUrl: process.env.STORE_PROXY_URL?.trim() || undefined,
+  /** Set RECIPE_LOOKUP=off to skip fetching recipe pages (tests, offline). */
+  recipeLookup: process.env.RECIPE_LOOKUP !== "off",
   storeMinGapMs: num(process.env.STORE_MIN_GAP_MS, 400),
   searchCacheTtlMs: num(process.env.SEARCH_CACHE_TTL_HOURS, 24) * 60 * 60 * 1000,
 };

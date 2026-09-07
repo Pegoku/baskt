@@ -7,6 +7,7 @@ import { compareBasket, type CompareMatch } from "@/matching/compare";
 import { chooseMatch, enqueue, getItem, getMatches, isRunning, rejectShown, rematchItem, searchMoreCandidates } from "@/matching/pipeline";
 import { splitShoppingText } from "@/matching/parse";
 import { suggest } from "@/matching/suggest";
+import { buildRecipeGroup, looksLikeRecipe } from "@/matching/recipes";
 import { collectProductIds, itemView } from "@/serialize";
 import { hasStore } from "@/stores/registry";
 import { productsByIds } from "@/stores/search";
@@ -22,13 +23,27 @@ function loadViews(items: BasketItemRow[]) {
     .orderBy(asc(basketMatches.store))
     .all();
   const products = new Map(productsByIds(collectProductIds(matches)).map((product) => [product.id, product]));
-  return items.map((item) =>
+  const views = items.map((item) =>
     itemView(
       item,
       matches.filter((match) => match.itemId === item.id),
       products,
     ),
   );
+  // A folder needs attention when any of its children does.
+  for (const view of views) {
+    if (view.kind === "group") view.needsChoice = views.some((child) => child.parentId === view.id && child.needsChoice);
+  }
+  return views;
+}
+
+function childrenOf(groupId: string) {
+  return db().select().from(basketItems).where(eq(basketItems.parentId, groupId)).orderBy(asc(basketItems.sortOrder), asc(basketItems.createdAt)).all();
+}
+
+function tombstone(ids: string[]) {
+  const database = db();
+  for (const id of ids) database.insert(tombstones).values({ collection: "basket", entityId: id, deletedAt: now() }).onConflictDoNothing().run();
 }
 
 function viewOf(itemId: string) {
@@ -36,11 +51,14 @@ function viewOf(itemId: string) {
   return item ? loadViews([item])[0] : null;
 }
 
-function createItem(text: string, quantity: number) {
+function createItem(text: string, quantity: number, parentId: string | null = null, kind: BasketItemRow["kind"] = "item") {
   const database = db();
   const last = database.select({ sortOrder: basketItems.sortOrder }).from(basketItems).orderBy(desc(basketItems.sortOrder)).get();
   const item: BasketItemRow = {
     id: newId(),
+    kind,
+    parentId,
+    recipeJson: null,
     text: text.trim(),
     quantity: Math.max(1, Math.floor(quantity || 1)),
     checked: false,
@@ -54,6 +72,37 @@ function createItem(text: string, quantity: number) {
   database.insert(basketItems).values(item).run();
   enqueue(item.id);
   return item;
+}
+
+/** Creates a folder; with `items` the children are given, otherwise a recipe is looked up in the background. */
+function createGroup(text: string, itemTexts?: string[]) {
+  const group = createItem(text, 1, null, "group");
+  if (itemTexts?.length) {
+    for (const child of itemTexts) createItem(child, 1, group.id);
+    return group;
+  }
+  db().update(basketItems).set({ status: "PARSING" }).where(eq(basketItems.id, group.id)).run();
+  void buildRecipeGroup(text)
+    .then(({ intent, recipe, items }) => {
+      if (!getItem(group.id)) return;
+      for (const child of items) createItem(child.text, child.quantity, group.id);
+      db()
+        .update(basketItems)
+        .set({
+          text: recipe?.title ?? intent.dish,
+          recipeJson: recipe ? { title: recipe.title, sourceUrl: recipe.sourceUrl, servings: recipe.servings, ingredientLines: recipe.ingredientLines } : null,
+          status: items.length ? "MATCHED" : "ERROR",
+          error: items.length ? null : "No ingredients found for this dish",
+          updatedAt: now(),
+        })
+        .where(eq(basketItems.id, group.id))
+        .run();
+    })
+    .catch((error) => {
+      console.error(`[recipes] group ${group.id} failed:`, error);
+      db().update(basketItems).set({ status: "ERROR", error: error instanceof Error ? error.message : String(error), updatedAt: now() }).where(eq(basketItems.id, group.id)).run();
+    });
+  return group;
 }
 
 basket.get("/", (c) => {
@@ -83,9 +132,28 @@ basket.get("/suggest", async (c) => {
 });
 
 basket.post("/items", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { text?: string; quantity?: number; parentId?: string | null };
+  if (!body.text?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "text is required" } }, 400);
+  if (body.parentId && getItem(body.parentId)?.kind !== "group") return c.json({ error: { code: "BAD_REQUEST", message: "parentId is not a folder" } }, 400);
+  // "ingredients for chocolate cookies" becomes a folder filled from a recipe instead of a single item.
+  const item = !body.parentId && looksLikeRecipe(body.text) ? createGroup(body.text) : createItem(body.text, body.quantity ?? 1, body.parentId ?? null);
+  return c.json(viewOf(item.id), 201);
+});
+
+basket.post("/groups", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { text?: string; items?: string[] };
+  if (!body.text?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "text is required" } }, 400);
+  const items = Array.isArray(body.items) ? body.items.filter((value): value is string => typeof value === "string" && value.trim().length > 0) : undefined;
+  const group = createGroup(body.text, items);
+  return c.json({ group: viewOf(group.id), items: loadViews(childrenOf(group.id)) }, 201);
+});
+
+basket.post("/groups/:id/items", async (c) => {
+  const group = getItem(c.req.param("id"));
+  if (!group || group.kind !== "group") return c.json({ error: { code: "NOT_FOUND", message: "folder not found" } }, 404);
   const body = (await c.req.json().catch(() => ({}))) as { text?: string; quantity?: number };
   if (!body.text?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "text is required" } }, 400);
-  const item = createItem(body.text, body.quantity ?? 1);
+  const item = createItem(body.text, body.quantity ?? 1, group.id);
   return c.json(viewOf(item.id), 201);
 });
 
@@ -100,14 +168,21 @@ basket.post("/from-text", async (c) => {
 basket.patch("/items/:id", async (c) => {
   const item = getItem(c.req.param("id"));
   if (!item) return c.json({ error: { code: "NOT_FOUND", message: "item not found" } }, 404);
-  const body = (await c.req.json().catch(() => ({}))) as { text?: string; quantity?: number; checked?: boolean; sortOrder?: number };
+  const body = (await c.req.json().catch(() => ({}))) as { text?: string; quantity?: number; checked?: boolean; sortOrder?: number; parentId?: string | null };
   const patch: Partial<BasketItemRow> = { updatedAt: now() };
   if (typeof body.text === "string" && body.text.trim()) patch.text = body.text.trim();
   if (typeof body.quantity === "number" && body.quantity >= 1) patch.quantity = Math.floor(body.quantity);
   if (typeof body.checked === "boolean") patch.checked = body.checked;
   if (typeof body.sortOrder === "number") patch.sortOrder = body.sortOrder;
+  if (body.parentId !== undefined && item.kind === "item") {
+    if (body.parentId && getItem(body.parentId)?.kind !== "group") return c.json({ error: { code: "BAD_REQUEST", message: "parentId is not a folder" } }, 400);
+    patch.parentId = body.parentId;
+  }
   db().update(basketItems).set(patch).where(eq(basketItems.id, item.id)).run();
-  if (patch.text && patch.text !== item.text) {
+  if (item.kind === "group" && typeof body.checked === "boolean") {
+    db().update(basketItems).set({ checked: body.checked, updatedAt: now() }).where(eq(basketItems.parentId, item.id)).run();
+  }
+  if (item.kind === "item" && patch.text && patch.text !== item.text) {
     db().delete(basketMatches).where(eq(basketMatches.itemId, item.id)).run();
     enqueue(item.id);
   }
@@ -116,9 +191,12 @@ basket.patch("/items/:id", async (c) => {
 
 basket.delete("/items/:id", (c) => {
   const id = c.req.param("id");
+  const children = childrenOf(id).map((child) => child.id);
   const removed = db().delete(basketItems).where(eq(basketItems.id, id)).returning({ id: basketItems.id }).all();
   if (!removed.length) return c.json({ error: { code: "NOT_FOUND", message: "item not found" } }, 404);
-  db().insert(tombstones).values({ collection: "basket", entityId: id, deletedAt: now() }).onConflictDoNothing().run();
+  // Explicit, so it works even on databases whose FK was created without ON DELETE CASCADE.
+  if (children.length) db().delete(basketItems).where(inArray(basketItems.id, children)).run();
+  tombstone([id, ...children]);
   return c.body(null, 204);
 });
 
@@ -131,8 +209,17 @@ basket.delete("/", (c) => {
     .where(onlyChecked ? eq(basketItems.checked, true) : undefined)
     .all();
   for (const victim of victims) {
+    const children = childrenOf(victim.id).map((child) => child.id);
     database.delete(basketItems).where(eq(basketItems.id, victim.id)).run();
-    database.insert(tombstones).values({ collection: "basket", entityId: victim.id, deletedAt: now() }).onConflictDoNothing().run();
+    if (children.length) database.delete(basketItems).where(inArray(basketItems.id, children)).run();
+    tombstone([victim.id, ...children]);
+  }
+  // Folders whose children were all removed disappear too.
+  for (const group of database.select().from(basketItems).where(eq(basketItems.kind, "group")).all()) {
+    if (onlyChecked && group.status !== "PARSING" && childrenOf(group.id).length === 0) {
+      database.delete(basketItems).where(eq(basketItems.id, group.id)).run();
+      tombstone([group.id]);
+    }
   }
   return c.json({ deleted: victims.length });
 });
@@ -180,7 +267,7 @@ basket.post("/items/:id/matches/:store/search", async (c) => {
 
 basket.get("/compare", (c) => {
   const stores = enabledStoreCodes();
-  const items = db().select().from(basketItems).where(eq(basketItems.checked, false)).orderBy(asc(basketItems.sortOrder)).all();
+  const items = db().select().from(basketItems).where(and(eq(basketItems.checked, false), eq(basketItems.kind, "item"))).orderBy(asc(basketItems.sortOrder)).all();
   const views = loadViews(items);
   const matches: CompareMatch[] = views.flatMap((view) =>
     view.matches.map((match) => ({

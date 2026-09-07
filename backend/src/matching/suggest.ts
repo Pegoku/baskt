@@ -6,12 +6,15 @@ import { appLanguage, appLanguageName } from "@/db/settings";
 import { aiConfigured } from "@/env";
 import { normalizeText, sha256, tokenize } from "@/lib/text";
 
-export const SUGGEST_PROMPT_VERSION = "v4";
+export const SUGGEST_PROMPT_VERSION = "v5";
+
+export type RecipeSuggestion = { title: string; ingredients: string[] };
 
 const SYSTEM = `The user is typing a grocery item into a shopping list app for Dutch supermarkets. The text may be incomplete, misspelled, in Dutch/English/Spanish, or a description instead of a name (e.g. "the olive liquid used to fry things" = olive oil).
 Return ONLY {"suggestions": [up to 3 short concrete item names, best first]}.
 Rules: return 3 suggestions when the text is about something sold in a supermarket, including household goods like toilet paper or detergent (fewer only if nothing else fits); each is 1-4 words naming a real grocery product type (e.g. "olive oil", "semi-skimmed milk", "free-range eggs"); ALWAYS write suggestions in LANGUAGE, whatever language the user typed in; fix typos (never repeat a misspelling); no brands unless typed; no explanations; return [] only when the text is clearly not about shopping.
-Dutch dairy terms: halfvol/halfvolle = semi-skimmed, vol/volle = whole, mager/magere = skimmed, houdbaar = long-life, karnemelk = buttermilk.`;
+Dutch dairy terms: halfvol/halfvolle = semi-skimmed, vol/volle = whole, mager/magere = skimmed, houdbaar = long-life, karnemelk = buttermilk.
+SPECIAL CASE: when the text asks for the ingredients of a dish or for everything needed to cook something (e.g. "ingredients for chocolate cookies", "alles voor lasagne", "stuff to make pancakes"), return {"suggestions": [], "recipe": {"title": dish name in LANGUAGE, "ingredients": [EVERY ingredient needed as a shopping item in LANGUAGE, with amounts when they matter, 6-15 entries, staples like salt and oil included]}}. Otherwise omit "recipe".`;
 
 /** Items typed or chosen before that start with / contain the same tokens: instant, no AI. */
 export function historySuggestions(text: string, limit = 3): string[] {
@@ -38,10 +41,10 @@ export function historySuggestions(text: string, limit = 3): string[] {
   return results;
 }
 
-export async function aiSuggestions(text: string): Promise<string[]> {
-  if (!aiConfigured() || normalizeText(text).length < 3) return [];
+export async function aiSuggestions(text: string): Promise<{ suggestions: string[]; recipe: RecipeSuggestion | null }> {
+  if (!aiConfigured() || normalizeText(text).length < 3) return { suggestions: [], recipe: null };
   const key = await sha256(`${SUGGEST_PROMPT_VERSION}|${appLanguage()}|${normalizeText(text)}`);
-  const raw = await cachedChatJson<{ suggestions?: unknown }>(
+  const raw = await cachedChatJson<{ suggestions?: unknown; recipe?: { title?: unknown; ingredients?: unknown } | null }>(
     "suggest",
     key,
     [
@@ -50,14 +53,17 @@ export async function aiSuggestions(text: string): Promise<string[]> {
     ],
     { maxTokens: 200 },
   );
-  if (!raw || !Array.isArray(raw.suggestions)) return [];
-  return raw.suggestions.filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim()).slice(0, 3);
+  const clean = (list: unknown, limit: number) =>
+    Array.isArray(list) ? list.filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim()).slice(0, limit) : [];
+  const ingredients = clean(raw?.recipe?.ingredients, 30);
+  const recipe = ingredients.length >= 2 ? { title: typeof raw?.recipe?.title === "string" && raw.recipe.title.trim() ? raw.recipe.title.trim() : text, ingredients } : null;
+  return { suggestions: clean(raw?.suggestions, 3), recipe };
 }
 
 /** History first (instant, personal), then AI interpretations; duplicates and the typed text itself removed. */
-export async function suggest(text: string): Promise<{ suggestions: string[]; source: "history" | "ai" | "both" | "none" }> {
+export async function suggest(text: string): Promise<{ suggestions: string[]; source: "history" | "ai" | "both" | "none"; recipe: RecipeSuggestion | null }> {
   const history = historySuggestions(text);
-  const ai = await aiSuggestions(text);
+  const { suggestions: ai, recipe } = await aiSuggestions(text);
   const typed = normalizeText(text);
   const seen = new Set<string>([typed]);
   const merged: string[] = [];
@@ -68,5 +74,5 @@ export async function suggest(text: string): Promise<{ suggestions: string[]; so
     merged.push(suggestion);
   }
   const source = history.length && ai.length ? "both" : history.length ? "history" : ai.length ? "ai" : "none";
-  return { suggestions: merged.slice(0, 4), source };
+  return { suggestions: merged.slice(0, 4), source, recipe };
 }

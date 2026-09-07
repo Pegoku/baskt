@@ -186,6 +186,51 @@ describe("api", () => {
     expect(short.suggestions).toEqual([]);
   });
 
+  test("folders hold child items, cascade on delete and toggle checked together", async () => {
+    const created = await api("/basket/groups", { method: "POST", body: JSON.stringify({ text: "cookies", items: ["halfvolle melk", "eieren"] }) });
+    expect(created.status).toBe(201);
+    const body = (await created.json()) as any;
+    expect(body.group.kind).toBe("group");
+    expect(body.items).toHaveLength(2);
+    expect(body.items.every((child: any) => child.parentId === body.group.id)).toBe(true);
+    await waitForMatched(body.items[0].id);
+    const basketBody = (await (await api("/basket")).json()) as any;
+    const group = basketBody.items.find((entry: any) => entry.id === body.group.id);
+    expect(group.status).toBe("MATCHED");
+    expect(group.matches).toEqual([]);
+    const compare = (await (await api("/basket/compare")).json()) as any;
+    expect(compare.items.some((row: any) => row.itemId === body.group.id)).toBe(false);
+    expect(compare.items.some((row: any) => row.itemId === body.items[0].id)).toBe(true);
+
+    const checked = (await (await api(`/basket/items/${body.group.id}`, { method: "PATCH", body: JSON.stringify({ checked: true }) })).json()) as any;
+    expect(checked.checked).toBe(true);
+    const after = (await (await api("/basket")).json()) as any;
+    expect(after.items.filter((entry: any) => entry.parentId === body.group.id).every((child: any) => child.checked)).toBe(true);
+
+    const added = await api(`/basket/groups/${body.group.id}/items`, { method: "POST", body: JSON.stringify({ text: "boter" }) });
+    expect(added.status).toBe(201);
+    expect(((await added.json()) as any).parentId).toBe(body.group.id);
+
+    expect((await api(`/basket/items/${body.group.id}`, { method: "DELETE" })).status).toBe(204);
+    const gone = (await (await api("/basket?since=1")).json()) as any;
+    expect(gone.deletedIds).toContain(body.group.id);
+    expect(gone.deletedIds).toContain(body.items[0].id);
+    expect(gone.items.some((entry: any) => entry.parentId === body.group.id)).toBe(false);
+  });
+
+  test("recipe-like text creates a folder even without AI", async () => {
+    const created = await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "ingredients for pancakes" }) });
+    const group = (await created.json()) as any;
+    expect(group.kind).toBe("group");
+    for (let i = 0; i < 50 && ((await (await api("/basket")).json()) as any).items.find((e: any) => e.id === group.id)?.status === "PARSING"; i += 1) await new Promise((r) => setTimeout(r, 20));
+    const final = ((await (await api("/basket")).json()) as any).items.find((e: any) => e.id === group.id);
+    expect(final.status).toBe("ERROR");
+    expect(final.error).toContain("No ingredients");
+    const suggestion = (await (await api("/basket/suggest?q=ingredients%20for%20pancakes")).json()) as any;
+    expect(suggestion.recipe).toBeNull();
+    await api(`/basket/items/${group.id}`, { method: "DELETE" });
+  });
+
   test("delete leaves a tombstone", async () => {
     expect((await api(`/basket/items/${itemId}`, { method: "DELETE" })).status).toBe(204);
     const body = (await (await api("/basket?since=1")).json()) as any;

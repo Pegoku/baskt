@@ -1,4 +1,4 @@
-import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
 export const products = sqliteTable(
   "products",
@@ -51,9 +51,21 @@ export const searchCache = sqliteTable(
 );
 
 export type ItemStatus = "NEW" | "PARSING" | "MATCHING" | "MATCHED" | "ERROR";
+export type ItemKind = "item" | "group";
+
+export type RecipeInfo = {
+  title: string;
+  sourceUrl: string | null;
+  servings: string | null;
+  ingredientLines: string[];
+};
 
 export const basketItems = sqliteTable("basket_items", {
   id: text("id").primaryKey(),
+  /** "item" = a shopping idea with matches; "group" = a folder (e.g. a recipe) holding child items. */
+  kind: text("kind").$type<ItemKind>().notNull().default("item"),
+  parentId: text("parent_id").references((): AnySQLiteColumn => basketItems.id, { onDelete: "cascade" }),
+  recipeJson: text("recipe_json", { mode: "json" }).$type<RecipeInfo | null>(),
   text: text("text").notNull(),
   quantity: integer("quantity").notNull().default(1),
   checked: integer("checked", { mode: "boolean" }).notNull().default(false),
