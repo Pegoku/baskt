@@ -6,11 +6,11 @@ import { appLanguage, appLanguageName } from "@/db/settings";
 import { aiConfigured } from "@/env";
 import { normalizeText, sha256, tokenize } from "@/lib/text";
 
-export const SUGGEST_PROMPT_VERSION = "v3";
+export const SUGGEST_PROMPT_VERSION = "v4";
 
 const SYSTEM = `The user is typing a grocery item into a shopping list app for Dutch supermarkets. The text may be incomplete, misspelled, in Dutch/English/Spanish, or a description instead of a name (e.g. "the olive liquid used to fry things" = olive oil).
 Return ONLY {"suggestions": [up to 3 short concrete item names, best first]}.
-Rules: return 3 suggestions when the text is about groceries (fewer only if nothing else fits); each is 1-4 words naming a real grocery product type (e.g. "olive oil", "semi-skimmed milk", "free-range eggs"); ALWAYS write suggestions in LANGUAGE, whatever language the user typed in; fix typos (never repeat a misspelling); no brands unless typed; no explanations; return [] when the text is not about groceries.
+Rules: return 3 suggestions when the text is about something sold in a supermarket, including household goods like toilet paper or detergent (fewer only if nothing else fits); each is 1-4 words naming a real grocery product type (e.g. "olive oil", "semi-skimmed milk", "free-range eggs"); ALWAYS write suggestions in LANGUAGE, whatever language the user typed in; fix typos (never repeat a misspelling); no brands unless typed; no explanations; return [] only when the text is clearly not about shopping.
 Dutch dairy terms: halfvol/halfvolle = semi-skimmed, vol/volle = whole, mager/magere = skimmed, houdbaar = long-life, karnemelk = buttermilk.`;
 
 /** Items typed or chosen before that start with / contain the same tokens: instant, no AI. */
