@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.ShoppingCart
 import nl.baskt.ui.common.buildShareText
 import nl.baskt.ui.common.shareText
@@ -86,7 +87,7 @@ import nl.baskt.ui.common.BasketSwitcherTitle
 import nl.baskt.ui.common.StoreBadge
 
 @Composable
-fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit, onStock: () -> Unit, onSearch: () -> Unit, onDeals: () -> Unit, onRecipes: () -> Unit, onShop: (String) -> Unit) {
+fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit, onStock: () -> Unit, onSearch: () -> Unit, onDeals: () -> Unit, onRecipes: () -> Unit, onShop: (String) -> Unit, onPurchases: () -> Unit) {
     val items by viewModel.basket.items.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
     val baskets by viewModel.basket.baskets.collectAsState()
@@ -150,6 +151,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                             DropdownMenuItem(text = { Text("Share list") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareText(context, buildShareText(baskets.firstOrNull { it.id == currentBasketId }, items, enabledStores), whatsApp = false) })
                             DropdownMenuItem(text = { Text("Send to WhatsApp") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareText(context, buildShareText(baskets.firstOrNull { it.id == currentBasketId }, items, enabledStores), whatsApp = true) })
                             DropdownMenuItem(text = { Text("Stock") }, leadingIcon = { Icon(Icons.Default.Kitchen, contentDescription = null) }, onClick = { menu = false; onStock() })
+                            DropdownMenuItem(text = { Text("Receipts & spending") }, leadingIcon = { Icon(Icons.Default.Receipt, contentDescription = null) }, onClick = { menu = false; onPurchases() })
                             DropdownMenuItem(text = { Text("Refresh") }, leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }, onClick = { menu = false; viewModel.reload() })
                             if (items.any { it.checked }) {
                                 DropdownMenuItem(text = { Text("Clear checked") }, leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }, onClick = { menu = false; viewModel.clearChecked() })

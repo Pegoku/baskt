@@ -214,6 +214,40 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
             auth(); contentType(ContentType.Application.Json); setBody(ConfirmRequest(items, basketId))
         }.expect<ItemsResponse>().items
 
+    suspend fun scanReceipt(images: List<Pair<String, ByteArray>>, store: String?): ReceiptScan =
+        client.post(url("/purchases/scan")) {
+            auth()
+            setBody(
+                io.ktor.client.request.forms.MultiPartFormDataContent(
+                    io.ktor.client.request.forms.formData {
+                        if (store != null) append("store", store)
+                        for ((name, bytes) in images) {
+                            append("files", bytes, io.ktor.http.Headers.build {
+                                append(io.ktor.http.HttpHeaders.ContentType, "image/jpeg")
+                                append(io.ktor.http.HttpHeaders.ContentDisposition, "filename=\"$name\"")
+                            })
+                        }
+                    },
+                ),
+            )
+        }.expect()
+
+    suspend fun savePurchase(store: String, purchasedAt: String?, totalCents: Int?, lines: List<ReceiptLine>): PurchaseDetail =
+        client.post(url("/purchases")) {
+            auth(); contentType(ContentType.Application.Json)
+            setBody(SavePurchaseRequest(store, purchasedAt, totalCents, lines.map { it.copy(product = null) }))
+        }.expect()
+
+    suspend fun purchases(): List<Purchase> = client.get(url("/purchases")) { auth() }.expect<PurchasesResponse>().purchases
+
+    suspend fun purchase(id: String): PurchaseDetail = client.get(url("/purchases/$id")) { auth() }.expect()
+
+    suspend fun deletePurchase(id: String) {
+        client.delete(url("/purchases/$id")) { auth() }.expect<Unit>()
+    }
+
+    suspend fun spendSummary(): SpendSummary = client.get(url("/purchases/summary")) { auth() }.expect()
+
     suspend fun deals(basketId: String, live: Boolean): DealsResponse =
         client.get(url("/basket/deals")) { auth(); parameter("basketId", basketId); if (live) parameter("live", "true") }.expect()
 
@@ -250,6 +284,7 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 @Serializable private data class BasketRequest(val name: String, val emoji: String? = null)
 @Serializable private data class StockRequest(val text: String)
 @Serializable private data class ConfirmRequest(val items: List<VoiceItem>, val basketId: String)
+@Serializable private data class SavePurchaseRequest(val store: String, val purchasedAt: String?, val totalCents: Int?, val lines: List<ReceiptLine>)
 @Serializable private data class TransferRequest(val basketId: String, val copy: Boolean)
 @Serializable private data class QueryRequest(val query: String)
 @Serializable private data class ItemsResponse(val items: List<BasketItem>)

@@ -17,6 +17,10 @@ import nl.baskt.data.DealsResponse
 import nl.baskt.data.Product
 import nl.baskt.data.ProductSearchResponse
 import nl.baskt.data.PriceChangesResponse
+import nl.baskt.data.Purchase
+import nl.baskt.data.PurchaseDetail
+import nl.baskt.data.ReceiptScan
+import nl.baskt.data.SpendSummary
 import nl.baskt.data.PricePoint
 import nl.baskt.data.RecipeDetail
 import nl.baskt.data.RecipeFavourite
@@ -156,6 +160,46 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun dismissProposal() { _voiceProposal.value = null }
+
+    private val _scan = MutableStateFlow<ReceiptScan?>(null)
+    val scan: StateFlow<ReceiptScan?> = _scan
+    private val _scanning = MutableStateFlow(false)
+    val scanning: StateFlow<Boolean> = _scanning
+    private val _scanError = MutableStateFlow<String?>(null)
+    val scanError: StateFlow<String?> = _scanError
+    private val _purchases = MutableStateFlow<List<Purchase>>(emptyList())
+    val purchases: StateFlow<List<Purchase>> = _purchases
+    private val _spend = MutableStateFlow<SpendSummary?>(null)
+    val spend: StateFlow<SpendSummary?> = _spend
+    private val _purchaseDetail = MutableStateFlow<PurchaseDetail?>(null)
+    val purchaseDetail: StateFlow<PurchaseDetail?> = _purchaseDetail
+
+    fun scanReceipt(images: List<Pair<String, ByteArray>>, store: String?) = viewModelScope.launch {
+        _scanning.value = true
+        _scanError.value = null
+        runCatching { container.api.scanReceipt(images, store) }
+            .onSuccess { _scan.value = it }
+            .onFailure { _scanError.value = it.message ?: "Scan failed" }
+        _scanning.value = false
+    }
+
+    fun updateScan(scan: ReceiptScan) { _scan.value = scan }
+    fun clearScan() { _scan.value = null; _scanError.value = null }
+
+    fun savePurchase(scan: ReceiptScan, store: String) = viewModelScope.launch {
+        runCatching { container.api.savePurchase(store, scan.purchasedAt, scan.totalCents, scan.lines) }
+            .onSuccess { _scan.value = null; loadPurchases() }
+            .onFailure { _scanError.value = it.message }
+    }
+
+    fun loadPurchases() = viewModelScope.launch {
+        _purchases.value = runCatching { container.api.purchases() }.getOrDefault(emptyList())
+        _spend.value = runCatching { container.api.spendSummary() }.getOrNull()
+    }
+
+    fun openPurchase(id: String) = viewModelScope.launch { _purchaseDetail.value = runCatching { container.api.purchase(id) }.getOrNull() }
+    fun closePurchase() { _purchaseDetail.value = null }
+    fun deletePurchase(id: String) = viewModelScope.launch { runCatching { container.api.deletePurchase(id) }; _purchaseDetail.value = null; loadPurchases() }
 
     private val _deals = MutableStateFlow<DealsResponse?>(null)
     val deals: StateFlow<DealsResponse?> = _deals

@@ -262,6 +262,41 @@ data class VoiceItem(val text: String, val quantity: Int = 1, val wanted: Boolea
 data class InterpretResponse(val items: List<VoiceItem> = emptyList())
 
 @Serializable
+data class ReceiptLine(
+    val name: String,
+    val quantity: Double = 1.0,
+    val unitPriceCents: Int? = null,
+    val totalPriceCents: Int,
+    val dealText: String? = null,
+    val productId: String? = null,
+    val product: Product? = null,
+)
+
+@Serializable
+data class ReceiptScan(val store: String? = null, val purchasedAt: String? = null, val totalCents: Int? = null, val lines: List<ReceiptLine> = emptyList(), val notes: String? = null)
+
+@Serializable
+data class Purchase(val id: String, val store: String, val purchasedAt: Long, val totalCents: Int, val source: String = "receipt", val createdAt: Long = 0, val lineCount: Int = 0)
+
+@Serializable
+data class PurchasesResponse(val purchases: List<Purchase> = emptyList())
+
+@Serializable
+data class PurchaseLine(val id: String, val purchaseId: String, val name: String, val productId: String? = null, val quantity: Double = 1.0, val unitPriceCents: Int? = null, val totalPriceCents: Int, val dealText: String? = null, val sortOrder: Int = 0)
+
+@Serializable
+data class PurchaseDetail(val purchase: Purchase, val lines: List<PurchaseLine> = emptyList(), val products: Map<String, Product> = emptyMap())
+
+@Serializable
+data class SpendMonth(val month: String, val totalCents: Int, val perStore: Map<String, Int> = emptyMap(), val count: Int = 0)
+
+@Serializable
+data class TopProduct(val name: String, val times: Int, val totalCents: Int)
+
+@Serializable
+data class SpendSummary(val months: List<SpendMonth> = emptyList(), val totalCents: Int = 0, val purchases: Int = 0, val topProducts: List<TopProduct> = emptyList())
+
+@Serializable
 data class HealthResponse(
     val ok: Boolean,
     val version: String = "",
