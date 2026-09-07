@@ -191,6 +191,12 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
 
     suspend fun compare(): Comparison? = guard { api.compare(_currentBasketId.value) }
 
+    suspend fun searchProducts(query: String, force: Boolean = false): ProductSearchResponse? = guard { api.searchProducts(query, force = force) }
+
+    suspend fun barcode(gtin: String): BarcodeResponse? = guard { api.barcode(gtin) }
+
+    suspend fun addFromProduct(product: Product, parentId: String? = null) = guard { replace(api.addFromProduct(product.id, _currentBasketId.value, parentId)) }
+
     suspend fun setEnabledStores(codes: List<String>) = guard {
         api.setEnabledStores(codes)
         refreshStores()

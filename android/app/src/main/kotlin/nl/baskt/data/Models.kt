@@ -199,6 +199,18 @@ data class Comparison(
 data class SuggestResponse(val suggestions: List<String> = emptyList(), val source: String = "none", val recipe: RecipeSuggestion? = null)
 
 @Serializable
+data class StoreSearchResult(val store: String, val source: String = "cache", val products: List<Product> = emptyList(), val error: String? = null)
+
+@Serializable
+data class ProductSearchResponse(val query: String, val results: List<StoreSearchResult> = emptyList())
+
+@Serializable
+data class BarcodeResult(val store: String, val product: Product? = null, val error: String? = null)
+
+@Serializable
+data class BarcodeResponse(val gtin: String, val results: List<BarcodeResult> = emptyList())
+
+@Serializable
 data class HealthResponse(
     val ok: Boolean,
     val version: String = "",

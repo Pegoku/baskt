@@ -179,6 +179,22 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 
     suspend fun refreshPrices(): JsonObject = client.post(url("/admin/refresh")) { auth() }.expect()
 
+    suspend fun searchProducts(query: String, store: String? = null, force: Boolean = false): ProductSearchResponse =
+        client.get(url("/products/search")) {
+            auth(); parameter("q", query); if (store != null) parameter("store", store); if (force) parameter("force", "true")
+        }.expect()
+
+    suspend fun barcode(gtin: String): BarcodeResponse = client.get(url("/products/barcode/$gtin")) { auth() }.expect()
+
+    suspend fun addFromProduct(productId: String, basketId: String, parentId: String? = null, quantity: Int = 1): BasketItem =
+        client.post(url("/basket/items/from-product")) {
+            auth(); contentType(ContentType.Application.Json)
+            setBody(JsonObject(buildMap {
+                put("productId", JsonPrimitive(productId)); put("basketId", JsonPrimitive(basketId)); put("quantity", JsonPrimitive(quantity))
+                if (parentId != null) put("parentId", JsonPrimitive(parentId))
+            }))
+        }.expect()
+
     private fun Map<String, Any?>.toJsonObject() = JsonObject(mapValues { (_, value) ->
         when (value) {
             null -> JsonNull

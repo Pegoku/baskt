@@ -11,6 +11,9 @@ import nl.baskt.AppContainer
 import nl.baskt.data.AppSettings
 import nl.baskt.data.BasketItem
 import nl.baskt.data.Comparison
+import nl.baskt.data.BarcodeResponse
+import nl.baskt.data.Product
+import nl.baskt.data.ProductSearchResponse
 import nl.baskt.data.RecipeSuggestion
 import nl.baskt.data.StockItem
 
@@ -58,6 +61,34 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun addToGroup(groupId: String, text: String, quantity: Int) = viewModelScope.launch { basket.add(text, quantity, groupId) }
+
+    private val _searchResults = MutableStateFlow<ProductSearchResponse?>(null)
+    val searchResults: StateFlow<ProductSearchResponse?> = _searchResults
+    private val _scanResult = MutableStateFlow<BarcodeResponse?>(null)
+    val scanResult: StateFlow<BarcodeResponse?> = _scanResult
+    private val _searching = MutableStateFlow(false)
+    val searching: StateFlow<Boolean> = _searching
+
+    fun searchProducts(query: String) = viewModelScope.launch {
+        _searching.value = true
+        _scanResult.value = null
+        _searchResults.value = basket.searchProducts(query)
+        _searching.value = false
+    }
+
+    fun lookupBarcode(gtin: String) = viewModelScope.launch {
+        _searching.value = true
+        _searchResults.value = null
+        _scanResult.value = basket.barcode(gtin)
+        _searching.value = false
+    }
+
+    fun clearSearch() {
+        _searchResults.value = null
+        _scanResult.value = null
+    }
+
+    fun addFromProduct(product: Product) = viewModelScope.launch { basket.addFromProduct(product) }
 
     /** Adds a recipe folder; with [items] the selected ingredients, otherwise the server looks the recipe up. */
     fun addGroup(title: String, items: List<String>? = null) = viewModelScope.launch { clearSuggestions(); basket.addGroup(title, items) }

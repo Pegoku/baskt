@@ -64,5 +64,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+    implementation(libs.play.services.code.scanner)
     debugImplementation(libs.compose.ui.tooling)
 }
