@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { env } from "@/env";
 import { basket } from "@/routes/basket";
+import { basketsRoute } from "@/routes/baskets";
 import { meta } from "@/routes/meta";
 
 function constantTimeEqual(a: string, b: string) {
@@ -28,6 +29,7 @@ export function createApp(options: { token?: string; log?: boolean } = {}) {
 
   app.route("/api/v1", meta);
   app.route("/api/v1/basket", basket);
+  app.route("/api/v1/baskets", basketsRoute);
 
   app.notFound((c) => c.json({ error: { code: "NOT_FOUND", message: `no route for ${c.req.method} ${c.req.path}` } }, 404));
   app.onError((error, c) => {

@@ -50,6 +50,18 @@ export const searchCache = sqliteTable(
   (table) => [primaryKey({ columns: [table.store, table.normalizedQuery] })],
 );
 
+export const DEFAULT_BASKET_ID = "default";
+
+/** Lists the user can switch between (Personal, Family, Sweets, ...). */
+export const baskets = sqliteTable("baskets", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  emoji: text("emoji"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 export type ItemStatus = "NEW" | "PARSING" | "MATCHING" | "MATCHED" | "ERROR";
 export type ItemKind = "item" | "group";
 
@@ -62,6 +74,7 @@ export type RecipeInfo = {
 
 export const basketItems = sqliteTable("basket_items", {
   id: text("id").primaryKey(),
+  basketId: text("basket_id").notNull().default(DEFAULT_BASKET_ID),
   /** "item" = a shopping idea with matches; "group" = a folder (e.g. a recipe) holding child items. */
   kind: text("kind").$type<ItemKind>().notNull().default("item"),
   parentId: text("parent_id").references((): AnySQLiteColumn => basketItems.id, { onDelete: "cascade" }),
@@ -151,6 +164,7 @@ export type ParsedIdea = {
   ambiguous: boolean;
 };
 
+export type BasketRow = typeof baskets.$inferSelect;
 export type ProductRow = typeof products.$inferSelect;
 export type BasketItemRow = typeof basketItems.$inferSelect;
 export type BasketMatchRow = typeof basketMatches.$inferSelect;

@@ -16,7 +16,15 @@ export function createDb(path: string) {
   sqlite.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
   const db = drizzle(sqlite, { schema });
   migrate(db, { migrationsFolder: resolve(import.meta.dir, "../../drizzle") });
+  ensureDefaultBasket(db);
   return db;
+}
+
+function ensureDefaultBasket(db: ReturnType<typeof drizzle>) {
+  const existing = db.select({ id: schema.baskets.id }).from(schema.baskets).all();
+  if (!existing.length) {
+    db.insert(schema.baskets).values({ id: schema.DEFAULT_BASKET_ID, name: "Personal", emoji: "🧺", sortOrder: 0, createdAt: Date.now(), updatedAt: Date.now() }).run();
+  }
 }
 
 let instance: Db | null = null;

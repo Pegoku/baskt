@@ -231,6 +231,34 @@ describe("api", () => {
     await api(`/basket/items/${group.id}`, { method: "DELETE" });
   });
 
+  test("multiple baskets: create, add into, move and copy items, delete", async () => {
+    const created = await api("/baskets", { method: "POST", body: JSON.stringify({ name: "Sweets", emoji: "🍫" }) });
+    expect(created.status).toBe(201);
+    const sweets = (await created.json()) as any;
+    const list = (await (await api("/baskets")).json()) as any;
+    expect(list.baskets.map((b: any) => b.name)).toEqual(["Personal", "Sweets"]);
+
+    const added = (await (await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "chocolade", basketId: sweets.id }) })).json()) as any;
+    expect(added.basketId).toBe(sweets.id);
+    const personal = (await (await api("/basket")).json()) as any;
+    expect(personal.items.some((i: any) => i.id === added.id)).toBe(false);
+    const sweetsBasket = (await (await api(`/basket?basketId=${sweets.id}`)).json()) as any;
+    expect(sweetsBasket.items.some((i: any) => i.id === added.id)).toBe(true);
+
+    const copied = (await (await api(`/basket/items/${added.id}/transfer`, { method: "POST", body: JSON.stringify({ basketId: "default", copy: true }) })).json()) as any;
+    expect(copied.id).not.toBe(added.id);
+    expect(copied.basketId).toBe("default");
+    const moved = (await (await api(`/basket/items/${added.id}/transfer`, { method: "POST", body: JSON.stringify({ basketId: "default" }) })).json()) as any;
+    expect(moved.id).toBe(added.id);
+    expect(moved.basketId).toBe("default");
+    expect(((await (await api(`/basket?basketId=${sweets.id}`)).json()) as any).items).toHaveLength(0);
+
+    expect((await api(`/baskets/${sweets.id}`, { method: "DELETE" })).status).toBe(204);
+    expect((await api("/baskets/default", { method: "DELETE" })).status).toBe(400);
+    await api(`/basket/items/${added.id}`, { method: "DELETE" });
+    await api(`/basket/items/${copied.id}`, { method: "DELETE" });
+  });
+
   test("delete leaves a tombstone", async () => {
     expect((await api(`/basket/items/${itemId}`, { method: "DELETE" })).status).toBe(204);
     const body = (await (await api("/basket?since=1")).json()) as any;

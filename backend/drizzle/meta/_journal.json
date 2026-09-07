@@ -15,6 +15,13 @@
       "when": 1788819919083,
       "tag": "0001_short_kid_colt",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788821953803,
+      "tag": "0002_classy_phil_sheldon",
+      "breakpoints": true
     }
   ]
 }

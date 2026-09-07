@@ -22,6 +22,7 @@ export type MatchView = {
 
 export type BasketItemView = {
   id: string;
+  basketId: string;
   kind: BasketItemRow["kind"];
   parentId: string | null;
   recipe: BasketItemRow["recipeJson"];
@@ -63,6 +64,7 @@ export function itemView(item: BasketItemRow, matches: BasketMatchRow[], product
   const views = matches.map((match) => matchView(match, products));
   return {
     id: item.id,
+    basketId: item.basketId,
     kind: item.kind,
     parentId: item.parentId ?? null,
     recipe: item.recipeJson ?? null,

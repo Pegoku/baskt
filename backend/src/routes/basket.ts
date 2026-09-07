@@ -1,7 +1,8 @@
 import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { db, newId, now } from "@/db";
-import { basketItems, basketMatches, tombstones, type BasketItemRow } from "@/db/schema";
+import { basketItems, basketMatches, tombstones, DEFAULT_BASKET_ID, type BasketItemRow } from "@/db/schema";
+import { basketExists, transferItem } from "@/routes/baskets";
 import { enabledStoreCodes } from "@/db/settings";
 import { compareBasket, type CompareMatch } from "@/matching/compare";
 import { chooseMatch, enqueue, getItem, getMatches, isRunning, rejectShown, rematchItem, searchMoreCandidates } from "@/matching/pipeline";
@@ -51,11 +52,12 @@ function viewOf(itemId: string) {
   return item ? loadViews([item])[0] : null;
 }
 
-function createItem(text: string, quantity: number, parentId: string | null = null, kind: BasketItemRow["kind"] = "item") {
+function createItem(text: string, quantity: number, parentId: string | null = null, kind: BasketItemRow["kind"] = "item", basketId = DEFAULT_BASKET_ID) {
   const database = db();
   const last = database.select({ sortOrder: basketItems.sortOrder }).from(basketItems).orderBy(desc(basketItems.sortOrder)).get();
   const item: BasketItemRow = {
     id: newId(),
+    basketId: parentId ? getItem(parentId)?.basketId ?? basketId : basketId,
     kind,
     parentId,
     recipeJson: null,
@@ -75,8 +77,8 @@ function createItem(text: string, quantity: number, parentId: string | null = nu
 }
 
 /** Creates a folder; with `items` the children are given, otherwise a recipe is looked up in the background. */
-function createGroup(text: string, itemTexts?: string[]) {
-  const group = createItem(text, 1, null, "group");
+function createGroup(text: string, itemTexts?: string[], basketId = DEFAULT_BASKET_ID) {
+  const group = createItem(text, 1, null, "group", basketId);
   if (itemTexts?.length) {
     for (const child of itemTexts) createItem(child, 1, group.id);
     return group;
@@ -89,7 +91,8 @@ function createGroup(text: string, itemTexts?: string[]) {
       db()
         .update(basketItems)
         .set({
-          text: recipe?.title ?? intent.dish,
+          // Folder name in the user's language; the recipe's own title stays in recipeJson.
+          text: intent.dish,
           recipeJson: recipe ? { title: recipe.title, sourceUrl: recipe.sourceUrl, servings: recipe.servings, ingredientLines: recipe.ingredientLines } : null,
           status: items.length ? "MATCHED" : "ERROR",
           error: items.length ? null : "No ingredients found for this dish",
@@ -105,13 +108,20 @@ function createGroup(text: string, itemTexts?: string[]) {
   return group;
 }
 
+function requestedBasket(c: { req: { query: (name: string) => string | undefined } }) {
+  const id = c.req.query("basketId") ?? DEFAULT_BASKET_ID;
+  return basketExists(id) ? id : null;
+}
+
 basket.get("/", (c) => {
   const since = Number(c.req.query("since") ?? 0);
+  const basketId = requestedBasket(c);
+  if (!basketId) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
   const database = db();
   const items = database
     .select()
     .from(basketItems)
-    .where(since ? gt(basketItems.updatedAt, since) : undefined)
+    .where(and(eq(basketItems.basketId, basketId), since ? gt(basketItems.updatedAt, since) : undefined))
     .orderBy(asc(basketItems.sortOrder), asc(basketItems.createdAt))
     .all();
   const deleted = database
@@ -121,7 +131,7 @@ basket.get("/", (c) => {
     .all()
     .map((row) => row.entityId);
   const anyRunning = items.some((item) => isRunning(item.id) || item.status === "NEW" || item.status === "PARSING" || item.status === "MATCHING");
-  return c.json({ serverTime: now(), items: loadViews(items), deletedIds: deleted, processing: anyRunning, stores: enabledStoreCodes() });
+  return c.json({ serverTime: now(), basketId, items: loadViews(items), deletedIds: deleted, processing: anyRunning, stores: enabledStoreCodes() });
 });
 
 /** Autocomplete for the idea input: personal history plus AI interpretations of descriptions. */
@@ -132,19 +142,23 @@ basket.get("/suggest", async (c) => {
 });
 
 basket.post("/items", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { text?: string; quantity?: number; parentId?: string | null };
+  const body = (await c.req.json().catch(() => ({}))) as { text?: string; quantity?: number; parentId?: string | null; basketId?: string };
   if (!body.text?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "text is required" } }, 400);
   if (body.parentId && getItem(body.parentId)?.kind !== "group") return c.json({ error: { code: "BAD_REQUEST", message: "parentId is not a folder" } }, 400);
+  const basketId = body.basketId ?? DEFAULT_BASKET_ID;
+  if (!basketExists(basketId)) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
   // "ingredients for chocolate cookies" becomes a folder filled from a recipe instead of a single item.
-  const item = !body.parentId && looksLikeRecipe(body.text) ? createGroup(body.text) : createItem(body.text, body.quantity ?? 1, body.parentId ?? null);
+  const item = !body.parentId && looksLikeRecipe(body.text) ? createGroup(body.text, undefined, basketId) : createItem(body.text, body.quantity ?? 1, body.parentId ?? null, "item", basketId);
   return c.json(viewOf(item.id), 201);
 });
 
 basket.post("/groups", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { text?: string; items?: string[] };
+  const body = (await c.req.json().catch(() => ({}))) as { text?: string; items?: string[]; basketId?: string };
   if (!body.text?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "text is required" } }, 400);
+  const basketId = body.basketId ?? DEFAULT_BASKET_ID;
+  if (!basketExists(basketId)) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
   const items = Array.isArray(body.items) ? body.items.filter((value): value is string => typeof value === "string" && value.trim().length > 0) : undefined;
-  const group = createGroup(body.text, items);
+  const group = createGroup(body.text, items, basketId);
   return c.json({ group: viewOf(group.id), items: loadViews(childrenOf(group.id)) }, 201);
 });
 
@@ -158,10 +172,12 @@ basket.post("/groups/:id/items", async (c) => {
 });
 
 basket.post("/from-text", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { text?: string };
+  const body = (await c.req.json().catch(() => ({}))) as { text?: string; basketId?: string };
   if (!body.text?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "text is required" } }, 400);
+  const basketId = body.basketId ?? DEFAULT_BASKET_ID;
+  if (!basketExists(basketId)) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
   const parts = await splitShoppingText(body.text);
-  const items = parts.map((part) => createItem(part.text, part.quantity));
+  const items = parts.map((part) => createItem(part.text, part.quantity, null, "item", basketId));
   return c.json({ items: loadViews(items) }, 201);
 });
 
@@ -200,13 +216,25 @@ basket.delete("/items/:id", (c) => {
   return c.body(null, 204);
 });
 
+/** Moves (default) or copies an item into another basket. */
+basket.post("/items/:id/transfer", async (c) => {
+  const item = getItem(c.req.param("id"));
+  if (!item) return c.json({ error: { code: "NOT_FOUND", message: "item not found" } }, 404);
+  const body = (await c.req.json().catch(() => ({}))) as { basketId?: string; copy?: boolean };
+  if (!body.basketId || !basketExists(body.basketId)) return c.json({ error: { code: "BAD_REQUEST", message: "basketId must be an existing basket" } }, 400);
+  const result = transferItem(item, body.basketId, body.copy === true);
+  return c.json(viewOf(result.id));
+});
+
 basket.delete("/", (c) => {
   const onlyChecked = c.req.query("checked") === "true";
+  const basketId = requestedBasket(c);
+  if (!basketId) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
   const database = db();
   const victims = database
     .select({ id: basketItems.id })
     .from(basketItems)
-    .where(onlyChecked ? eq(basketItems.checked, true) : undefined)
+    .where(and(eq(basketItems.basketId, basketId), onlyChecked ? eq(basketItems.checked, true) : undefined))
     .all();
   for (const victim of victims) {
     const children = childrenOf(victim.id).map((child) => child.id);
@@ -215,7 +243,7 @@ basket.delete("/", (c) => {
     tombstone([victim.id, ...children]);
   }
   // Folders whose children were all removed disappear too.
-  for (const group of database.select().from(basketItems).where(eq(basketItems.kind, "group")).all()) {
+  for (const group of database.select().from(basketItems).where(and(eq(basketItems.kind, "group"), eq(basketItems.basketId, basketId))).all()) {
     if (onlyChecked && group.status !== "PARSING" && childrenOf(group.id).length === 0) {
       database.delete(basketItems).where(eq(basketItems.id, group.id)).run();
       tombstone([group.id]);
@@ -267,7 +295,14 @@ basket.post("/items/:id/matches/:store/search", async (c) => {
 
 basket.get("/compare", (c) => {
   const stores = enabledStoreCodes();
-  const items = db().select().from(basketItems).where(and(eq(basketItems.checked, false), eq(basketItems.kind, "item"))).orderBy(asc(basketItems.sortOrder)).all();
+  const basketId = requestedBasket(c);
+  if (!basketId) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
+  const items = db()
+    .select()
+    .from(basketItems)
+    .where(and(eq(basketItems.basketId, basketId), eq(basketItems.checked, false), eq(basketItems.kind, "item")))
+    .orderBy(asc(basketItems.sortOrder))
+    .all();
   const views = loadViews(items);
   const matches: CompareMatch[] = views.flatMap((view) =>
     view.matches.map((match) => ({
