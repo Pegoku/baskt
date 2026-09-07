@@ -262,6 +262,25 @@ describe("api", () => {
     await api(`/basket/items/${group.id}`, { method: "DELETE" });
   });
 
+  test("barcode lookup and adding a concrete product pins that store", async () => {
+    const lookup = (await (await api("/products/barcode/8712800147008")).json()) as any;
+    expect(lookup.results.map((r: any) => r.store)).toEqual(["AH", "JUMBO"]);
+    expect(lookup.results.every((r: any) => r.product === null)).toBe(true); // fakes know no barcodes
+    await api("/products/search?q=melk&store=JUMBO");
+    const created = await api("/basket/items/from-product", { method: "POST", body: JSON.stringify({ productId: "JUMBO:a" }) });
+    expect(created.status).toBe(201);
+    const item = (await created.json()) as any;
+    expect(item.text).toContain("Jumbo Verse Halfvolle Melk");
+    const jumbo = item.matches.find((m: any) => m.store === "JUMBO");
+    expect(jumbo.status).toBe("CHOSEN");
+    expect(jumbo.chosenBy).toBe("USER");
+    await waitForMatched(item.id);
+    const after = ((await (await api("/basket")).json()) as any).items.find((e: any) => e.id === item.id);
+    expect(after.matches.find((m: any) => m.store === "JUMBO").chosen.id).toBe("JUMBO:a");
+    expect(after.matches.find((m: any) => m.store === "AH").options.length).toBeGreaterThan(0);
+    await api(`/basket/items/${item.id}`, { method: "DELETE" });
+  });
+
   test("multiple baskets: create, add into, move and copy items, delete", async () => {
     const created = await api("/baskets", { method: "POST", body: JSON.stringify({ name: "Sweets", emoji: "🍫" }) });
     expect(created.status).toBe(201);

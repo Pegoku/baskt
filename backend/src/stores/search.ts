@@ -93,6 +93,24 @@ export async function searchStore(store: StoreCode, query: string, options: { fo
   }
 }
 
+/** Barcode lookup across stores: native GTIN endpoints where available, otherwise a search with the code. */
+export async function lookupBarcode(stores: StoreCode[], gtin: string): Promise<Array<{ store: StoreCode; product: ProductRow | null; error: string | null }>> {
+  return Promise.all(
+    stores.map(async (store) => {
+      try {
+        const adapter = getAdapter(store);
+        let found: StoreProduct | null = null;
+        if (adapter.byBarcode) found = await adapter.byBarcode(gtin);
+        else found = (await adapter.search(gtin, 3))[0] ?? null;
+        const row = found ? upsertProducts([found])[0] : null;
+        return { store, product: row, error: null };
+      } catch (error) {
+        return { store, product: null, error: error instanceof Error ? error.message : String(error) };
+      }
+    }),
+  );
+}
+
 /** Re-fetches the cached queries that reference the given product ids (used by the refresh job). */
 export async function refreshQueriesFor(productIds: Set<string>) {
   const entries = db().select().from(searchCache).all().filter((entry) => entry.productIds.some((id) => productIds.has(id)));

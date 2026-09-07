@@ -35,6 +35,8 @@ export interface StoreAdapter {
   search(query: string, limit: number): Promise<StoreProduct[]>;
   /** Optional: refresh specific products by their source ids (used by re-pricing). */
   refresh?(sourceIds: string[]): Promise<StoreProduct[]>;
+  /** Optional: look up a product by EAN/GTIN barcode. Stores without it are searched with the barcode as query. */
+  byBarcode?(gtin: string): Promise<StoreProduct | null>;
 }
 
 export const productKey = (store: StoreCode, sourceId: string) => `${store}:${sourceId}`;

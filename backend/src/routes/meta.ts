@@ -7,7 +7,7 @@ import { appLanguage, defaultServings, enabledStoreCodes, rankBy, setSetting, sk
 import { addStock, listStock, removeStock } from "@/stock";
 import { deleteChoice, listChoices } from "@/matching/memory";
 import { allStores, hasStore, storeHealth } from "@/stores/registry";
-import { refreshQueriesFor, searchStore } from "@/stores/search";
+import { lookupBarcode, refreshQueriesFor, searchStore } from "@/stores/search";
 
 export const meta = new Hono();
 
@@ -70,6 +70,14 @@ meta.get("/products/search", async (c) => {
     }),
   );
   return c.json({ query, results });
+});
+
+/** Scan result: the product at every enabled store that recognises the barcode. */
+meta.get("/products/barcode/:gtin", async (c) => {
+  const gtin = c.req.param("gtin").replace(/\D/g, "");
+  if (gtin.length < 8 || gtin.length > 14) return c.json({ error: { code: "BAD_REQUEST", message: "gtin must be 8-14 digits" } }, 400);
+  const results = await lookupBarcode(enabledStoreCodes(), gtin);
+  return c.json({ gtin, results });
 });
 
 meta.get("/products/:id", (c) => {

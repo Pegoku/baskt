@@ -14,6 +14,7 @@ import { buildRecipeGroup, itemsForServings, looksLikeRecipe, type RecipeItem } 
 import { collectProductIds, itemView } from "@/serialize";
 import { hasStore } from "@/stores/registry";
 import { productsByIds } from "@/stores/search";
+import { basketMatches as matchesTable } from "@/db/schema";
 
 export const basket = new Hono();
 
@@ -171,6 +172,59 @@ basket.post("/items", async (c) => {
   if (!basketExists(basketId)) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
   // "ingredients for chocolate cookies" becomes a folder filled from a recipe instead of a single item.
   const item = !body.parentId && looksLikeRecipe(body.text) ? createGroup(body.text, undefined, basketId) : createItem(body.text, body.quantity ?? 1, body.parentId ?? null, "item", basketId);
+  return c.json(viewOf(item.id), 201);
+});
+
+/**
+ * Adds a concrete product (from a scan or a manual search) as an idea: the scanned store is pinned to that
+ * product, the other stores are matched as usual so the comparison still works.
+ */
+basket.post("/items/from-product", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { productId?: string; basketId?: string; parentId?: string | null; quantity?: number; text?: string };
+  const product = body.productId ? productsByIds([body.productId])[0] : undefined;
+  if (!product) return c.json({ error: { code: "NOT_FOUND", message: "product not found (search or scan it first)" } }, 404);
+  const basketId = body.basketId ?? DEFAULT_BASKET_ID;
+  if (!basketExists(basketId)) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
+  const text = body.text?.trim() || `${product.title} ${product.quantityText}`.trim();
+  const database = db();
+  const last = database.select({ sortOrder: basketItems.sortOrder }).from(basketItems).orderBy(desc(basketItems.sortOrder)).get();
+  const item: BasketItemRow = {
+    id: newId(),
+    basketId,
+    kind: "item",
+    parentId: body.parentId ?? null,
+    recipeJson: null,
+    text,
+    quantity: Math.max(1, Math.floor(body.quantity ?? 1)),
+    checked: false,
+    sortOrder: (last?.sortOrder ?? -1) + 1,
+    status: "NEW",
+    error: null,
+    parsedJson: null,
+    createdAt: now(),
+    updatedAt: now(),
+  };
+  database.insert(basketItems).values(item).run();
+  // A pre-existing USER choice survives the pipeline run, which fills in the other stores.
+  database
+    .insert(matchesTable)
+    .values({
+      id: newId(),
+      itemId: item.id,
+      store: product.store,
+      candidateIds: [product.id],
+      equivalences: { [product.id]: "EXACT" },
+      windowStart: 0,
+      shownCount: 1,
+      chosenProductId: product.id,
+      status: "CHOSEN",
+      chosenBy: "USER",
+      confidence: 1,
+      reason: "Added from a scan or search",
+      updatedAt: now(),
+    })
+    .run();
+  enqueue(item.id);
   return c.json(viewOf(item.id), 201);
 });
 

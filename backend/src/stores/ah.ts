@@ -142,6 +142,16 @@ export class AhAdapter implements StoreAdapter {
     return (body.products ?? []).map(mapAhProduct).filter((product): product is StoreProduct => product !== null);
   }
 
+  async byBarcode(gtin: string): Promise<StoreProduct | null> {
+    try {
+      const body = await this.throttle.run(() => this.get<AhProduct | { productCard?: AhProduct }>(`/mobile-services/product/search/v1/gtin/${encodeURIComponent(gtin)}`));
+      return mapAhProduct("productCard" in body && body.productCard ? body.productCard : (body as AhProduct));
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
   async refresh(sourceIds: string[]): Promise<StoreProduct[]> {
     const results: StoreProduct[] = [];
     for (const id of sourceIds) {
