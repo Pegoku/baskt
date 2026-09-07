@@ -82,6 +82,9 @@ export type RecipeInfo = {
   ingredientLines: string[];
   /** Ingredients left out because they are in stock (can be added later from the folder). */
   skipped?: Array<{ text: string; quantity: number; reason: string }>;
+  /** Servings the recipe was written for, and the servings the folder is currently scaled to. */
+  baseServings?: number | null;
+  currentServings?: number | null;
 };
 
 export const basketItems = sqliteTable("basket_items", {

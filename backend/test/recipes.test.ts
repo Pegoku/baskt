@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { extractRecipe, looksLikeRecipe } from "@/matching/recipes";
+import { extractRecipe, looksLikeRecipe, parseServings, scaleLine, scaleLines } from "@/matching/recipes";
 
 describe("recipes", () => {
   test("extracts schema.org Recipe data from an Allerhande page", async () => {
@@ -10,6 +10,20 @@ describe("recipes", () => {
     expect(recipe?.ingredientLines).toHaveLength(8);
     expect(recipe?.ingredientLines[0]).toBe("80 g ongezouten roomboter");
     expect(extractRecipe("<html></html>", "u")).toBeNull();
+  });
+
+  test("scales ingredient amounts to another number of servings", () => {
+    expect(scaleLine("160 g tarwebloem", 1.5)).toBe("240 g tarwebloem");
+    expect(scaleLine("0.25 tl baksoda", 2)).toBe("0,5 tl baksoda");
+    expect(scaleLine("1 scharrelei", 3)).toBe("3 scharrelei");
+    expect(scaleLine("½ citroen", 2)).toBe("1 citroen");
+    expect(scaleLine("2-3 tenen knoflook", 2)).toBe("4-6 tenen knoflook");
+    expect(scaleLine("snufje zout", 2)).toBe("snufje zout");
+    expect(scaleLines(["100 g suiker"], 4, 4)).toEqual(["100 g suiker"]);
+    expect(scaleLines(["100 g suiker"], 4, 2)).toEqual(["50 g suiker"]);
+    expect(parseServings("8")).toBe(8);
+    expect(parseServings("4 personen")).toBe(4);
+    expect(parseServings(null)).toBeNull();
   });
 
   test("detects recipe intent in mixed languages", () => {

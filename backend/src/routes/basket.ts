@@ -3,14 +3,14 @@ import { Hono } from "hono";
 import { db, newId, now } from "@/db";
 import { basketItems, basketMatches, tombstones, DEFAULT_BASKET_ID, type BasketItemRow } from "@/db/schema";
 import { basketExists, transferItem } from "@/routes/baskets";
-import { skipInStock } from "@/db/settings";
+import { defaultServings, skipInStock } from "@/db/settings";
 import { inStock, listStock } from "@/stock";
 import { enabledStoreCodes } from "@/db/settings";
 import { compareBasket, type CompareMatch } from "@/matching/compare";
 import { chooseMatch, enqueue, getItem, getMatches, isRunning, rejectShown, rematchItem, searchMoreCandidates } from "@/matching/pipeline";
 import { splitShoppingText } from "@/matching/parse";
 import { suggest } from "@/matching/suggest";
-import { buildRecipeGroup, looksLikeRecipe } from "@/matching/recipes";
+import { buildRecipeGroup, itemsForServings, looksLikeRecipe, type RecipeItem } from "@/matching/recipes";
 import { collectProductIds, itemView } from "@/serialize";
 import { hasStore } from "@/stores/registry";
 import { productsByIds } from "@/stores/search";
@@ -78,6 +78,18 @@ function createItem(text: string, quantity: number, parentId: string | null = nu
   return item;
 }
 
+/** Creates child items, leaving out (and reporting) ingredients already in stock. */
+function createChildren(groupId: string, items: RecipeItem[]) {
+  const stockRows = skipInStock() ? listStock() : [];
+  const skipped: Array<{ text: string; quantity: number; reason: string }> = [];
+  for (const child of items) {
+    const have = stockRows.length ? inStock(child.text, stockRows) : null;
+    if (have) skipped.push({ text: child.text, quantity: child.quantity, reason: `in stock: ${have.text}` });
+    else createItem(child.text, child.quantity, groupId);
+  }
+  return skipped;
+}
+
 /** Creates a folder; with `items` the children are given, otherwise a recipe is looked up in the background. */
 function createGroup(text: string, itemTexts?: string[], basketId = DEFAULT_BASKET_ID) {
   const group = createItem(text, 1, null, "group", basketId);
@@ -86,17 +98,10 @@ function createGroup(text: string, itemTexts?: string[], basketId = DEFAULT_BASK
     return group;
   }
   db().update(basketItems).set({ status: "PARSING" }).where(eq(basketItems.id, group.id)).run();
-  void buildRecipeGroup(text)
-    .then(({ intent, recipe, items }) => {
+  void buildRecipeGroup(text, defaultServings())
+    .then(({ intent, recipe, items, baseServings, servings }) => {
       if (!getItem(group.id)) return;
-      // Ingredients already in stock are left out but remembered so the folder can add them later.
-      const stockRows = skipInStock() ? listStock() : [];
-      const skipped: Array<{ text: string; quantity: number; reason: string }> = [];
-      for (const child of items) {
-        const have = stockRows.length ? inStock(child.text, stockRows) : null;
-        if (have) skipped.push({ text: child.text, quantity: child.quantity, reason: `in stock: ${have.text}` });
-        else createItem(child.text, child.quantity, group.id);
-      }
+      const skipped = createChildren(group.id, items);
       db()
         .update(basketItems)
         .set({
@@ -108,6 +113,8 @@ function createGroup(text: string, itemTexts?: string[], basketId = DEFAULT_BASK
             servings: recipe?.servings ?? null,
             ingredientLines: recipe?.ingredientLines ?? items.map((item) => item.text),
             skipped,
+            baseServings,
+            currentServings: servings,
           },
           status: items.length ? "MATCHED" : "ERROR",
           error: items.length ? null : "No ingredients found for this dish",
@@ -175,6 +182,31 @@ basket.post("/groups", async (c) => {
   const items = Array.isArray(body.items) ? body.items.filter((value): value is string => typeof value === "string" && value.trim().length > 0) : undefined;
   const group = createGroup(body.text, items, basketId);
   return c.json({ group: viewOf(group.id), items: loadViews(childrenOf(group.id)) }, 201);
+});
+
+/** Rescales a recipe folder to another number of servings; children are rebuilt from the recipe. */
+basket.post("/groups/:id/servings", async (c) => {
+  const group = getItem(c.req.param("id"));
+  if (!group || group.kind !== "group" || !group.recipeJson) return c.json({ error: { code: "NOT_FOUND", message: "recipe folder not found" } }, 404);
+  const body = (await c.req.json().catch(() => ({}))) as { servings?: number };
+  if (typeof body.servings !== "number" || body.servings <= 0 || body.servings > 50) return c.json({ error: { code: "BAD_REQUEST", message: "servings must be 1-50" } }, 400);
+  const info = group.recipeJson;
+  const recipe = info.sourceUrl ? { title: info.title, sourceUrl: info.sourceUrl, servings: info.servings, ingredientLines: info.ingredientLines } : null;
+  db().update(basketItems).set({ status: "PARSING", updatedAt: now() }).where(eq(basketItems.id, group.id)).run();
+  const items = await itemsForServings(recipe, group.text, info.baseServings ?? null, body.servings);
+  const database = db();
+  const oldChildren = childrenOf(group.id).map((child) => child.id);
+  if (oldChildren.length) {
+    database.delete(basketItems).where(inArray(basketItems.id, oldChildren)).run();
+    tombstone(oldChildren);
+  }
+  const skipped = createChildren(group.id, items);
+  database
+    .update(basketItems)
+    .set({ recipeJson: { ...info, skipped, currentServings: body.servings }, status: "MATCHED", error: null, updatedAt: now() })
+    .where(eq(basketItems.id, group.id))
+    .run();
+  return c.json({ group: viewOf(group.id), items: loadViews(childrenOf(group.id)) });
 });
 
 /** Adds the ingredients that were skipped because they were in stock. */

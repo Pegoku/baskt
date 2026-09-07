@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { aiStats } from "@/ai/client";
 import { db, now } from "@/db";
 import { aiCache, basketItems, basketMatches, priceHistory, products, searchCache } from "@/db/schema";
-import { appLanguage, enabledStoreCodes, setSetting, skipInStock } from "@/db/settings";
+import { appLanguage, defaultServings, enabledStoreCodes, setSetting, skipInStock } from "@/db/settings";
 import { addStock, listStock, removeStock } from "@/stock";
 import { deleteChoice, listChoices } from "@/matching/memory";
 import { allStores, hasStore, storeHealth } from "@/stores/registry";
@@ -18,11 +18,18 @@ meta.get("/stores", (c) => {
   return c.json({ stores: allStores().map((store) => ({ ...store, enabled: enabled.includes(store.code) })) });
 });
 
-meta.get("/settings", (c) => c.json({ enabledStores: enabledStoreCodes(), language: appLanguage(), recipeSkipInStock: skipInStock() }));
+function settingsView() {
+  return { enabledStores: enabledStoreCodes(), language: appLanguage(), recipeSkipInStock: skipInStock(), defaultServings: defaultServings() };
+}
+
+meta.get("/settings", (c) => c.json(settingsView()));
 
 meta.patch("/settings", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { enabledStores?: string[]; language?: string; recipeSkipInStock?: boolean };
+  const body = (await c.req.json().catch(() => ({}))) as { enabledStores?: string[]; language?: string; recipeSkipInStock?: boolean; defaultServings?: number | null };
   if (typeof body.recipeSkipInStock === "boolean") setSetting("recipeSkipInStock", body.recipeSkipInStock);
+  if (body.defaultServings === null || (typeof body.defaultServings === "number" && body.defaultServings > 0 && body.defaultServings <= 50)) {
+    setSetting("defaultServings", body.defaultServings);
+  }
   if (Array.isArray(body.enabledStores)) {
     const valid = body.enabledStores.filter((code) => typeof code === "string" && hasStore(code));
     if (!valid.length) return c.json({ error: { code: "BAD_REQUEST", message: "at least one known store must stay enabled" } }, 400);
@@ -31,7 +38,7 @@ meta.patch("/settings", async (c) => {
   if (typeof body.language === "string" && /^[a-zA-Z]{2,3}([-_][a-zA-Z0-9]+)?$/.test(body.language.trim())) {
     setSetting("language", body.language.trim().toLowerCase().split(/[-_]/)[0]);
   }
-  return c.json({ enabledStores: enabledStoreCodes(), language: appLanguage(), recipeSkipInStock: skipInStock() });
+  return c.json(settingsView());
 });
 
 meta.get("/stock", (c) => c.json({ items: listStock() }));

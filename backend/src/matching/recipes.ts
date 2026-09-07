@@ -17,6 +17,35 @@ export type Recipe = {
 
 export type RecipeItem = { text: string; quantity: number; staple: boolean };
 
+export function parseServings(value: string | number | null | undefined): number | null {
+  if (typeof value === "number") return value > 0 ? value : null;
+  const match = value?.match(/\d+(?:[.,]\d+)?/);
+  const parsed = match ? Number(match[0].replace(",", ".")) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+const FRACTIONS: Record<string, number> = { "½": 0.5, "¼": 0.25, "¾": 0.75, "⅓": 1 / 3, "⅔": 2 / 3 };
+
+function formatAmount(value: number) {
+  const rounded = value >= 10 ? Math.round(value) : Math.round(value * 4) / 4;
+  return String(Number(rounded.toFixed(2))).replace(".", ",");
+}
+
+/** Scales the leading amount of an ingredient line: "160 g bloem" ×1.5 → "240 g bloem". */
+export function scaleLine(line: string, factor: number) {
+  if (!Number.isFinite(factor) || factor <= 0 || Math.abs(factor - 1) < 1e-9) return line;
+  return line.replace(/^\s*(\d+(?:[.,]\d+)?|[½¼¾⅓⅔])(\s*[-–]\s*(\d+(?:[.,]\d+)?))?/, (match, first: string, _range, second?: string) => {
+    const parse = (raw: string) => FRACTIONS[raw] ?? Number(raw.replace(",", "."));
+    const scaledFirst = formatAmount(parse(first) * factor);
+    return second ? `${scaledFirst}-${formatAmount(parse(second) * factor)}` : match.replace(first, scaledFirst);
+  });
+}
+
+export function scaleLines(lines: string[], baseServings: number | null, servings: number | null) {
+  if (!baseServings || !servings || baseServings === servings) return lines;
+  return lines.map((line) => scaleLine(line, servings / baseServings));
+}
+
 /** Words that signal "I want the ingredients for a dish" in the languages the user mixes. */
 export const RECIPE_INTENT = /\b(ingredi[eë]nt\w*|ingredientes?|recipe|recept\w*|receta|to make|for making|om te maken|para hacer|alles voor|everything for|todo para)\b/i;
 
@@ -134,7 +163,7 @@ Merge duplicates, drop water, keep the order of the recipe. Translate carefully 
 }
 
 /** Ingredient list from the model's own knowledge, used when no recipe page is found. */
-export async function ingredientsFromKnowledge(dish: string): Promise<RecipeItem[]> {
+export async function ingredientsFromKnowledge(dish: string, servings: number | null = null): Promise<RecipeItem[]> {
   if (!aiConfigured()) return [];
   const raw = await chatJson<{ items?: Array<{ text?: string; quantity?: number; staple?: boolean }> }>(
     [
@@ -142,7 +171,7 @@ export async function ingredientsFromKnowledge(dish: string): Promise<RecipeItem
         role: "system",
         content: `List the shopping-list ingredients for a home-cooked dish, in ${appLanguageName()}. Return ONLY {"items":[{"text": product with amount when it matters, "quantity": 1, "staple": true for pantry staples like salt, pepper, oil, sugar, flour}]}. 6-15 items, in cooking order.`,
       },
-      { role: "user", content: dish },
+      { role: "user", content: servings ? `${dish} (for ${servings} people)` : dish },
     ],
     { maxTokens: 1000 },
   );
@@ -151,10 +180,21 @@ export async function ingredientsFromKnowledge(dish: string): Promise<RecipeItem
     .map((item) => ({ text: item.text!.trim(), quantity: Number.isInteger(item.quantity) && item.quantity! > 0 ? item.quantity! : 1, staple: Boolean(item.staple) }));
 }
 
+/** Items for a recipe at a given number of servings (scales the published lines, or asks the model directly). */
+export async function itemsForServings(recipe: Recipe | null, dish: string, baseServings: number | null, servings: number | null) {
+  if (recipe) return ingredientsToItems(scaleLines(recipe.ingredientLines, baseServings, servings), dish);
+  return ingredientsFromKnowledge(dish, servings);
+}
+
 /** Full flow: detect dish → find a recipe online → convert to items (falls back to model knowledge). */
-export async function buildRecipeGroup(text: string): Promise<{ intent: RecipeIntent; recipe: Recipe | null; items: RecipeItem[] }> {
+export async function buildRecipeGroup(
+  text: string,
+  defaultServings: number | null = null,
+): Promise<{ intent: RecipeIntent; recipe: Recipe | null; items: RecipeItem[]; baseServings: number | null; servings: number | null }> {
   const intent = await detectRecipeIntent(text);
   const recipe = await findRecipeOnline(intent.dishNl || intent.dish, intent.dish);
-  const items = recipe ? await ingredientsToItems(recipe.ingredientLines, intent.dish) : await ingredientsFromKnowledge(intent.dish);
-  return { intent, recipe, items };
+  const baseServings = parseServings(recipe?.servings);
+  const servings = intent.servings ?? defaultServings ?? baseServings;
+  const items = await itemsForServings(recipe, intent.dish, baseServings, servings);
+  return { intent, recipe, items, baseServings, servings };
 }

@@ -34,6 +34,12 @@ export function appLanguageName(): string {
   return LANGUAGE_NAMES[code] ?? code;
 }
 
+/** Default number of servings recipe folders are scaled to (null = as written). */
+export function defaultServings(): number | null {
+  const value = getSetting<number | null>("defaultServings", null);
+  return typeof value === "number" && value > 0 ? value : null;
+}
+
 /** Recipe folders leave out ingredients that are in stock (default on). */
 export function skipInStock(): boolean {
   return getSetting<boolean>("recipeSkipInStock", true);
