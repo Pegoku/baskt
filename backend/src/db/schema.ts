@@ -83,6 +83,22 @@ export const recipeFavourites = sqliteTable("recipe_favourites", {
   createdAt: integer("created_at").notNull(),
 });
 
+/** The user's own recipes: written by hand, drafted by the AI, or copied from a site. */
+export const userRecipes = sqliteTable("user_recipes", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  servings: text("servings"),
+  ingredientLines: text("ingredient_lines", { mode: "json" }).$type<string[]>().notNull(),
+  steps: text("steps", { mode: "json" }).$type<Array<{ text: string; imageUrl: string | null }>>().notNull(),
+  imageUrl: text("image_url"),
+  sourceUrl: text("source_url"),
+  /** "manual" | "ai" | "site" */
+  origin: text("origin").notNull().default("manual"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 /** Real purchases, from scanned receipts (or manual entry). */
 export const purchases = sqliteTable("purchases", {
   id: text("id").primaryKey(),
@@ -220,6 +236,7 @@ export type ParsedIdea = {
 
 export type BasketRow = typeof baskets.$inferSelect;
 export type StockRow = typeof stock.$inferSelect;
+export type UserRecipeRow = typeof userRecipes.$inferSelect;
 export type PurchaseRow = typeof purchases.$inferSelect;
 export type PurchaseLineRow = typeof purchaseLines.$inferSelect;
 export type ProductRow = typeof products.$inferSelect;

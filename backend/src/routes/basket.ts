@@ -13,7 +13,7 @@ import { suggest } from "@/matching/suggest";
 import { buildRecipeGroup, itemsForServings, looksLikeRecipe, type RecipeItem } from "@/matching/recipes";
 import { findDeals } from "@/matching/deals";
 import { interpretVoice } from "@/matching/voice";
-import { fetchRecipe } from "@/routes/recipes";
+import { fetchRecipe, getUserRecipe, userRecipeAsRecipe } from "@/routes/recipes";
 import { detectRecipeIntent, parseServings } from "@/matching/recipes";
 import { collectProductIds, itemView } from "@/serialize";
 import { getAdapter, hasStore } from "@/stores/registry";
@@ -105,7 +105,8 @@ function createGroupFromUrl(url: string, basketId = DEFAULT_BASKET_ID, servings:
   const group = createItem(url, 1, null, "group", basketId);
   db().update(basketItems).set({ status: "PARSING" }).where(eq(basketItems.id, group.id)).run();
   void (async () => {
-    const recipe = await fetchRecipe(url);
+    const own = url.match(/^baskt:\/\/recipe\/(.+)$/);
+    const recipe = own ? (getUserRecipe(own[1]) ? userRecipeAsRecipe(getUserRecipe(own[1])!) : null) : await fetchRecipe(url);
     if (!recipe) throw new Error("No recipe data found on that page");
     const intent = await detectRecipeIntent(recipe.title);
     const baseServings = parseServings(recipe.servings);
@@ -274,7 +275,7 @@ basket.post("/groups", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { text?: string; items?: string[]; basketId?: string; url?: string; servings?: number };
   const basketId = body.basketId ?? DEFAULT_BASKET_ID;
   if (!basketExists(basketId)) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
-  if (body.url?.trim() && /^https?:\/\//.test(body.url.trim())) {
+  if (body.url?.trim() && /^(https?:\/\/|baskt:\/\/recipe\/)/.test(body.url.trim())) {
     const group = createGroupFromUrl(body.url.trim(), basketId, typeof body.servings === "number" && body.servings > 0 ? body.servings : null);
     return c.json({ group: viewOf(group.id), items: [] }, 201);
   }

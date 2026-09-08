@@ -281,6 +281,30 @@ describe("api", () => {
     await api(`/basket/items/${item.id}`, { method: "DELETE" });
   });
 
+  test("own recipes: create, list, update, folder from it, delete", async () => {
+    const created = await api("/recipes/mine", { method: "POST", body: JSON.stringify({ title: "Arroz cubano", servings: "2", ingredientLines: ["200 g rice", "2 eggs", "1 can tomato sauce"], steps: ["Cook the rice", "Fry the eggs", "Warm the sauce and serve"] }) });
+    expect(created.status).toBe(201);
+    const recipe = (await created.json()) as any;
+    expect(recipe.origin).toBe("manual");
+    expect(recipe.steps).toHaveLength(3);
+    const mine = (await (await api("/recipes/mine")).json()) as any;
+    expect(mine.recipes.map((r: any) => r.id)).toContain(recipe.id);
+    const fetched = (await (await api(`/recipes/fetch?url=${encodeURIComponent(`baskt://recipe/${recipe.id}`)}`)).json()) as any;
+    expect(fetched.ingredientLines).toHaveLength(3);
+    const updated = (await (await api(`/recipes/mine/${recipe.id}`, { method: "PATCH", body: JSON.stringify({ title: "Arroz a la cubana" }) })).json()) as any;
+    expect(updated.title).toBe("Arroz a la cubana");
+    const folder = await api("/basket/groups", { method: "POST", body: JSON.stringify({ url: `baskt://recipe/${recipe.id}` }) });
+    expect(folder.status).toBe(201);
+    const groupId = ((await folder.json()) as any).group.id;
+    for (let i = 0; i < 100 && ((await (await api("/basket")).json()) as any).items.find((e: any) => e.id === groupId)?.status === "PARSING"; i += 1) await new Promise((r) => setTimeout(r, 20));
+    const basketBody = (await (await api("/basket")).json()) as any;
+    const group = basketBody.items.find((e: any) => e.id === groupId);
+    expect(group.status).toBe("MATCHED");
+    expect(basketBody.items.filter((e: any) => e.parentId === groupId)).toHaveLength(3);
+    await api(`/basket/items/${groupId}`, { method: "DELETE" });
+    expect((await api(`/recipes/mine/${recipe.id}`, { method: "DELETE" })).status).toBe(204);
+  });
+
   test("recipe favourites can be saved and removed", async () => {
     const saved = await api("/recipes/favourites", { method: "POST", body: JSON.stringify({ title: "Pannenkoeken", url: "https://www.ah.nl/allerhande/recept/R-R1/pannenkoeken" }) });
     expect(saved.status).toBe(201);
