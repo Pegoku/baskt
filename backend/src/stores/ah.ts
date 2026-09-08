@@ -2,7 +2,7 @@ import { fetchWithRetry, HttpError } from "@/lib/http";
 import { eurosToCents, parseQuantity, parseUnitPriceDescription, quantityTextFromTitle, unitPriceFrom } from "@/lib/units";
 import { StoreThrottle } from "@/stores/throttle";
 import type { StoreAdapter, StoreProduct } from "@/stores/types";
-import type { DealCard } from "@/stores/promotions";
+import { realDate, type DealCard } from "@/stores/promotions";
 import { productKey } from "@/stores/types";
 
 const BASE = "https://api.ah.nl";
@@ -167,8 +167,8 @@ export class AhAdapter implements StoreAdapter {
           priceCents: product.priceCents,
           regularPriceCents: product.regularPriceCents,
           productId: productKey("AH", product.sourceId),
-          validFrom: raw.bonusStartDate ?? null,
-          validUntil: raw.bonusEndDate ?? null,
+          validFrom: realDate(raw.bonusStartDate),
+          validUntil: realDate(raw.bonusEndDate),
         });
       }
       if ((body.page?.totalPages ?? 1) <= page + 1) break;

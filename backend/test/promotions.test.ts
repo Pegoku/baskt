@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { decodeDevalue, findDevalueObjects, matchesQuery } from "@/stores/promotions";
+import { decodeDevalue, findDevalueObjects, matchesQuery, realDate, termRelevance } from "@/stores/promotions";
 import { mapJumboPromotions } from "@/stores/jumbo";
 
 // Mimics Nuxt's devalue layout: objects/arrays reference other entries by index.
@@ -44,5 +44,9 @@ describe("devalue decoding", () => {
     expect(cards[0].subtitle).toBe("Alle zakken à 36 stuks · M.u.v. Biologische");
     expect(matchesQuery(cards[0], "koffie")).toBe(true);
     expect(matchesQuery(cards[0], "melk")).toBe(false);
+    expect(termRelevance(cards[0], ["koffie", "melk"])).toBe(1);
+    expect(termRelevance(cards[0], ["melk", "zuivel"])).toBe(0);
+    expect(realDate("2999-12-31")).toBeNull();
+    expect(realDate("2026-09-13")).toBe("2026-09-13");
   });
 });

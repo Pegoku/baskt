@@ -77,3 +77,20 @@ export function matchesQuery(card: DealCard, query: string) {
   const haystack = `${card.title} ${card.subtitle ?? ""} ${card.dealText ?? ""}`.toLowerCase();
   return tokens.every((token) => haystack.includes(token));
 }
+
+/** How many of the search terms a card matches (word-prefix match on title/subtitle); 0 = unrelated. */
+export function termRelevance(card: DealCard, terms: string[]) {
+  const words = `${card.title} ${card.subtitle ?? ""}`.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z0-9]+/).filter(Boolean);
+  let score = 0;
+  for (const term of terms) {
+    const tokens = term.toLowerCase().split(/\s+/).filter((token) => token.length > 2);
+    if (tokens.length && tokens.every((token) => words.some((word) => word.startsWith(token) || token.startsWith(word) && word.length > 3))) score += 1;
+  }
+  return score;
+}
+
+/** Store placeholder "no end date" values (e.g. 2999-12-31) are not real dates. */
+export function realDate(value: string | null | undefined) {
+  if (!value) return null;
+  return /^2[89]\d\d-|^9\d{3}-/.test(value) ? null : value;
+}

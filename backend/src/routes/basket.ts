@@ -12,6 +12,7 @@ import { splitShoppingText } from "@/matching/parse";
 import { suggest } from "@/matching/suggest";
 import { buildRecipeGroup, itemsForServings, looksLikeRecipe, type RecipeItem } from "@/matching/recipes";
 import { expandDealQuery, findDeals } from "@/matching/deals";
+import { termRelevance } from "@/stores/promotions";
 import { interpretVoice } from "@/matching/voice";
 import { fetchRecipe, getUserRecipe, userRecipeAsRecipe } from "@/routes/recipes";
 import { detectRecipeIntent, parseServings } from "@/matching/recipes";
@@ -528,8 +529,9 @@ basket.get("/deals/all", async (c) => {
   const query = c.req.query("q")?.trim() ?? "";
   const only = c.req.query("store");
   const stores = enabledStoreCodes().filter((code) => !only || code === only);
-  // Search by meaning: the typed word plus Dutch synonyms, merged per store.
-  const terms = query ? await expandDealQuery(query) : [""];
+  // Search by meaning: Dutch synonyms of the typed word (the raw word only when no synonyms came back).
+  const expanded = query ? await expandDealQuery(query) : [""];
+  const terms = query && expanded.length > 1 ? expanded.slice(1) : expanded;
   const results = await Promise.all(
     stores.map(async (code) => {
       const adapter = getAdapter(code);
@@ -545,7 +547,11 @@ basket.get("/deals/all", async (c) => {
             }
           }
         }
-        return { store: code, deals, error: null };
+        // Store search is fuzzy; keep only cards that actually mention one of the terms, best matches first.
+        const filtered = query
+          ? deals.map((card) => ({ card, score: termRelevance(card, terms) })).filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score).map((entry) => entry.card)
+          : deals;
+        return { store: code, deals: filtered, error: null };
       } catch (error) {
         return { store: code, deals: [], error: error instanceof Error ? error.message : String(error) };
       }
