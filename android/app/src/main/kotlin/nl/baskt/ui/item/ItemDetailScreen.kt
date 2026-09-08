@@ -21,7 +21,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DriveFileMove
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
@@ -44,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,7 +69,6 @@ import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.PriceSparkline
 import nl.baskt.ui.common.ProductRow
 import nl.baskt.ui.common.StoreBadge
-import nl.baskt.ui.common.TransferMenu
 import nl.baskt.ui.common.storeName
 
 @Composable
@@ -73,20 +78,63 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
     val baskets by viewModel.basket.baskets.collectAsState()
     val currentBasketId by viewModel.basket.currentBasketId.collectAsState()
     val item = items.firstOrNull { it.id == itemId }
-    var editing by remember { mutableStateOf(false) }
 
+    var titleDraft by remember(item?.text) { mutableStateOf(item?.text ?: "") }
+    var editingTitle by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    fun commitTitle() {
+        val current = item ?: return
+        editingTitle = false
+        val value = titleDraft.trim()
+        if (value.isNotEmpty() && value != current.text) viewModel.rename(current, value) else titleDraft = current.text
+    }
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
-                title = { Text(item?.text ?: "Item", maxLines = 1) },
+                title = {
+                    if (editingTitle) {
+                        // Inline rename: the title turns into a text field, saved on Done or when focus leaves.
+                        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = titleDraft,
+                            onValueChange = { titleDraft = it },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { commitTitle() }),
+                            modifier = Modifier.fillMaxWidth().focusRequester(focusRequester).onFocusChanged { if (!it.isFocused && editingTitle) commitTitle() },
+                        )
+                    } else {
+                        Text(
+                            item?.text ?: "Item",
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth().clickable(enabled = item != null) { titleDraft = item?.text ?: ""; editingTitle = true },
+                        )
+                    }
+                },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
                 actions = {
                     if (item != null) {
-                        IconButton(onClick = { editing = true }) { Icon(Icons.Default.Edit, contentDescription = "Edit") }
-                        IconButton(onClick = { viewModel.rematch(item) }) { Icon(Icons.Default.Autorenew, contentDescription = "Match again") }
-                        IconButton(onClick = { viewModel.addToStockFromItem(item) }) { Icon(Icons.Default.Kitchen, contentDescription = "Add to stock") }
-                        TransferMenu(baskets, currentBasketId) { basketId, copy -> viewModel.transfer(item, basketId, copy); if (!copy) onBack() }
+                        androidx.compose.foundation.layout.Box {
+                            IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
+                            androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("Match again") }, leadingIcon = { Icon(Icons.Default.Autorenew, contentDescription = null) }, onClick = { menuOpen = false; viewModel.rematch(item) })
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("Add to stock") }, leadingIcon = { Icon(Icons.Default.Kitchen, contentDescription = null) }, onClick = { menuOpen = false; viewModel.addToStockFromItem(item) })
+                                for (basket in baskets.filter { it.id != currentBasketId }) {
+                                    androidx.compose.material3.DropdownMenuItem(text = { Text("Move to ${basket.label}") }, leadingIcon = { Icon(Icons.Default.DriveFileMove, contentDescription = null) }, onClick = { menuOpen = false; viewModel.transfer(item, basket.id, copy = false); onBack() })
+                                }
+                                androidx.compose.material3.HorizontalDivider()
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                    onClick = { menuOpen = false; viewModel.delete(item); onBack() },
+                                )
+                            }
+                        }
                     }
                 },
             )
@@ -95,9 +143,6 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
         if (item == null) {
             Column(modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp)) { Text("This item no longer exists.") }
             return@Scaffold
-        }
-        if (editing) {
-            EditDialog(item, onDismiss = { editing = false }, onSave = { text -> viewModel.rename(item, text); editing = false })
         }
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { Header(item, onQuantity = { viewModel.setQuantity(item, it) }) }
@@ -290,19 +335,6 @@ private fun OptionRow(product: Product, equivalence: String?, selected: Boolean,
     }
 }
 
-@Composable
-private fun EditDialog(item: BasketItem, onDismiss: () -> Unit, onSave: (String) -> Unit) {
-    var text by remember { mutableStateOf(item.text) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit idea") },
-        text = {
-            OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        },
-        confirmButton = { TextButton(onClick = { if (text.isNotBlank()) onSave(text.trim()) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
-}
 
 @Suppress("unused")
 private fun StoreMatch.priceLabel(quantity: Int) = effective?.let { (it.priceCents * quantity).euros() } ?: "—"
