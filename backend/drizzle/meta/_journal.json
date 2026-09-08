@@ -57,6 +57,13 @@
       "when": 1788883567757,
       "tag": "0007_late_zuras",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1788893285693,
+      "tag": "0008_funny_morg",
+      "breakpoints": true
     }
   ]
 }

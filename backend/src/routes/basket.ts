@@ -70,6 +70,7 @@ function createItem(text: string, quantity: number, parentId: string | null = nu
     kind,
     parentId,
     recipeJson: null,
+    assignedStore: null,
     text: text.trim(),
     quantity: Math.max(1, Math.floor(quantity || 1)),
     checked: false,
@@ -240,6 +241,7 @@ basket.post("/items/from-product", async (c) => {
     kind: "item",
     parentId: body.parentId ?? null,
     recipeJson: null,
+    assignedStore: null,
     text,
     quantity: Math.max(1, Math.floor(body.quantity ?? 1)),
     checked: false,
@@ -404,8 +406,9 @@ basket.post("/from-text", async (c) => {
 basket.patch("/items/:id", async (c) => {
   const item = getItem(c.req.param("id"));
   if (!item) return c.json({ error: { code: "NOT_FOUND", message: "item not found" } }, 404);
-  const body = (await c.req.json().catch(() => ({}))) as { text?: string; quantity?: number; checked?: boolean; sortOrder?: number; parentId?: string | null };
+  const body = (await c.req.json().catch(() => ({}))) as { text?: string; quantity?: number; checked?: boolean; sortOrder?: number; parentId?: string | null; assignedStore?: string | null };
   const patch: Partial<BasketItemRow> = { updatedAt: now() };
+  if (body.assignedStore === null || (typeof body.assignedStore === "string" && hasStore(body.assignedStore))) patch.assignedStore = body.assignedStore;
   if (typeof body.text === "string" && body.text.trim()) patch.text = body.text.trim();
   if (typeof body.quantity === "number" && body.quantity >= 1) patch.quantity = Math.floor(body.quantity);
   if (typeof body.checked === "boolean") patch.checked = body.checked;
@@ -560,6 +563,35 @@ basket.get("/deals/all", async (c) => {
   return c.json({ query, terms, results, computedAt: now() });
 });
 
+/**
+ * Order step: decides where each open item is bought. mode "store:AH" = everything at AH (items AH lacks go to
+ * the cheapest other store), "mix" = cheapest store per item, "clear" = undo.
+ */
+basket.post("/assign", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { basketId?: string; mode?: string };
+  const basketId = body.basketId ?? DEFAULT_BASKET_ID;
+  if (!basketExists(basketId)) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
+  const mode = body.mode ?? "mix";
+  const items = db().select().from(basketItems).where(and(eq(basketItems.basketId, basketId), eq(basketItems.checked, false), eq(basketItems.kind, "item"))).all();
+  const views = loadViews(items);
+  const preferred = mode.startsWith("store:") ? mode.slice(6) : null;
+  if (preferred && !hasStore(preferred)) return c.json({ error: { code: "BAD_REQUEST", message: "unknown store" } }, 400);
+  for (const view of views) {
+    let assigned: string | null = null;
+    if (mode !== "clear") {
+      const available = view.matches.filter((match) => match.status !== "NONE" && match.status !== "EXHAUSTED" && (match.chosen ?? match.provisional)).map((match) => ({ store: match.store, cents: (match.chosen ?? match.provisional)!.priceCents }));
+      if (preferred && available.some((entry) => entry.store === preferred)) assigned = preferred;
+      else if (available.length) assigned = available.sort((a, b) => a.cents - b.cents)[0].store;
+    }
+    db().update(basketItems).set({ assignedStore: assigned, updatedAt: now() }).where(eq(basketItems.id, view.id)).run();
+  }
+  return c.json({ items: loadViews(childrenAndItems(basketId)) });
+});
+
+function childrenAndItems(basketId: string) {
+  return db().select().from(basketItems).where(eq(basketItems.basketId, basketId)).orderBy(asc(basketItems.sortOrder), asc(basketItems.createdAt)).all();
+}
+
 /** Promotions for the open items; `live=true` also re-searches the stores. */
 basket.get("/deals", async (c) => {
   const basketId = requestedBasket(c);
@@ -593,5 +625,19 @@ basket.get("/compare", (c) => {
     stores,
   );
   const products = new Map(views.flatMap((view) => view.matches.flatMap((match) => [match.chosen, match.provisional])).filter(Boolean).map((product) => [product!.id, product!]));
-  return c.json({ ...comparison, rankBy: rankBy(), products: Object.fromEntries(products) });
+  // Order summary: what the assignments add up to per store, and what is still unassigned.
+  const order = { perStore: {} as Record<string, { totalCents: number; count: number }>, unassigned: [] as string[] };
+  for (const view of views) {
+    const store = view.assignedStore;
+    if (!store) {
+      order.unassigned.push(view.id);
+      continue;
+    }
+    const line = comparison.items.find((row) => row.itemId === view.id)?.perStore[store];
+    const entry = order.perStore[store] ?? { totalCents: 0, count: 0 };
+    entry.count += 1;
+    entry.totalCents += line?.lineCents ?? 0;
+    order.perStore[store] = entry;
+  }
+  return c.json({ ...comparison, rankBy: rankBy(), order, products: Object.fromEntries(products) });
 });

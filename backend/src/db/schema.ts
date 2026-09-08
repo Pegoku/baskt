@@ -149,6 +149,8 @@ export const basketItems = sqliteTable("basket_items", {
   kind: text("kind").$type<ItemKind>().notNull().default("item"),
   parentId: text("parent_id").references((): AnySQLiteColumn => basketItems.id, { onDelete: "cascade" }),
   recipeJson: text("recipe_json", { mode: "json" }).$type<RecipeInfo | null>(),
+  /** Store this item will be bought at (set in the order step); null = not decided yet. */
+  assignedStore: text("assigned_store"),
   text: text("text").notNull(),
   quantity: integer("quantity").notNull().default(1),
   checked: integer("checked", { mode: "boolean" }).notNull().default(false),

@@ -4,12 +4,42 @@ import { aiConfigured } from "@/env";
 import type { RecipeStep } from "@/matching/recipes";
 import { listStock } from "@/stock";
 
-export type StockDish = { title: string; searchQuery: string; uses: string[]; missing: string[]; minutes: number | null };
+export type StockDish = { title: string; searchQuery: string; uses: string[]; missing: string[]; minutes: number | null; imageUrl?: string | null; recipeUrl?: string | null; source?: string | null };
+
+const dishCache = new Map<string, { at: number; dishes: StockDish[] }>();
+
+/** Attaches a picture and link from the recipe sites to each proposed dish (Allerhande + BBC Good Food, in parallel). */
+export async function illustrateDishes(dishes: StockDish[]): Promise<StockDish[]> {
+  const { searchSite, SITE_SOURCES } = await import("@/matching/sources");
+  const sites = SITE_SOURCES.filter((site) => site.id === "allerhande" || site.id === "bbcgoodfood");
+  return Promise.all(
+    dishes.map(async (dish) => {
+      for (const site of sites) {
+        try {
+          const hit = (await searchSite(site, dish.searchQuery, 3)).find((entry) => entry.imageUrl);
+          if (hit) return { ...dish, imageUrl: hit.imageUrl, recipeUrl: hit.url, source: hit.source };
+        } catch {
+          // try the next site
+        }
+      }
+      return dish;
+    }),
+  );
+}
 
 /** Dishes that can (mostly) be cooked from what is in stock, with what would still need buying. */
 export async function dishesFromStock(): Promise<StockDish[]> {
   const stock = listStock().map((row) => row.text);
   if (!stock.length || !aiConfigured()) return [];
+  const cacheKey = `${appLanguageName()}|${stock.slice().sort().join("|")}`;
+  const cached = dishCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < 6 * 60 * 60 * 1000) return cached.dishes;
+  const dishes = await illustrateDishes(await proposeDishes(stock));
+  dishCache.set(cacheKey, { at: Date.now(), dishes });
+  return dishes;
+}
+
+async function proposeDishes(stock: string[]): Promise<StockDish[]> {
   const raw = await chatJson<{ dishes?: Array<Partial<StockDish>> }>(
     [
       {

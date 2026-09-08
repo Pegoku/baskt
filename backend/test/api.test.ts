@@ -365,6 +365,22 @@ describe("api", () => {
     await api(`/basket/items/${id}`, { method: "DELETE" });
   });
 
+  test("order step assigns stores per item and compare reports the totals", async () => {
+    const a = (await (await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "halfvolle melk" }) })).json()) as any;
+    await waitForMatched(a.id);
+    const all = (await (await api("/basket/assign", { method: "POST", body: JSON.stringify({ mode: "store:AH" }) })).json()) as any;
+    expect(all.items.find((i: any) => i.id === a.id).assignedStore).toBe("AH");
+    const mix = (await (await api("/basket/assign", { method: "POST", body: JSON.stringify({ mode: "mix" }) })).json()) as any;
+    expect(mix.items.find((i: any) => i.id === a.id).assignedStore).toBe("AH"); // AH:1 at 95 is cheaper than JUMBO:a at 129
+    const manual = (await (await api(`/basket/items/${a.id}`, { method: "PATCH", body: JSON.stringify({ assignedStore: "JUMBO" }) })).json()) as any;
+    expect(manual.assignedStore).toBe("JUMBO");
+    const compare = (await (await api("/basket/compare")).json()) as any;
+    expect(compare.order.perStore.JUMBO.count).toBeGreaterThanOrEqual(1);
+    const cleared = (await (await api("/basket/assign", { method: "POST", body: JSON.stringify({ mode: "clear" }) })).json()) as any;
+    expect(cleared.items.find((i: any) => i.id === a.id).assignedStore).toBeNull();
+    await api(`/basket/items/${a.id}`, { method: "DELETE" });
+  });
+
   test("existing items can be grouped into a folder and bulk deleted", async () => {
     const a = (await (await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "melk" }) })).json()) as any;
     const b = (await (await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "eieren" }) })).json()) as any;
