@@ -79,7 +79,8 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
     val currentBasketId by viewModel.basket.currentBasketId.collectAsState()
     val item = items.firstOrNull { it.id == itemId }
 
-    var titleDraft by remember(item?.text) { mutableStateOf(item?.text ?: "") }
+    // TextFieldValue so the cursor can be placed at the end when editing starts.
+    var titleDraft by remember(item?.text) { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(item?.text ?: "")) }
     var editingTitle by remember { mutableStateOf(false) }
     var titleHadFocus by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
@@ -87,8 +88,8 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
     fun commitTitle() {
         val current = item ?: return
         editingTitle = false
-        val value = titleDraft.trim()
-        if (value.isNotEmpty() && value != current.text) viewModel.rename(current, value) else titleDraft = current.text
+        val value = titleDraft.text.trim()
+        if (value.isNotEmpty() && value != current.text) viewModel.rename(current, value) else titleDraft = androidx.compose.ui.text.input.TextFieldValue(current.text)
     }
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -116,7 +117,11 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
                             item?.text ?: "Item",
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth().clickable(enabled = item != null) { titleDraft = item?.text ?: ""; editingTitle = true },
+                            modifier = Modifier.fillMaxWidth().clickable(enabled = item != null) {
+                                val text = item?.text ?: ""
+                                titleDraft = androidx.compose.ui.text.input.TextFieldValue(text, selection = androidx.compose.ui.text.TextRange(text.length))
+                                editingTitle = true
+                            },
                         )
                     }
                 },
