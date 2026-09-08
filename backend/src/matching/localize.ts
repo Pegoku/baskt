@@ -4,7 +4,7 @@ import { aiConfigured } from "@/env";
 import { normalizeText, sha256 } from "@/lib/text";
 import type { Recipe } from "@/matching/recipes";
 
-export const L10N_PROMPT_VERSION = "v1";
+export const L10N_PROMPT_VERSION = "v2";
 
 export type LocalizedRecipe = Recipe & { originalTitle: string; language: string };
 
@@ -12,7 +12,8 @@ export type LocalizedRecipe = Recipe & { originalTitle: string; language: string
 export async function localizeRecipe(recipe: Recipe): Promise<LocalizedRecipe> {
   const language = appLanguage();
   const untouched: LocalizedRecipe = { ...recipe, originalTitle: recipe.title, language: "nl" };
-  if (language === "nl" || !aiConfigured()) return untouched;
+  // Even for Dutch the steps are rewritten: sites pad them with links and cross-references.
+  if (!aiConfigured()) return untouched;
   const steps = recipe.steps ?? [];
   const key = await sha256([L10N_PROMPT_VERSION, language, recipe.sourceUrl ?? recipe.title, recipe.ingredientLines.join("|"), steps.map((step) => step.text).join("|")].join("#"));
   const raw = await cachedChatJson<{ title?: unknown; ingredientLines?: unknown; steps?: unknown }>(
@@ -21,7 +22,7 @@ export async function localizeRecipe(recipe: Recipe): Promise<LocalizedRecipe> {
     [
       {
         role: "system",
-        content: `Translate this recipe into ${appLanguageName()}. Keep amounts and units, keep the same number of ingredient lines and steps, same order. Return ONLY {"title": string, "ingredientLines": string[], "steps": string[]}.`,
+        content: `Rewrite this recipe in ${appLanguageName()} (translate when needed). Ingredient lines: keep amounts and units, same count and order. Steps: keep the same count and order, but turn each into a clean, self-contained cooking instruction: remove links, "see this article", tips about other recipes, ads, and chatty filler; keep times, temperatures and techniques. Return ONLY {"title": string, "ingredientLines": string[], "steps": string[]}.`,
       },
       { role: "user", content: JSON.stringify({ title: recipe.title, ingredientLines: recipe.ingredientLines, steps: steps.map((step) => step.text) }) },
     ],

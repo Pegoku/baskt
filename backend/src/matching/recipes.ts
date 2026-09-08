@@ -28,19 +28,33 @@ function firstImage(value: unknown): string | null {
 }
 
 /** Flattens schema.org recipeInstructions (strings, HowToStep, HowToSection) into steps. */
+/** Removes HTML, URLs and "see our article about…" filler that recipe sites embed in step texts. */
+export function cleanStepText(raw: string): string {
+  return raw
+    .replace(/<[^>]+>/g, " ")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/&nbsp;|&amp;|&quot;|&#39;/g, (entity) => ({ "&nbsp;": " ", "&amp;": "&", "&quot;": '"', "&#39;": "'" })[entity] ?? " ")
+    .replace(/\b(?:lees|bekijk|check|see|read|discover|ontdek)\b[^.!?]*\b(?:artikel|article|blog|video|hier|here|link)\b[^.!?]*[.!?]/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 export function extractSteps(value: unknown): RecipeStep[] {
   const steps: RecipeStep[] = [];
   const visit = (node: unknown) => {
     if (!node) return;
     if (typeof node === "string") {
-      for (const part of node.split(/\n+/)) if (part.trim()) steps.push({ text: part.trim(), imageUrl: null });
+      for (const part of node.split(/\n+/)) {
+        const text = cleanStepText(part);
+        if (text) steps.push({ text, imageUrl: null });
+      }
       return;
     }
     if (Array.isArray(node)) return node.forEach(visit);
     if (typeof node === "object") {
       const record = node as { "@type"?: unknown; text?: unknown; name?: unknown; itemListElement?: unknown; image?: unknown };
       if (Array.isArray(record.itemListElement)) return visit(record.itemListElement);
-      const text = typeof record.text === "string" ? record.text.trim() : typeof record.name === "string" ? record.name.trim() : "";
+      const text = cleanStepText(typeof record.text === "string" ? record.text : typeof record.name === "string" ? record.name : "");
       if (text) steps.push({ text, imageUrl: firstImage(record.image) });
     }
   };

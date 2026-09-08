@@ -279,6 +279,20 @@ export async function rejectShown(itemId: string, store: string) {
       return saveMatch({ ...match, windowStart, shownCount: windowStart, status: "EXHAUSTED", chosenProductId: null, chosenBy: null, reason, updatedAt: now() });
     }
     candidateIds = [...candidateIds, ...more];
+    const equivalences = { ...match.equivalences };
+    for (const id of more) equivalences[id] = equivalences[id] ?? "SUBSTITUTE";
+    return saveMatch({
+      ...match,
+      candidateIds,
+      equivalences,
+      windowStart,
+      shownCount: Math.min(windowStart + OPTIONS_PER_PAGE, candidateIds.length),
+      status: "PENDING",
+      chosenProductId: null,
+      chosenBy: "AI",
+      reason: `Alternatives for: ${tried.slice(0, 3).join(", ")}`,
+      updatedAt: now(),
+    });
   }
   return saveMatch({
     ...match,

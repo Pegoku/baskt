@@ -104,14 +104,14 @@ export async function alternativeQuery(text: string, parsed: ParsedIdea, store: 
       {
         role: "system",
         content:
-          'The user is shopping at a Dutch supermarket webshop. Earlier search queries did not find what they meant. Suggest up to 3 different short Dutch search queries (1-3 words each: synonyms, the broader product type, a typical variant) likely to find it. Return ONLY {"queries": ["...", "..."]}.',
+          `The user shops at a Dutch supermarket webshop and did not find what they meant. First understand WHAT the item is (its category and role: e.g. "krulsla melange" is a bag of mixed salad leaves). Then propose up to 4 short Dutch search queries for ALTERNATIVES a shopper would accept instead: the broader category ("gemengde sla"), sibling products ("rucola", "ijsbergsla", "veldsla"), and the same thing under another name. Never repeat or merely reword the earlier queries. Return ONLY {"queries": ["...", ...]}.`,
       },
       {
         role: "user",
-        content: `Idea: ${text}\nCanonical: ${parsed.canonicalName}\nStore: ${store}\nQueries already tried: ${triedQueries.join(" | ")}\nProducts the user rejected: ${rejectedTitles.join(" | ") || "none"}`,
+        content: `Idea: ${text}\nCanonical: ${parsed.canonicalName}\nAttributes: ${parsed.attributes.join(", ") || "none"}\nStore: ${store}\nQueries already tried (do not repeat): ${triedQueries.join(" | ")}\nProducts the user rejected or that were not it: ${rejectedTitles.join(" | ") || "none"}`,
       },
     ],
-    { maxTokens: 300 },
+    { maxTokens: 400 },
   );
   const candidates = [...(Array.isArray(raw?.queries) ? raw!.queries : []), raw?.query].filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim());
   const tried = new Set(triedQueries.map(normalizeText));
@@ -122,5 +122,5 @@ export async function alternativeQuery(text: string, parsed: ParsedIdea, store: 
     tried.add(key);
     out.push(candidate);
   }
-  return out.slice(0, 3);
+  return out.slice(0, 4);
 }

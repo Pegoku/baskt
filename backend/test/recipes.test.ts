@@ -16,6 +16,12 @@ describe("recipes", () => {
     expect(extractRecipe("<html></html>", "u")).toBeNull();
   });
 
+  test("cleans links and article references out of step texts", () => {
+    const { cleanStepText } = require("@/matching/recipes");
+    expect(cleanStepText('Kook de <b>pasta</b> 8 min. Lees hier ons artikel over pasta koken. Giet af.')).toBe("Kook de pasta 8 min. Giet af.");
+    expect(cleanStepText("Bake at 180°C for 20 min https://example.com/tips and cool.")).toBe("Bake at 180°C for 20 min and cool.");
+  });
+
   test("flattens instruction shapes into steps", () => {
     expect(extractSteps("Mix.\nBake.")).toEqual([{ text: "Mix.", imageUrl: null }, { text: "Bake.", imageUrl: null }]);
     expect(extractSteps([{ "@type": "HowToSection", itemListElement: [{ "@type": "HowToStep", text: "Chop", image: { url: "https://x/1.jpg" } }] }])).toEqual([{ text: "Chop", imageUrl: "https://x/1.jpg" }]);
