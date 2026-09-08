@@ -363,10 +363,17 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun rename(item: BasketItem, text: String) = viewModelScope.launch { basket.rename(item, text) }
     fun delete(item: BasketItem) = viewModelScope.launch { basket.delete(item) }
     fun clearChecked() = viewModelScope.launch { basket.clearChecked() }
-    fun choose(item: BasketItem, store: String, productId: String?) = viewModelScope.launch { basket.choose(item, store, productId) }
-    fun reject(item: BasketItem, store: String) = viewModelScope.launch { basket.reject(item, store) }
+    /** Store cards that are waiting for the server (alternatives search, manual search, choose). */
+    val busyMatches = MutableStateFlow<Set<String>>(emptySet())
+    private fun <T> busy(item: BasketItem, store: String, block: suspend () -> T) = viewModelScope.launch {
+        val key = "${item.id}:$store"
+        busyMatches.update { it + key }
+        try { block() } finally { busyMatches.update { it - key } }
+    }
+    fun choose(item: BasketItem, store: String, productId: String?) = busy(item, store) { basket.choose(item, store, productId) }
+    fun reject(item: BasketItem, store: String) = busy(item, store) { basket.reject(item, store) }
     fun feedback(item: BasketItem, store: String, productId: String, up: Boolean) = viewModelScope.launch { basket.feedback(item, store, productId, up) }
-    fun searchMore(item: BasketItem, store: String, query: String) = viewModelScope.launch { basket.searchMore(item, store, query) }
+    fun searchMore(item: BasketItem, store: String, query: String) = busy(item, store) { basket.searchMore(item, store, query) }
     fun rematch(item: BasketItem) = viewModelScope.launch { basket.rematch(item) }
     fun setEnabledStores(codes: List<String>) = viewModelScope.launch { basket.setEnabledStores(codes); basket.refresh(false) }
 

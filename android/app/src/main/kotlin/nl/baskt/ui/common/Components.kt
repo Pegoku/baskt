@@ -1,6 +1,10 @@
 package nl.baskt.ui.common
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,13 +54,26 @@ fun StoreBadge(code: String, stores: List<StoreInfo>, modifier: Modifier = Modif
 
 private fun Color.luminance() = 0.2126f * red + 0.7152f * green + 0.0722f * blue
 
+/** Product picture; tapping it opens a large view (title, size, price) that closes on tap. */
 @Composable
 fun ProductThumb(product: Product, size: Int = 56) {
-    Surface(shape = RoundedCornerShape(12.dp), color = Color.White, modifier = Modifier.size(size.dp)) {
+    var zoomed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    Surface(shape = RoundedCornerShape(12.dp), color = Color.White, modifier = Modifier.size(size.dp).clickable(enabled = product.imageUrl != null) { zoomed = true }) {
         if (product.imageUrl != null) {
             AsyncImage(model = product.imageUrl, contentDescription = product.title, modifier = Modifier.padding(4.dp))
         } else {
             Box(contentAlignment = Alignment.Center) { Text("🛒", textAlign = TextAlign.Center) }
+        }
+    }
+    if (zoomed && product.imageUrl != null) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { zoomed = false }) {
+            Surface(shape = RoundedCornerShape(24.dp), color = Color.White, modifier = Modifier.clickable { zoomed = false }) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
+                    AsyncImage(model = product.imageUrl, contentDescription = product.title, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
+                    Text(product.title, style = MaterialTheme.typography.titleMedium, color = Color.Black, textAlign = TextAlign.Center)
+                    Text(listOfNotNull(product.quantityText, product.priceCents.euros(), product.unitPriceLabel()).joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = Color.DarkGray)
+                }
+            }
         }
     }
 }

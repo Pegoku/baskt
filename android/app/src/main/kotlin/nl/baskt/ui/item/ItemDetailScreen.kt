@@ -80,6 +80,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
     val stores by viewModel.basket.stores.collectAsState()
     val baskets by viewModel.basket.baskets.collectAsState()
     val currentBasketId by viewModel.basket.currentBasketId.collectAsState()
+    val busyMatches by viewModel.busyMatches.collectAsState()
     val item = items.firstOrNull { it.id == itemId }
 
     // TextFieldValue so the cursor can be placed at the end when editing starts.
@@ -182,6 +183,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
                         onSearch = { query -> viewModel.searchMore(item, store.code, query) },
                         onFeedback = { productId, up -> viewModel.feedback(item, store.code, productId, up) },
                         loadHistory = { productId -> viewModel.priceHistory(productId) },
+                        busy = "${item.id}:${store.code}" in busyMatches,
                     )
                 }
             }
@@ -230,6 +232,7 @@ private fun StoreCard(
     onSearch: (String) -> Unit,
     onFeedback: (String, Boolean) -> Unit,
     loadHistory: suspend (String) -> List<nl.baskt.data.PricePoint> = { emptyList() },
+    busy: Boolean = false,
 ) {
     var showOptions by remember(match?.status, match?.updatedAt) { mutableStateOf(match?.status == "PENDING") }
     var searchText by remember { mutableStateOf("") }
@@ -254,9 +257,11 @@ private fun StoreCard(
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.weight(1f),
                 )
-                if (match?.status == "CHOSEN" && !showOptions) TextButton(onClick = { showOptions = true }) { Text("Change") }
+                if (busy) LoadingIndicator(modifier = Modifier.size(22.dp))
+                else if (match?.status == "CHOSEN" && !showOptions) TextButton(onClick = { showOptions = true }) { Text("Change") }
             }
             if (match == null) return@Column
+            if (busy) Text("Looking for alternatives…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
 
             val chosen = match.chosen
             if (match.status == "CHOSEN" && chosen != null) {
@@ -289,21 +294,24 @@ private fun StoreCard(
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         if (options.isNotEmpty()) {
-                            FilledTonalButton(onClick = onReject, modifier = Modifier.weight(1f)) { Text("None of these fit") }
+                            FilledTonalButton(onClick = onReject, enabled = !busy, modifier = Modifier.weight(1f)) { Text("None of these fit") }
                         }
                         if (match.status != "NONE") {
-                            OutlinedButton(onClick = { onChoose(null) }, modifier = Modifier.weight(1f)) { Text("Skip at ${storeName(store.code, stores)}") }
+                            OutlinedButton(onClick = { onChoose(null) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Skip at ${storeName(store.code, stores)}") }
                         }
                     }
                 }
             }
 
             if (match.status == "EXHAUSTED") {
-                if (match.reason != null) Text(match.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                // Asks the server for synonyms / broader terms and searches the store again.
-                FilledTonalButton(onClick = onReject, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Autorenew, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Text("  Search alternatives")
+                if (match.reason != null && !busy) Text(match.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    // Asks the server to understand the product and search for substitutes.
+                    FilledTonalButton(onClick = onReject, enabled = !busy, modifier = Modifier.weight(1f)) {
+                        if (busy) LoadingIndicator(modifier = Modifier.size(18.dp)) else Icon(Icons.Default.Autorenew, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Text(if (busy) "  Searching…" else "  Search alternatives")
+                    }
+                    OutlinedButton(onClick = { onChoose(null) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Skip at ${storeName(store.code, stores)}") }
                 }
             }
             val showSearch = match.status != "CHOSEN" || showOptions
