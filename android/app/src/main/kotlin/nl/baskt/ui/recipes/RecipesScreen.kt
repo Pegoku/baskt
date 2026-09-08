@@ -159,7 +159,7 @@ private fun RecipeList(list: List<RecipeSummary>, empty: String, busy: Boolean, 
         Text(empty, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(20.dp))
         return
     }
-    LazyColumn(contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 128.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(list, key = { it.url }) { recipe ->
             Card(onClick = { onOpen(recipe) }) {
                 Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {

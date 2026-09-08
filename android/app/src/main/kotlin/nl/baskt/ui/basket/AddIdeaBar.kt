@@ -44,6 +44,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import nl.baskt.data.RecipeSuggestion
@@ -158,7 +164,10 @@ fun AddIdeaBar(
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it; onTextChanged(it) },
-                    modifier = Modifier.weight(1f).focusRequester(focusRequester),
+                    // Enter adds the idea (Shift+Enter or a pasted list still gives new lines).
+                    modifier = Modifier.weight(1f).focusRequester(focusRequester).onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown && event.key == Key.Enter && !event.isShiftPressed) { submit(); true } else false
+                    },
                     placeholder = { Text(placeholder) },
                     singleLine = false,
                     maxLines = 3,
