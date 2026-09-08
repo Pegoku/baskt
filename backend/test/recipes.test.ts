@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { extractRecipe, extractSteps, looksLikeRecipe, parseServings, scaleLine, scaleLines } from "@/matching/recipes";
+import { recipeRelevance } from "@/matching/sources";
 
 describe("recipes", () => {
   test("extracts schema.org Recipe data from an Allerhande page", async () => {
@@ -32,6 +33,12 @@ describe("recipes", () => {
     expect(parseServings("8")).toBe(8);
     expect(parseServings("4 personen")).toBe(4);
     expect(parseServings(null)).toBeNull();
+  });
+
+  test("relevance keeps titles that share a word with the query", () => {
+    expect(recipeRelevance("Receta de Arroz a la cubana tradicional", "arroz cubano")).toBeGreaterThan(0);
+    expect(recipeRelevance("Cubaanse rijst met ei", "Cubaanse rijst")).toBeGreaterThan(0);
+    expect(recipeRelevance("Pasta carbonara", "Cubaanse rijst")).toBe(0);
   });
 
   test("detects recipe intent in mixed languages", () => {

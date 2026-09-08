@@ -69,7 +69,23 @@ async function fetchHtml(url: string) {
   return response.text();
 }
 
-export async function searchSite(site: SiteSource, query: string, limit = 12): Promise<RecipeHit[]> {
+const STOPWORDS = new Set(["de", "het", "een", "met", "van", "en", "the", "a", "an", "with", "and", "of", "con", "la", "el", "los", "las", "y", "recept", "recipe", "receta"]);
+
+function relevance(title: string, query: string) {
+  const norm = (value: string) => value.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z0-9]+/).filter((token) => token.length > 2 && !STOPWORDS.has(token));
+  const wanted = norm(query);
+  const have = new Set(norm(title));
+  return wanted.filter((token) => have.has(token) || Array.from(have).some((other) => other.startsWith(token) || token.startsWith(other))).length;
+}
+
+/** Sites with fuzzy search return unrelated dishes when nothing matches; keep only titles that share a word with the query. */
+function filterRelevant(hits: RecipeHit[], query: string, limit: number) {
+  const scored = hits.map((hit) => ({ hit, score: relevance(hit.title, query) }));
+  const relevant = scored.filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score);
+  return (relevant.length ? relevant : []).slice(0, limit).map((entry) => entry.hit);
+}
+
+export async function searchSite(site: SiteSource, query: string, limit = 8): Promise<RecipeHit[]> {
   const html = await fetchHtml(site.searchUrl(query));
   const seen = new Set<string>();
   const hits: RecipeHit[] = [];
@@ -83,12 +99,14 @@ export async function searchSite(site: SiteSource, query: string, limit = 12): P
     const anchor = around.match(/>([^<>]{4,120})<\/a>/)?.[1]?.replace(/\s+/g, " ").trim();
     const image = html.slice(Math.max(0, match.index! - 1500), match.index! + 1500).match(/https:\/\/[^"'\s]+\.(?:jpe?g|png|webp)(?:\?[^"'\s]*)?/)?.[0] ?? null;
     hits.push({ title: anchor && !/^(lees|bekijk|meer|read|ver)/i.test(anchor) ? anchor : titleFromSlug(match[1]), url, imageUrl: image, source: site.name, language: site.language });
-    if (hits.length >= limit) break;
+    if (hits.length >= limit * 3) break;
   }
-  return hits;
+  return filterRelevant(hits, query, limit);
 }
 
 /** TheMealDB: a free JSON API with English recipes (small catalogue, but instant and structured). */
+export { relevance as recipeRelevance };
+
 export async function searchMealDb(query: string): Promise<RecipeHit[]> {
   const response = await fetchWithRetry(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(query)}`, {}, { retries: 1 });
   const body = (await response.json()) as { meals?: Array<{ idMeal: string; strMeal: string; strMealThumb?: string }> | null };
