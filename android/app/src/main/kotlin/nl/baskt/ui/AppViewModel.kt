@@ -388,6 +388,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
     fun choose(item: BasketItem, store: String, productId: String?) = busy(item, store) { basket.choose(item, store, productId) }
     fun reject(item: BasketItem, store: String) = busy(item, store) { basket.reject(item, store) }
+    fun unskip(item: BasketItem, store: String) = busy(item, store) { basket.unskip(item, store) }
     fun feedback(item: BasketItem, store: String, productId: String, up: Boolean) = viewModelScope.launch { basket.feedback(item, store, productId, up) }
     fun searchMore(item: BasketItem, store: String, query: String) = busy(item, store) { basket.searchMore(item, store, query) }
     fun rematch(item: BasketItem) = viewModelScope.launch { basket.rematch(item) }

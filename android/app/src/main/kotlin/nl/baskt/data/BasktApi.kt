@@ -179,6 +179,8 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
             setBody(JsonObject(mapOf("productId" to JsonPrimitive(productId), "up" to JsonPrimitive(up))))
         }.expect()
 
+    suspend fun unskip(id: String, store: String): BasketItem = client.post(url("/basket/items/$id/matches/$store/unskip")) { auth() }.expect()
+
     suspend fun reject(id: String, store: String): BasketItem =
         client.post(url("/basket/items/$id/matches/$store/reject")) { auth() }.expect()
 

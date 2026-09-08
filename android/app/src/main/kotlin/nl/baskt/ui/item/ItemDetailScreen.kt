@@ -60,6 +60,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -182,6 +183,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
                         onReject = { viewModel.reject(item, store.code) },
                         onSearch = { query -> viewModel.searchMore(item, store.code, query) },
                         onFeedback = { productId, up -> viewModel.feedback(item, store.code, productId, up) },
+                        onUnskip = { viewModel.unskip(item, store.code) },
                         loadHistory = { productId -> viewModel.priceHistory(productId) },
                         busy = "${item.id}:${store.code}" in busyMatches,
                     )
@@ -231,12 +233,24 @@ private fun StoreCard(
     onReject: () -> Unit,
     onSearch: (String) -> Unit,
     onFeedback: (String, Boolean) -> Unit,
+    onUnskip: () -> Unit = {},
     loadHistory: suspend (String) -> List<nl.baskt.data.PricePoint> = { emptyList() },
     busy: Boolean = false,
 ) {
     var showOptions by remember(match?.status, match?.updatedAt) { mutableStateOf(match?.status == "PENDING") }
     var searchText by remember { mutableStateOf("") }
 
+    // A skipped store is shown dimmed and collapsed; tapping the card re-enables it.
+    if (match?.status == "NONE") {
+        Card(onClick = onUnskip, modifier = Modifier.alpha(0.55f)) {
+            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StoreBadge(store.code, stores)
+                Text("Skipped at ${storeName(store.code, stores)} — tap to enable again", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                if (busy) LoadingIndicator(modifier = Modifier.size(22.dp))
+            }
+        }
+        return
+    }
     Card {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -272,10 +286,8 @@ private fun StoreCard(
                 if (match.reason != null && match.chosenBy != "USER") Text(match.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
-            if (showOptions || match.status == "PENDING" || match.status == "NONE") {
-                if (match.status == "NONE" && !showOptions) {
-                    TextButton(onClick = { showOptions = true }) { Text("Pick a product instead") }
-                } else {
+            if (showOptions || match.status == "PENDING") {
+                run {
                     val options = match.options.filter { it.id != chosen?.id || match.status != "CHOSEN" }
                     if (options.isNotEmpty()) {
                         Text("Option ${match.page} of suggestions", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
