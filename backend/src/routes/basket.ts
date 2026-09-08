@@ -16,7 +16,7 @@ import { interpretVoice } from "@/matching/voice";
 import { fetchRecipe } from "@/routes/recipes";
 import { detectRecipeIntent, parseServings } from "@/matching/recipes";
 import { collectProductIds, itemView } from "@/serialize";
-import { hasStore } from "@/stores/registry";
+import { getAdapter, hasStore } from "@/stores/registry";
 import { productsByIds } from "@/stores/search";
 import { basketMatches as matchesTable } from "@/db/schema";
 
@@ -518,6 +518,25 @@ basket.post("/items/:id/matches/:store/search", async (c) => {
   const match = await searchMoreCandidates(c.req.param("id"), store, body.query.trim());
   if (!match) return c.json({ error: { code: "NOT_FOUND", message: "item or store not found" } }, 404);
   return c.json(viewOf(c.req.param("id")));
+});
+
+/** Store-wide promotions (not tied to the basket), optionally narrowed by store and keyword. */
+basket.get("/deals/all", async (c) => {
+  const query = c.req.query("q")?.trim() ?? "";
+  const only = c.req.query("store");
+  const stores = enabledStoreCodes().filter((code) => !only || code === only);
+  const results = await Promise.all(
+    stores.map(async (code) => {
+      const adapter = getAdapter(code);
+      if (!adapter.promotions) return { store: code, deals: [], error: null };
+      try {
+        return { store: code, deals: await adapter.promotions(query), error: null };
+      } catch (error) {
+        return { store: code, deals: [], error: error instanceof Error ? error.message : String(error) };
+      }
+    }),
+  );
+  return c.json({ query, results, computedAt: now() });
 });
 
 /** Promotions for the open items; `live=true` also re-searches the stores. */

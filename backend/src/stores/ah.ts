@@ -2,6 +2,8 @@ import { fetchWithRetry, HttpError } from "@/lib/http";
 import { eurosToCents, parseQuantity, parseUnitPriceDescription, quantityTextFromTitle, unitPriceFrom } from "@/lib/units";
 import { StoreThrottle } from "@/stores/throttle";
 import type { StoreAdapter, StoreProduct } from "@/stores/types";
+import type { DealCard } from "@/stores/promotions";
+import { productKey } from "@/stores/types";
 
 const BASE = "https://api.ah.nl";
 const HEADERS = {
@@ -27,6 +29,8 @@ export type AhProduct = {
   orderAvailabilityStatus?: string | null;
   isOrderable?: boolean | null;
   availableOnline?: boolean | null;
+  bonusStartDate?: string | null;
+  bonusEndDate?: string | null;
 };
 
 export type AhSearchResponse = {
@@ -140,6 +144,36 @@ export class AhAdapter implements StoreAdapter {
     const params = new URLSearchParams({ query, sortOn: "RELEVANCE", size: String(size), page: "0" });
     const body = await this.throttle.run(() => this.get<AhSearchResponse>(`/mobile-services/product/search/v2?${params}`));
     return (body.products ?? []).map(mapAhProduct).filter((product): product is StoreProduct => product !== null);
+  }
+
+  /** Bonus products via the search endpoint's bonus filter (empty query = the whole bonus). */
+  async promotions(query: string): Promise<DealCard[]> {
+    const cards: DealCard[] = [];
+    const pages = query ? 2 : 4;
+    for (let page = 0; page < pages; page += 1) {
+      const params = new URLSearchParams({ query, sortOn: "RELEVANCE", size: "40", page: String(page), filters: "bonus=true" });
+      const body = await this.throttle.run(() => this.get<AhSearchResponse>(`/mobile-services/product/search/v2?${params}`));
+      for (const raw of body.products ?? []) {
+        const product = mapAhProduct(raw);
+        if (!product) continue;
+        cards.push({
+          store: "AH",
+          id: product.sourceId,
+          title: product.title,
+          subtitle: product.quantityText,
+          dealText: product.dealText,
+          imageUrl: product.imageUrl,
+          url: product.sourceUrl,
+          priceCents: product.priceCents,
+          regularPriceCents: product.regularPriceCents,
+          productId: productKey("AH", product.sourceId),
+          validFrom: raw.bonusStartDate ?? null,
+          validUntil: raw.bonusEndDate ?? null,
+        });
+      }
+      if ((body.page?.totalPages ?? 1) <= page + 1) break;
+    }
+    return cards;
   }
 
   async byBarcode(gtin: string): Promise<StoreProduct | null> {

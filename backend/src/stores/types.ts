@@ -1,4 +1,5 @@
 import type { Unit } from "@/lib/units";
+import type { DealCard } from "@/stores/promotions";
 
 export type StoreCode = string;
 
@@ -37,6 +38,8 @@ export interface StoreAdapter {
   refresh?(sourceIds: string[]): Promise<StoreProduct[]>;
   /** Optional: look up a product by EAN/GTIN barcode. Stores without it are searched with the barcode as query. */
   byBarcode?(gtin: string): Promise<StoreProduct | null>;
+  /** Optional: the store's current promotions (optionally narrowed by a keyword). */
+  promotions?(query: string): Promise<DealCard[]>;
 }
 
 export const productKey = (store: StoreCode, sourceId: string) => `${store}:${sourceId}`;
