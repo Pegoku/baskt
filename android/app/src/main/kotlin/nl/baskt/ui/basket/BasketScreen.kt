@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.ShoppingCart
 import nl.baskt.ui.common.buildShareText
@@ -144,6 +145,24 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
     }
     val whatsapp by viewModel.whatsapp.collectAsState()
     LaunchedEffect(Unit) { viewModel.loadWhatsApp() }
+    /** Opens the Google code scanner straight away; the result shows in the scan sheet below. */
+    fun startScan(context: android.content.Context) {
+        val options = com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(
+                com.google.mlkit.vision.barcode.common.Barcode.FORMAT_EAN_13,
+                com.google.mlkit.vision.barcode.common.Barcode.FORMAT_EAN_8,
+                com.google.mlkit.vision.barcode.common.Barcode.FORMAT_UPC_A,
+                com.google.mlkit.vision.barcode.common.Barcode.FORMAT_UPC_E,
+            )
+            .enableAutoZoom()
+            .build()
+        com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(context, options).startScan()
+            .addOnSuccessListener { barcode -> barcode.rawValue?.let { viewModel.lookupBarcode(it); viewModel.refreshStock() } }
+            .addOnFailureListener { error ->
+                val cancelled = error is com.google.mlkit.common.MlKitException && error.errorCode == com.google.mlkit.common.MlKitException.CODE_SCANNER_CANCELLED
+                if (!cancelled) android.widget.Toast.makeText(context, error.message ?: "Scanner unavailable", android.widget.Toast.LENGTH_SHORT).show()
+            }
+    }
     val scanResult by viewModel.scanResult.collectAsState()
     val searching by viewModel.searching.collectAsState()
     val stock by viewModel.basket.stock.collectAsState()
@@ -212,7 +231,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                     )
                 },
                 actions = {
-                    IconButton(onClick = onSearch) { Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan or search products") }
+                    IconButton(onClick = { startScan(context) }) { Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan a barcode") }
                     IconButton(onClick = onRecipes) { Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = "Recipes") }
                     if (items.any { !it.checked && !it.isGroup }) IconButton(onClick = onDeals) { Icon(Icons.Default.LocalOffer, contentDescription = "Find deals") }
                     var menu by remember { mutableStateOf(false) }
@@ -228,6 +247,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                             DropdownMenuItem(text = { Text("Share link (live list)") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareLink(whatsApp = false) })
                             DropdownMenuItem(text = { Text("Send link to WhatsApp") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareLink(whatsApp = true) })
                             DropdownMenuItem(text = { Text("Share as text") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareText(context, buildShareText(baskets.firstOrNull { it.id == currentBasketId }, items, enabledStores), whatsApp = false) })
+                            DropdownMenuItem(text = { Text("Search products") }, leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }, onClick = { menu = false; onSearch() })
                             DropdownMenuItem(text = { Text("Stock") }, leadingIcon = { Icon(Icons.Default.Kitchen, contentDescription = null) }, onClick = { menu = false; onStock() })
                             DropdownMenuItem(text = { Text("Receipts & spending") }, leadingIcon = { Icon(Icons.Default.Receipt, contentDescription = null) }, onClick = { menu = false; onPurchases() })
                             DropdownMenuItem(text = { Text("Refresh") }, leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }, onClick = { menu = false; viewModel.reload() })
