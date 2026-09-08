@@ -15,6 +15,7 @@ import nl.baskt.ui.settings.SettingsScreen
 import nl.baskt.ui.settings.MemoryScreen
 import nl.baskt.ui.stock.StockScreen
 import nl.baskt.ui.search.SearchScreen
+import nl.baskt.ui.search.ScannerScreen
 import nl.baskt.ui.deals.DealsScreen
 import nl.baskt.ui.recipes.RecipesScreen
 import nl.baskt.ui.shop.ShopModeScreen
@@ -35,6 +36,7 @@ import nl.baskt.ui.recipes.RecipeEditorScreen
 @Serializable data class RecipeEditorRoute(val recipeId: String? = null) : NavKey
 @Serializable data object MemoryRoute : NavKey
 @Serializable data object OrderRoute : NavKey
+@Serializable data object ScannerRoute : NavKey
 
 @Composable
 fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
@@ -58,6 +60,7 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
                     onSettings = { backStack.add(SettingsRoute) },
                     onStock = { backStack.add(StockRoute) },
                     onSearch = { backStack.add(SearchRoute) },
+                    onScan = { backStack.add(ScannerRoute) },
                     onDeals = { backStack.add(DealsRoute) },
                     onRecipes = { backStack.add(RecipesRoute) },
                     onShop = { backStack.add(ShopRoute(it)) },
@@ -78,6 +81,7 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
             entry<CompareRoute> {
                 CompareScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) }, onOrder = { backStack.add(OrderRoute) })
             }
+            entry<ScannerRoute> { ScannerScreen(viewModel, onClose = { backStack.removeLastOrNull() }) }
             entry<OrderRoute> {
                 OrderScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onShop = { backStack.add(ShopRoute(it)) })
             }

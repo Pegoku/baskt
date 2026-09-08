@@ -280,6 +280,28 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun setWhatsAppChat(chat: WhatsAppChat) = viewModelScope.launch { runCatching { container.api.whatsappSetChat(chat) }; loadWhatsApp() }
     suspend fun sendToWhatsApp(store: String? = null): Result<Int> = runCatching { container.api.whatsappSend(basket.currentBasketId.value, store) }
 
+    /** Continuous scanner: one entry per distinct barcode seen in this session. */
+    data class Scan(val gtin: String, val products: List<Product> = emptyList(), val loading: Boolean = true, val done: String? = null, val at: Long = System.currentTimeMillis())
+    val scans = MutableStateFlow<List<Scan>>(emptyList())
+    private var lastSeen: Pair<String, Long>? = null
+    fun onBarcodeSeen(raw: String) {
+        val gtin = raw.filter { it.isDigit() }
+        if (gtin.length < 8) return
+        val now = System.currentTimeMillis()
+        // Ignore the same code while it stays in view; a different code (or the same after 4 s) is a new scan.
+        if (lastSeen?.first == gtin && now - (lastSeen?.second ?: 0) < 4000) { lastSeen = gtin to now; return }
+        lastSeen = gtin to now
+        if (scans.value.any { it.gtin == gtin }) return
+        scans.update { it + Scan(gtin) }
+        viewModelScope.launch {
+            val result = runCatching { container.api.barcode(gtin) }.getOrNull()
+            val products = result?.results?.mapNotNull { it.product } ?: emptyList()
+            scans.update { list -> list.map { if (it.gtin == gtin) it.copy(products = products, loading = false) else it } }
+        }
+    }
+    fun markScan(gtin: String, done: String) { scans.update { list -> list.map { if (it.gtin == gtin) it.copy(done = done) else it } } }
+    fun clearScans() { scans.value = emptyList(); lastSeen = null }
+
     private val _memory = MutableStateFlow<List<Choice>>(emptyList())
     val memory: StateFlow<List<Choice>> = _memory
     fun loadMemory() = viewModelScope.launch { _memory.value = runCatching { container.api.memory() }.getOrDefault(emptyList()) }
