@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Remove
@@ -27,6 +28,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -46,7 +48,12 @@ fun GroupScreen(viewModel: AppViewModel, groupId: String, onBack: () -> Unit, on
     val recipe by viewModel.recipeSuggestion.collectAsState()
     val baskets by viewModel.basket.baskets.collectAsState()
     val currentBasketId by viewModel.basket.currentBasketId.collectAsState()
+    val recipeDetail by viewModel.recipeDetail.collectAsState()
+    var showRecipe by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val group = items.firstOrNull { it.id == groupId }
+    if (showRecipe && group != null) {
+        nl.baskt.ui.recipes.RecipeSheet(title = group.text, detail = recipeDetail, onDismiss = { showRecipe = false; viewModel.closeRecipe() }) {}
+    }
     val children = items.filter { it.parentId == groupId }
     val enabledStores = stores.filter { it.enabled }
     val context = LocalContext.current
@@ -108,6 +115,10 @@ fun GroupScreen(viewModel: AppViewModel, groupId: String, onBack: () -> Unit, on
                         }
                         val info = group.recipe
                         if (info != null && !group.isProcessing && group.status != "ERROR") {
+                            androidx.compose.material3.FilledTonalButton(onClick = { showRecipe = true; viewModel.openGroupRecipe(group.id) }) {
+                                Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null)
+                                Text("  Recipe & steps")
+                            }
                             val current = (info.currentServings ?: info.baseServings)?.toInt()
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("Servings", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))

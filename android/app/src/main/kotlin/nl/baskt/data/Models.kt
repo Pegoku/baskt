@@ -69,6 +69,8 @@ data class RecipeInfo(
     val skipped: List<SkippedIngredient> = emptyList(),
     val baseServings: Double? = null,
     val currentServings: Double? = null,
+    val imageUrl: String? = null,
+    val steps: List<RecipeStep> = emptyList(),
 )
 
 @Serializable
@@ -226,7 +228,12 @@ data class Deal(
 data class DealsResponse(val deals: List<Deal> = emptyList(), val computedAt: Long = 0)
 
 @Serializable
-data class RecipeSummary(val title: String, val url: String, val imageUrl: String? = null, val slug: String = "")
+data class RecipeSummary(val title: String, val url: String, val imageUrl: String? = null, val slug: String = "", val titleLocalized: String? = null) {
+    val displayTitle: String get() = titleLocalized?.takeIf { it.isNotBlank() } ?: title
+}
+
+@Serializable
+data class RecipeStep(val text: String, val imageUrl: String? = null)
 
 @Serializable
 data class RecipeSearchResponse(val query: String = "", val results: List<RecipeSummary> = emptyList())
@@ -238,7 +245,17 @@ data class RecipeFavourite(val id: String, val title: String, val url: String, v
 data class RecipeFavouritesResponse(val favourites: List<RecipeFavourite> = emptyList())
 
 @Serializable
-data class RecipeDetail(val title: String, val sourceUrl: String? = null, val servings: String? = null, val ingredientLines: List<String> = emptyList())
+data class RecipeDetail(
+    val title: String,
+    val sourceUrl: String? = null,
+    val servings: String? = null,
+    val ingredientLines: List<String> = emptyList(),
+    val imageUrl: String? = null,
+    val steps: List<RecipeStep> = emptyList(),
+    val totalTime: String? = null,
+    val originalTitle: String? = null,
+    val language: String? = null,
+)
 
 @Serializable
 data class PricePoint(val capturedAt: Long, val priceCents: Int, val isDeal: Boolean = false)

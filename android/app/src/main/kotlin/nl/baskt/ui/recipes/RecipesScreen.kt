@@ -122,7 +122,10 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
                             if (recipe.imageUrl != null) {
                                 AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)))
                             }
-                            Text(recipe.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(recipe.displayTitle, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                if (recipe.displayTitle != recipe.title) Text(recipe.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                             IconButton(onClick = { viewModel.toggleRecipeFavourite(recipe) }) {
                                 Icon(if (isFavourite(recipe)) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "Favourite", tint = MaterialTheme.colorScheme.primary)
                             }
@@ -136,21 +139,15 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
 
     val current = selected
     if (current != null) {
-        ModalBottomSheet(onDismissRequest = { selected = null; viewModel.closeRecipe() }) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(detail?.title ?: current.title, style = MaterialTheme.typography.titleLarge)
-                detail?.servings?.let { Text("$it servings", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                if (detail == null) LoadingIndicator() else for (line in detail!!.ingredientLines) Text("• $line", style = MaterialTheme.typography.bodyMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                    Button(onClick = { viewModel.addRecipeFolder(current.url); selected = null; viewModel.closeRecipe(); onFolderAdded() }) {
-                        Icon(Icons.Default.CreateNewFolder, contentDescription = null)
-                        Text("  Add as folder")
-                    }
-                    IconButton(onClick = { viewModel.toggleRecipeFavourite(current) }) {
-                        Icon(if (isFavourite(current)) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "Favourite")
-                    }
+        RecipeSheet(title = current.displayTitle, detail = detail, onDismiss = { selected = null; viewModel.closeRecipe() }) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { viewModel.addRecipeFolder(current.url); selected = null; viewModel.closeRecipe(); onFolderAdded() }) {
+                    Icon(Icons.Default.CreateNewFolder, contentDescription = null)
+                    Text("  Add as folder")
                 }
-                androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
+                IconButton(onClick = { viewModel.toggleRecipeFavourite(current) }) {
+                    Icon(if (isFavourite(current)) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "Favourite")
+                }
             }
         }
     }

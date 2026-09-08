@@ -138,6 +138,14 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     fun closeRecipe() { _recipeDetail.value = null }
 
+    /** Localized recipe (ingredients + steps) of a folder, for the folder screen. */
+    fun openGroupRecipe(groupId: String) = viewModelScope.launch {
+        _recipeDetail.value = null
+        _recipesBusy.value = true
+        _recipeDetail.value = runCatching { container.api.groupRecipe(groupId) }.getOrNull()
+        _recipesBusy.value = false
+    }
+
     fun addRecipeFolder(recipeUrl: String) = viewModelScope.launch { basket.addGroupFromUrl(recipeUrl) }
 
     private val _priceChanges = MutableStateFlow<PriceChangesResponse?>(null)

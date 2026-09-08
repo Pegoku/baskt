@@ -183,6 +183,8 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 
     suspend fun fetchRecipe(recipeUrl: String): RecipeDetail = client.get(url("/recipes/fetch")) { auth(); parameter("url", recipeUrl) }.expect()
 
+    suspend fun groupRecipe(groupId: String): RecipeDetail = client.get(url("/basket/groups/$groupId/recipe")) { auth() }.expect()
+
     suspend fun recipeFavourites(): List<RecipeFavourite> = client.get(url("/recipes/favourites")) { auth() }.expect<RecipeFavouritesResponse>().favourites
 
     suspend fun addRecipeFavourite(recipe: RecipeSummary): RecipeFavourite =
