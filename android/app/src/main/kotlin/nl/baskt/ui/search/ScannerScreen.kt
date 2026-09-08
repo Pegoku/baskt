@@ -124,7 +124,10 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                 if (scans.isEmpty()) {
                     Text("Scanned products appear here.", modifier = Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
-                    LazyColumn(contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), reverseLayout = true) {
+                    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+                    // A new scan is inserted at the top; bring it into view.
+                    LaunchedEffect(scans.firstOrNull()?.gtin) { if (scans.isNotEmpty()) listState.animateScrollToItem(0) }
+                    LazyColumn(state = listState, contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(scans, key = { it.gtin }) { scan ->
                             Card {
                                 Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

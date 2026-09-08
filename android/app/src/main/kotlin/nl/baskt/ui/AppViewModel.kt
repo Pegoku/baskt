@@ -292,11 +292,16 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         if (lastSeen?.first == gtin && now - (lastSeen?.second ?: 0) < 4000) { lastSeen = gtin to now; return }
         lastSeen = gtin to now
         if (scans.value.any { it.gtin == gtin }) return
-        scans.update { it + Scan(gtin) }
+        scans.update { listOf(Scan(gtin)) + it } // newest first
         viewModelScope.launch {
             val result = runCatching { container.api.barcode(gtin) }.getOrNull()
             val products = result?.results?.mapNotNull { it.product } ?: emptyList()
             scans.update { list -> list.map { if (it.gtin == gtin) it.copy(products = products, loading = false) else it } }
+            if (products.isEmpty()) {
+                // Unknown codes only clutter the list: show the notice briefly, then drop it.
+                delay(3000)
+                scans.update { list -> list.filterNot { it.gtin == gtin && it.products.isEmpty() } }
+            }
         }
     }
     fun markScan(gtin: String, done: String) { scans.update { list -> list.map { if (it.gtin == gtin) it.copy(done = done) else it } } }
