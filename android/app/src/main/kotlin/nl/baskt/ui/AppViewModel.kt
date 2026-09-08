@@ -11,7 +11,9 @@ import nl.baskt.AppContainer
 import nl.baskt.data.AppSettings
 import nl.baskt.data.BasketItem
 import nl.baskt.data.Comparison
+import nl.baskt.data.AllDealsResponse
 import nl.baskt.data.BarcodeResponse
+import nl.baskt.data.DealCard
 import nl.baskt.data.Deal
 import nl.baskt.data.DealsResponse
 import nl.baskt.data.Product
@@ -222,6 +224,23 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         _loadingDeals.value = true
         _deals.value = basket.deals(live)
         _loadingDeals.value = false
+    }
+
+    private val _allDeals = MutableStateFlow<AllDealsResponse?>(null)
+    val allDeals: StateFlow<AllDealsResponse?> = _allDeals
+    private val _loadingAllDeals = MutableStateFlow(false)
+    val loadingAllDeals: StateFlow<Boolean> = _loadingAllDeals
+
+    fun loadAllDeals(query: String, store: String?) = viewModelScope.launch {
+        _loadingAllDeals.value = true
+        _allDeals.value = runCatching { container.api.allDeals(query, store) }.getOrNull()
+        _loadingAllDeals.value = false
+    }
+
+    /** Adds a store-wide deal to the basket: known products are pinned, promotion groups become an idea. */
+    fun addDeal(card: DealCard) = viewModelScope.launch {
+        val product = card.productId?.let { id -> runCatching { container.api.searchProducts(card.title, card.store) }.getOrNull()?.results?.firstOrNull()?.products?.firstOrNull { it.id == id } }
+        if (product != null) basket.addFromProduct(product) else basket.add(card.title, 1)
     }
 
     /** Switches the item at that store to the promoted product. */

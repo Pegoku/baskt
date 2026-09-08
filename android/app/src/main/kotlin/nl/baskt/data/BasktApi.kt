@@ -265,6 +265,9 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 
     suspend fun spendSummary(): SpendSummary = client.get(url("/purchases/summary")) { auth() }.expect()
 
+    suspend fun allDeals(query: String, store: String?): AllDealsResponse =
+        client.get(url("/basket/deals/all")) { auth(); parameter("q", query); if (store != null) parameter("store", store) }.expect()
+
     suspend fun deals(basketId: String, live: Boolean): DealsResponse =
         client.get(url("/basket/deals")) { auth(); parameter("basketId", basketId); if (live) parameter("live", "true") }.expect()
 

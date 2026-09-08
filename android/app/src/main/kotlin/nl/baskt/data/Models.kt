@@ -231,6 +231,28 @@ data class Deal(
 data class DealsResponse(val deals: List<Deal> = emptyList(), val computedAt: Long = 0)
 
 @Serializable
+data class DealCard(
+    val store: String,
+    val id: String,
+    val title: String,
+    val subtitle: String? = null,
+    val dealText: String? = null,
+    val imageUrl: String? = null,
+    val url: String? = null,
+    val priceCents: Int? = null,
+    val regularPriceCents: Int? = null,
+    val productId: String? = null,
+    val validFrom: String? = null,
+    val validUntil: String? = null,
+)
+
+@Serializable
+data class StoreDeals(val store: String, val deals: List<DealCard> = emptyList(), val error: String? = null)
+
+@Serializable
+data class AllDealsResponse(val query: String = "", val results: List<StoreDeals> = emptyList(), val computedAt: Long = 0)
+
+@Serializable
 data class RecipeSummary(val title: String, val url: String, val imageUrl: String? = null, val slug: String = "", val titleLocalized: String? = null) {
     val displayTitle: String get() = titleLocalized?.takeIf { it.isNotBlank() } ?: title
 }

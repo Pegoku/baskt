@@ -6,12 +6,15 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -62,8 +65,13 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Promotions") }
-                SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Price changes") }
+                SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 3)) { Text("My items") }
+                SegmentedButton(selected = tab == 2, onClick = { tab = 2 }, shape = SegmentedButtonDefaults.itemShape(1, 3)) { Text("All deals") }
+                SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(2, 3)) { Text("Prices") }
+            }
+            if (tab == 2) {
+                AllDealsTab(viewModel, stores)
+                return@Column
             }
             if (tab == 1) {
                 val data = changes
@@ -131,6 +139,60 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
                                 TextButton(onClick = { onOpenItem(deal.itemId) }) { Text("Open item") }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Store-wide promotions with a store filter and keyword search; each card can be added to the basket. */
+@Composable
+private fun AllDealsTab(viewModel: AppViewModel, stores: List<nl.baskt.data.StoreInfo>) {
+    val data by viewModel.allDeals.collectAsState()
+    val loading by viewModel.loadingAllDeals.collectAsState()
+    var query by remember { androidx.compose.runtime.mutableStateOf("") }
+    var store by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    val enabled = stores.filter { it.enabled }
+    LaunchedEffect(store) { viewModel.loadAllDeals(query, store) }
+    Column(modifier = Modifier.fillMaxSize()) {
+        androidx.compose.material3.OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            placeholder = { Text("Search the deals, e.g. kaas") },
+            singleLine = true,
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { viewModel.loadAllDeals(query.trim(), store) }),
+            trailingIcon = { IconButton(onClick = { viewModel.loadAllDeals(query.trim(), store) }) { Icon(Icons.Default.Search, contentDescription = "Search") } },
+        )
+        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.material3.FilterChip(selected = store == null, onClick = { store = null }, label = { Text("All stores") })
+            for (info in enabled) androidx.compose.material3.FilterChip(selected = store == info.code, onClick = { store = info.code }, label = { Text(info.name) })
+        }
+        if (loading) LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
+        val cards = data?.results?.flatMap { result -> result.deals } ?: emptyList()
+        val errors = data?.results?.mapNotNull { it.error } ?: emptyList()
+        if (errors.isNotEmpty()) Text(errors.joinToString("; "), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp))
+        if (!loading && data != null && cards.isEmpty()) Text("No deals found.", modifier = Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(cards, key = { "${it.store}-${it.id}" }) { card ->
+                Card {
+                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (card.imageUrl != null) {
+                            coil3.compose.AsyncImage(model = card.imageUrl, contentDescription = null, modifier = Modifier.padding(2.dp).then(Modifier.size(64.dp)))
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                StoreBadge(card.store, stores)
+                                if (card.dealText != null) Text(card.dealText, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                            }
+                            Text(card.title, style = MaterialTheme.typography.titleSmall)
+                            if (card.subtitle != null) Text(card.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val price = listOfNotNull(card.priceCents?.euros(), card.regularPriceCents?.let { "was ${it.euros()}" }, card.validUntil?.let { "until $it" }).joinToString(" · ")
+                            if (price.isNotEmpty()) Text(price, style = MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton(onClick = { viewModel.addDeal(card) }) { Text("Add") }
                     }
                 }
             }
