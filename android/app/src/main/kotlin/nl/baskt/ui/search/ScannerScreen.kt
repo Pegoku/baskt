@@ -14,6 +14,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -112,7 +116,8 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                         Button(onClick = { permission.launch(Manifest.permission.CAMERA) }) { Text("Allow camera") }
                     }
                 }
-                IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart).padding(8.dp)) { Icon(Icons.Default.Close, contentDescription = "Close scanner", tint = Color.White) }
+                // Below the status bar (the screen is edge-to-edge).
+                IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.statusBars).padding(8.dp)) { Icon(Icons.Default.Close, contentDescription = "Close scanner", tint = Color.White) }
                 Text(
                     if (scans.isEmpty()) "Point at a barcode — keep scanning as many as you like" else "${scans.size} scanned · keep going or close",
                     color = Color.White,
@@ -120,7 +125,7 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                     modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
                 )
             }
-            Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth().weight(1f)) {
+            Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth().weight(1f).navigationBarsPadding()) {
                 if (scans.isEmpty()) {
                     Text("Scanned products appear here.", modifier = Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
