@@ -337,26 +337,36 @@ async function findMoreCandidates(item: BasketItemRow, store: string, known: str
   return { ids: lexicalRank(item.text, parsed, fresh).map((entry) => entry.product.id), tried: attempts };
 }
 
-/** Manual search from the app: adds the results as the next options. */
+/**
+ * Manual search from the app: the typed text goes through the usual pipeline (understand it, search the
+ * store with the right Dutch queries, rank with the AI and your preferences) and the best results become
+ * the next options.
+ */
 export async function searchMoreCandidates(itemId: string, store: string, query: string) {
   const item = getItem(itemId);
   const match = getMatch(itemId, store);
   if (!item || !match) return null;
-  const parsed = item.parsedJson ?? { canonicalName: item.text, attributes: [], sizeHint: null, queries: {}, fallbackQuery: null, ambiguous: false };
-  const result = await searchStore(store, query, { limit: 20 });
-  const fresh = lexicalRank(query, { ...parsed, canonicalName: query }, result.products.filter((product) => !match.candidateIds.includes(product.id))).map(
-    (entry) => entry.product.id,
-  );
-  if (!fresh.length) return match;
-  const candidateIds = [...match.candidateIds, ...fresh];
+  const probe: BasketItemRow = { ...item, text: query };
+  const parsed = await parseIdea(query, [store]);
+  // Keep the original idea's size preference when the new text does not state one.
+  if (!parsed.sizeHint && item.parsedJson?.sizeHint) parsed.sizeHint = item.parsedJson.sizeHint;
+  const { candidates } = await collectCandidates(probe, parsed, store);
+  const fresh = candidates.filter((product) => !match.candidateIds.includes(product.id));
+  if (!fresh.length) {
+    return saveMatch({ ...match, reason: `Nothing new for "${query}" (tried ${parsed.queries[store] ?? query})`, updatedAt: now() });
+  }
+  const ranked = await rankCandidates(probe, parsed, store, fresh);
+  const candidateIds = [...match.candidateIds, ...ranked.orderedIds];
   return saveMatch({
     ...match,
     candidateIds,
+    equivalences: { ...match.equivalences, ...ranked.equivalences },
     windowStart: match.candidateIds.length,
     shownCount: Math.min(candidateIds.length, match.candidateIds.length + OPTIONS_PER_PAGE),
     status: "PENDING",
     chosenProductId: null,
     chosenBy: "AI",
+    reason: ranked.reason ?? `Results for "${query}"`,
     updatedAt: now(),
   });
 }
