@@ -112,7 +112,7 @@ function createGroupFromUrl(url: string, basketId = DEFAULT_BASKET_ID, servings:
       .update(basketItems)
       .set({
         text: intent.dish || recipe.title,
-        recipeJson: { title: recipe.title, sourceUrl: recipe.sourceUrl, servings: recipe.servings, ingredientLines: recipe.ingredientLines, skipped, baseServings, currentServings: target },
+        recipeJson: { title: recipe.title, sourceUrl: recipe.sourceUrl, servings: recipe.servings, ingredientLines: recipe.ingredientLines, skipped, baseServings, currentServings: target, imageUrl: recipe.imageUrl ?? null, steps: recipe.steps ?? [] },
         status: items.length ? "MATCHED" : "ERROR",
         error: items.length ? null : "No ingredients found in this recipe",
         updatedAt: now(),
@@ -151,6 +151,8 @@ function createGroup(text: string, itemTexts?: string[], basketId = DEFAULT_BASK
             skipped,
             baseServings,
             currentServings: servings,
+            imageUrl: recipe?.imageUrl ?? null,
+            steps: recipe?.steps ?? [],
           },
           status: items.length ? "MATCHED" : "ERROR",
           error: items.length ? null : "No ingredients found for this dish",
@@ -275,6 +277,15 @@ basket.post("/groups", async (c) => {
   const items = Array.isArray(body.items) ? body.items.filter((value): value is string => typeof value === "string" && value.trim().length > 0) : undefined;
   const group = createGroup(body.text, items, basketId);
   return c.json({ group: viewOf(group.id), items: loadViews(childrenOf(group.id)) }, 201);
+});
+
+/** The folder's recipe (title, ingredients, steps) in the app language. */
+basket.get("/groups/:id/recipe", async (c) => {
+  const group = getItem(c.req.param("id"));
+  if (!group || group.kind !== "group" || !group.recipeJson) return c.json({ error: { code: "NOT_FOUND", message: "recipe folder not found" } }, 404);
+  const info = group.recipeJson;
+  const { localizeRecipe } = await import("@/matching/localize");
+  return c.json(await localizeRecipe({ title: info.title, sourceUrl: info.sourceUrl, servings: info.servings, ingredientLines: info.ingredientLines, imageUrl: info.imageUrl ?? null, steps: info.steps ?? [] }));
 });
 
 /** Rescales a recipe folder to another number of servings; children are rebuilt from the recipe. */

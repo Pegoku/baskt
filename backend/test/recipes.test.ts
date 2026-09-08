@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { extractRecipe, looksLikeRecipe, parseServings, scaleLine, scaleLines } from "@/matching/recipes";
+import { extractRecipe, extractSteps, looksLikeRecipe, parseServings, scaleLine, scaleLines } from "@/matching/recipes";
 
 describe("recipes", () => {
   test("extracts schema.org Recipe data from an Allerhande page", async () => {
@@ -9,7 +9,15 @@ describe("recipes", () => {
     expect(recipe?.servings).toBe("8");
     expect(recipe?.ingredientLines).toHaveLength(8);
     expect(recipe?.ingredientLines[0]).toBe("80 g ongezouten roomboter");
+    expect(recipe?.imageUrl).toContain("static.ah.nl");
+    expect(recipe?.steps).toHaveLength(7);
+    expect(recipe?.steps?.[0].text).toStartWith("Laat de boter");
     expect(extractRecipe("<html></html>", "u")).toBeNull();
+  });
+
+  test("flattens instruction shapes into steps", () => {
+    expect(extractSteps("Mix.\nBake.")).toEqual([{ text: "Mix.", imageUrl: null }, { text: "Bake.", imageUrl: null }]);
+    expect(extractSteps([{ "@type": "HowToSection", itemListElement: [{ "@type": "HowToStep", text: "Chop", image: { url: "https://x/1.jpg" } }] }])).toEqual([{ text: "Chop", imageUrl: "https://x/1.jpg" }]);
   });
 
   test("scales ingredient amounts to another number of servings", () => {

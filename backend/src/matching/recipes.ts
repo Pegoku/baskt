@@ -7,13 +7,55 @@ import { tokenize } from "@/lib/text";
 const BROWSER_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36";
 const ALLERHANDE = "https://www.ah.nl";
 
+export type RecipeStep = { text: string; imageUrl: string | null };
+
 export type Recipe = {
   title: string;
   sourceUrl: string | null;
   servings: string | null;
   /** Raw ingredient lines as published, e.g. "160 g tarwebloem". */
   ingredientLines: string[];
+  imageUrl?: string | null;
+  steps?: RecipeStep[];
+  totalTime?: string | null;
 };
+
+function firstImage(value: unknown): string | null {
+  if (typeof value === "string") return value.trim() || null;
+  if (Array.isArray(value)) for (const entry of value) { const found = firstImage(entry); if (found) return found; }
+  if (value && typeof value === "object") return firstImage((value as { url?: unknown; contentUrl?: unknown }).url ?? (value as { contentUrl?: unknown }).contentUrl);
+  return null;
+}
+
+/** Flattens schema.org recipeInstructions (strings, HowToStep, HowToSection) into steps. */
+export function extractSteps(value: unknown): RecipeStep[] {
+  const steps: RecipeStep[] = [];
+  const visit = (node: unknown) => {
+    if (!node) return;
+    if (typeof node === "string") {
+      for (const part of node.split(/\n+/)) if (part.trim()) steps.push({ text: part.trim(), imageUrl: null });
+      return;
+    }
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (typeof node === "object") {
+      const record = node as { "@type"?: unknown; text?: unknown; name?: unknown; itemListElement?: unknown; image?: unknown };
+      if (Array.isArray(record.itemListElement)) return visit(record.itemListElement);
+      const text = typeof record.text === "string" ? record.text.trim() : typeof record.name === "string" ? record.name.trim() : "";
+      if (text) steps.push({ text, imageUrl: firstImage(record.image) });
+    }
+  };
+  visit(value);
+  return steps;
+}
+
+function humanDuration(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const match = value.match(/^PT(?:(\d+)H)?(?:(\d+)M)?/i);
+  if (!match) return value;
+  const hours = Number(match[1] ?? 0);
+  const minutes = Number(match[2] ?? 0);
+  return [hours ? `${hours} h` : null, minutes ? `${minutes} min` : null].filter(Boolean).join(" ") || null;
+}
 
 export type RecipeItem = { text: string; quantity: number; staple: boolean };
 
@@ -64,7 +106,7 @@ function extractRecipe(html: string, url: string): Recipe | null {
     const nodes = Array.isArray(data) ? data : [data, ...(((data as { "@graph"?: unknown[] })["@graph"] ?? []) as unknown[])];
     for (const node of nodes) {
       if (!node || typeof node !== "object") continue;
-      const record = node as { "@type"?: unknown; name?: unknown; recipeYield?: unknown; recipeIngredient?: unknown };
+      const record = node as { "@type"?: unknown; name?: unknown; recipeYield?: unknown; recipeIngredient?: unknown; image?: unknown; recipeInstructions?: unknown; totalTime?: unknown };
       const type = Array.isArray(record["@type"]) ? record["@type"].join(",") : String(record["@type"] ?? "");
       if (!type.includes("Recipe") || !Array.isArray(record.recipeIngredient)) continue;
       const lines = record.recipeIngredient.filter((line): line is string => typeof line === "string" && line.trim().length > 0).map((line) => line.trim());
@@ -75,6 +117,9 @@ function extractRecipe(html: string, url: string): Recipe | null {
         sourceUrl: url,
         servings: servings != null ? String(servings) : null,
         ingredientLines: lines,
+        imageUrl: firstImage(record.image),
+        steps: extractSteps(record.recipeInstructions),
+        totalTime: humanDuration(record.totalTime),
       };
     }
   }

@@ -120,6 +120,8 @@ export type RecipeInfo = {
   /** Servings the recipe was written for, and the servings the folder is currently scaled to. */
   baseServings?: number | null;
   currentServings?: number | null;
+  imageUrl?: string | null;
+  steps?: Array<{ text: string; imageUrl: string | null }>;
 };
 
 export const basketItems = sqliteTable("basket_items", {

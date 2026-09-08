@@ -4,13 +4,14 @@ import { db, newId, now } from "@/db";
 import { recipeFavourites } from "@/db/schema";
 import { fetchWithRetry } from "@/lib/http";
 import { extractRecipe, type Recipe } from "@/matching/recipes";
+import { localizeRecipe, localizeTitles } from "@/matching/localize";
 
 export const recipes = new Hono();
 
 const BROWSER_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36";
 const ALLERHANDE = "https://www.ah.nl";
 
-export type RecipeSummary = { title: string; url: string; imageUrl: string | null; slug: string };
+export type RecipeSummary = { title: string; titleLocalized?: string; url: string; imageUrl: string | null; slug: string };
 
 /** Searches AH Allerhande and returns recipe cards (title from the slug, image when present in the page). */
 export async function searchRecipes(query: string): Promise<RecipeSummary[]> {
@@ -47,7 +48,9 @@ recipes.get("/search", async (c) => {
   const query = c.req.query("q")?.trim();
   if (!query) return c.json({ error: { code: "BAD_REQUEST", message: "q is required" } }, 400);
   try {
-    return c.json({ query, results: await searchRecipes(query) });
+    const results = await searchRecipes(query);
+    const localized = await localizeTitles(results.map((result) => result.title));
+    return c.json({ query, results: results.map((result, index) => ({ ...result, titleLocalized: localized[index] })) });
   } catch (error) {
     return c.json({ error: { code: "UPSTREAM", message: error instanceof Error ? error.message : String(error) } }, 502);
   }
@@ -60,7 +63,7 @@ recipes.get("/fetch", async (c) => {
   try {
     const recipe = await fetchRecipe(url);
     if (!recipe) return c.json({ error: { code: "NOT_FOUND", message: "no recipe data found on that page" } }, 404);
-    return c.json(recipe);
+    return c.json(await localizeRecipe(recipe));
   } catch (error) {
     return c.json({ error: { code: "UPSTREAM", message: error instanceof Error ? error.message : String(error) } }, 502);
   }
