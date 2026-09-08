@@ -97,14 +97,14 @@ export async function splitShoppingText(text: string): Promise<Array<{ text: str
   return items.length ? items : fallback;
 }
 
-/** Asks for a different search query after the user rejected everything shown so far. */
-export async function alternativeQuery(text: string, parsed: ParsedIdea, store: string, rejectedTitles: string[], triedQueries: string[]) {
-  const raw = await chatJson<{ query?: string }>(
+/** Asks for different search queries after the user rejected everything shown so far (or nothing was found). */
+export async function alternativeQuery(text: string, parsed: ParsedIdea, store: string, rejectedTitles: string[], triedQueries: string[]): Promise<string[]> {
+  const raw = await chatJson<{ queries?: unknown; query?: string }>(
     [
       {
         role: "system",
         content:
-          'The user is shopping at a Dutch supermarket webshop. Earlier search queries did not find what they meant. Suggest ONE different short Dutch search query (1-3 words) likely to find it. Return ONLY {"query": "..."}.',
+          'The user is shopping at a Dutch supermarket webshop. Earlier search queries did not find what they meant. Suggest up to 3 different short Dutch search queries (1-3 words each: synonyms, the broader product type, a typical variant) likely to find it. Return ONLY {"queries": ["...", "..."]}.',
       },
       {
         role: "user",
@@ -113,7 +113,14 @@ export async function alternativeQuery(text: string, parsed: ParsedIdea, store: 
     ],
     { maxTokens: 300 },
   );
-  const query = raw?.query?.trim();
-  if (!query || triedQueries.some((tried) => normalizeText(tried) === normalizeText(query))) return null;
-  return query;
+  const candidates = [...(Array.isArray(raw?.queries) ? raw!.queries : []), raw?.query].filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim());
+  const tried = new Set(triedQueries.map(normalizeText));
+  const out: string[] = [];
+  for (const candidate of candidates) {
+    const key = normalizeText(candidate);
+    if (!key || tried.has(key)) continue;
+    tried.add(key);
+    out.push(candidate);
+  }
+  return out.slice(0, 3);
 }

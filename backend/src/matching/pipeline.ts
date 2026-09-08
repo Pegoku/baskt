@@ -106,9 +106,14 @@ export async function processItem(itemId: string, options: { keepUserChoices?: b
   const stores = enabledStoreCodes();
   updateItem(itemId, { status: "PARSING", error: null });
   const parsed = await parseIdea(item.text, stores);
-  updateItem(itemId, { status: "MATCHING", parsedJson: parsed });
-
   const existing = new Map(getMatches(itemId).map((match) => [match.store, match]));
+  // A pinned product (scan / manual pick) lends its pack size as a preference for the other stores.
+  if (!parsed.sizeHint) {
+    const pinned = Array.from(existing.values()).find((match) => match.status === "CHOSEN" && match.chosenBy === "USER" && match.chosenProductId);
+    const product = pinned?.chosenProductId ? productsByIds([pinned.chosenProductId])[0] : undefined;
+    if (product?.unitAmount && product.unit) parsed.sizeHint = { amount: product.unitAmount, unit: product.unit };
+  }
+  updateItem(itemId, { status: "MATCHING", parsedJson: parsed });
   await Promise.all(
     stores.map(async (store) => {
       const previous = existing.get(store);
@@ -292,8 +297,8 @@ async function findMoreCandidates(item: BasketItemRow, store: string, known: str
   const attempts: string[] = [];
   if (normalizeText(parsed.canonicalName) !== normalizeText(item.text)) attempts.push(parsed.canonicalName);
   if (aiConfigured()) {
-    const alternative = await alternativeQuery(item.text, parsed, store, rejectedTitles.slice(-9), [...tried, ...attempts]);
-    if (alternative) attempts.unshift(alternative);
+    const alternatives = await alternativeQuery(item.text, parsed, store, rejectedTitles.slice(-9), [...tried, ...attempts]);
+    attempts.unshift(...alternatives);
   }
   for (const query of attempts) {
     const result = await searchStore(store, query, { limit: 20 });

@@ -18,6 +18,7 @@ import { detectRecipeIntent, parseServings } from "@/matching/recipes";
 import { collectProductIds, itemView } from "@/serialize";
 import { getAdapter, hasStore } from "@/stores/registry";
 import { productsByIds } from "@/stores/search";
+import { genericTitle } from "@/lib/units";
 import { basketMatches as matchesTable } from "@/db/schema";
 
 export const basket = new Hono();
@@ -228,7 +229,8 @@ basket.post("/items/from-product", async (c) => {
   if (!product) return c.json({ error: { code: "NOT_FOUND", message: "product not found (search or scan it first)" } }, 404);
   const basketId = body.basketId ?? DEFAULT_BASKET_ID;
   if (!basketExists(basketId)) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
-  const text = body.text?.trim() || `${product.title} ${product.quantityText}`.trim();
+  // The idea is the generic product ("krulsla melange"), not the exact pack; the pack size becomes a preference.
+  const text = body.text?.trim() || genericTitle(product.title, product.store);
   const database = db();
   const last = database.select({ sortOrder: basketItems.sortOrder }).from(basketItems).orderBy(desc(basketItems.sortOrder)).get();
   const item: BasketItemRow = {

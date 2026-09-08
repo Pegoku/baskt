@@ -60,6 +60,16 @@ export function quantityTextFromTitle(title: string | null | undefined): string 
   return match ? match[0].toLowerCase() : null;
 }
 
+/** "AH Krulsla melange 100 g" → "Krulsla melange": strips store brands and pack sizes so an idea stays generic. */
+export function genericTitle(title: string, store?: string | null): string {
+  let text = title.replace(/\s+/g, " ").trim();
+  text = text.replace(/^(AH|Jumbo(?:'s)?|Lidl|Aldi|Plus|Dirk)\b\s*/i, "");
+  text = text.replace(MULTI, "").replace(SINGLE, "");
+  text = text.replace(/\b\d+[-\s]?pack\b|\bvoordeelverpakking\b|\bvoordeelpak\b/gi, "");
+  text = text.replace(/\s{2,}/g, " ").replace(/^[\s,.-]+|[\s,.-]+$/g, "");
+  return text || title;
+}
+
 export function normalizeUnit(raw: string | null | undefined): Unit | null {
   if (!raw) return null;
   return convert(1, raw.trim())?.unit ?? null;

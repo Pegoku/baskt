@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseQuantity, parseUnitPriceDescription, quantityTextFromTitle, unitPriceFrom, type Unit } from "@/lib/units";
+import { genericTitle, parseQuantity, parseUnitPriceDescription, quantityTextFromTitle, unitPriceFrom, type Unit } from "@/lib/units";
 
 describe("parseQuantity", () => {
   const cases: Array<[string, { amount: number; unit: Unit } | null]> = [
@@ -26,6 +26,15 @@ describe("parseQuantity", () => {
       }
     });
   }
+});
+
+describe("genericTitle", () => {
+  test("strips store brands and pack sizes", () => {
+    expect(genericTitle("AH Krulsla melange 100 g", "AH")).toBe("Krulsla melange");
+    expect(genericTitle("Jumbo Verse Halfvolle Melk 1 L", "JUMBO")).toBe("Verse Halfvolle Melk");
+    expect(genericTitle("Campina Langlekker halfvolle melk 8-pack")).toBe("Campina Langlekker halfvolle melk");
+    expect(genericTitle("Jumbo's Bolognese Pastasaus 500 g")).toBe("Bolognese Pastasaus");
+  });
 });
 
 describe("quantityTextFromTitle", () => {

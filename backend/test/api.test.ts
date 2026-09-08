@@ -270,7 +270,7 @@ describe("api", () => {
     const created = await api("/basket/items/from-product", { method: "POST", body: JSON.stringify({ productId: "JUMBO:a" }) });
     expect(created.status).toBe(201);
     const item = (await created.json()) as any;
-    expect(item.text).toContain("Jumbo Verse Halfvolle Melk");
+    expect(item.text).toBe("Verse Halfvolle Melk");
     const jumbo = item.matches.find((m: any) => m.store === "JUMBO");
     expect(jumbo.status).toBe("CHOSEN");
     expect(jumbo.chosenBy).toBe("USER");
