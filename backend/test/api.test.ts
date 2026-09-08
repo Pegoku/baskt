@@ -396,6 +396,12 @@ describe("api", () => {
     expect(after.deletedIds).toContain(a.id);
   });
 
+  test("whatsapp routes report disabled without a bridge", async () => {
+    const status = (await (await api("/whatsapp/status")).json()) as any;
+    expect(status.enabled).toBe(false);
+    expect((await api("/whatsapp/send", { method: "POST", body: JSON.stringify({}) })).status).toBe(400);
+  });
+
   test("share links expose a basket without the bearer and allow checking items", async () => {
     const created = (await (await api("/baskets/default/share", { method: "POST", body: JSON.stringify({ baseUrl: "http://example" }) })).json()) as any;
     expect(created.url).toBe(`http://example/share/default?t=${created.token}`);

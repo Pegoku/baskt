@@ -25,6 +25,8 @@ export const env = {
   storeProxyUrl: process.env.STORE_PROXY_URL?.trim() || undefined,
   /** Set RECIPE_LOOKUP=off to skip fetching recipe pages (tests, offline). */
   recipeLookup: process.env.RECIPE_LOOKUP !== "off",
+  /** WhatsApp bridge (backend/whatsapp) base URL, e.g. http://localhost:3001; empty disables the feature. */
+  whatsappUrl: process.env.WHATSAPP_URL?.trim().replace(/\/$/, "") || "",
   /** Nightly re-pricing of products referenced by baskets. */
   priceScanEnabled: process.env.PRICE_SCAN !== "off",
   priceScanTime: process.env.PRICE_SCAN_TIME ?? "03:30",
