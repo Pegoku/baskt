@@ -4,6 +4,28 @@ import { basketItems, basketMatches, type ProductRow } from "@/db/schema";
 import { enabledStoreCodes } from "@/db/settings";
 import { lexicalScore } from "@/matching/rank";
 import { productsByIds, searchStore } from "@/stores/search";
+import { cachedChatJson } from "@/ai/client";
+import { aiConfigured } from "@/env";
+import { normalizeText, sha256 } from "@/lib/text";
+
+/** "leche" → ["melk", "zuivel", ...]: Dutch keywords the store promotions can be matched against. */
+export async function expandDealQuery(query: string): Promise<string[]> {
+  const base = query.trim();
+  if (!base) return [];
+  if (!aiConfigured()) return [base];
+  const key = await sha256(`deal-terms|v1|${normalizeText(base)}`);
+  const raw = await cachedChatJson<{ terms?: unknown }>(
+    "deal-terms",
+    key,
+    [
+      { role: "system", content: 'The user searches supermarket promotions in the Netherlands, in any language. Return ONLY {"terms": [3-6 short Dutch product words that mean what they typed, most specific first, e.g. for "leche": ["melk", "halfvolle melk", "zuivel"]]}.' },
+      { role: "user", content: base },
+    ],
+    { maxTokens: 150 },
+  );
+  const terms = Array.isArray(raw?.terms) ? raw!.terms.filter((term): term is string => typeof term === "string" && term.trim().length > 0).map((term) => term.trim()) : [];
+  return Array.from(new Set([base, ...terms]));
+}
 
 export type Deal = {
   itemId: string;

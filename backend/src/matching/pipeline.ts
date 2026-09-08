@@ -272,9 +272,11 @@ export async function rejectShown(itemId: string, store: string) {
   let candidateIds = match.candidateIds;
   const windowStart = Math.min(match.shownCount, candidateIds.length);
   if (windowStart >= candidateIds.length) {
-    const more = await findMoreCandidates(item, store, candidateIds);
+    const { ids: more, tried } = await findMoreCandidates(item, store, candidateIds);
     if (!more.length) {
-      return saveMatch({ ...match, windowStart, shownCount: windowStart, status: "EXHAUSTED", chosenProductId: null, chosenBy: null, updatedAt: now() });
+      // Tell the app what was tried so "Search alternatives" visibly did something.
+      const reason = tried.length ? `Nothing new for: ${tried.join(", ")}` : "No alternative searches available";
+      return saveMatch({ ...match, windowStart, shownCount: windowStart, status: "EXHAUSTED", chosenProductId: null, chosenBy: null, reason, updatedAt: now() });
     }
     candidateIds = [...candidateIds, ...more];
   }
@@ -290,7 +292,7 @@ export async function rejectShown(itemId: string, store: string) {
   });
 }
 
-async function findMoreCandidates(item: BasketItemRow, store: string, known: string[]) {
+async function findMoreCandidates(item: BasketItemRow, store: string, known: string[]): Promise<{ ids: string[]; tried: string[] }> {
   const parsed = item.parsedJson ?? { canonicalName: item.text, attributes: [], sizeHint: null, queries: {}, fallbackQuery: null, ambiguous: false };
   const tried = [parsed.queries[store] ?? item.text, parsed.fallbackQuery, item.text].filter((query): query is string => Boolean(query));
   const rejectedTitles = productsByIds(known).map((product) => product.title);
@@ -300,12 +302,25 @@ async function findMoreCandidates(item: BasketItemRow, store: string, known: str
     const alternatives = await alternativeQuery(item.text, parsed, store, rejectedTitles.slice(-9), [...tried, ...attempts]);
     attempts.unshift(...alternatives);
   }
+  // Also retry the original query uncached: the first search may have been served from a stale cache.
+  attempts.push(...tried.slice(0, 1));
+  const fresh: ProductRow[] = [];
+  const seen = new Set(known);
   for (const query of attempts) {
-    const result = await searchStore(store, query, { limit: 20 });
-    const fresh = result.products.filter((product) => !known.includes(product.id));
-    if (fresh.length) return lexicalRank(item.text, parsed, fresh).map((entry) => entry.product.id);
+    try {
+      const result = await searchStore(store, query, { limit: 20, force: query === tried[0] });
+      for (const product of result.products) {
+        if (!seen.has(product.id)) {
+          seen.add(product.id);
+          fresh.push(product);
+        }
+      }
+    } catch (error) {
+      console.warn(`[pipeline] alternative "${query}" at ${store} failed: ${error instanceof Error ? error.message : error}`);
+    }
+    if (fresh.length >= 6) break;
   }
-  return [];
+  return { ids: lexicalRank(item.text, parsed, fresh).map((entry) => entry.product.id), tried: attempts };
 }
 
 /** Manual search from the app: adds the results as the next options. */

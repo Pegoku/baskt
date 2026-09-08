@@ -11,7 +11,7 @@ import { chooseMatch, enqueue, feedback, getItem, getMatches, isRunning, rejectS
 import { splitShoppingText } from "@/matching/parse";
 import { suggest } from "@/matching/suggest";
 import { buildRecipeGroup, itemsForServings, looksLikeRecipe, type RecipeItem } from "@/matching/recipes";
-import { findDeals } from "@/matching/deals";
+import { expandDealQuery, findDeals } from "@/matching/deals";
 import { interpretVoice } from "@/matching/voice";
 import { fetchRecipe, getUserRecipe, userRecipeAsRecipe } from "@/routes/recipes";
 import { detectRecipeIntent, parseServings } from "@/matching/recipes";
@@ -528,18 +528,30 @@ basket.get("/deals/all", async (c) => {
   const query = c.req.query("q")?.trim() ?? "";
   const only = c.req.query("store");
   const stores = enabledStoreCodes().filter((code) => !only || code === only);
+  // Search by meaning: the typed word plus Dutch synonyms, merged per store.
+  const terms = query ? await expandDealQuery(query) : [""];
   const results = await Promise.all(
     stores.map(async (code) => {
       const adapter = getAdapter(code);
       if (!adapter.promotions) return { store: code, deals: [], error: null };
       try {
-        return { store: code, deals: await adapter.promotions(query), error: null };
+        const seen = new Set<string>();
+        const deals = [];
+        for (const term of terms.slice(0, 4)) {
+          for (const card of await adapter.promotions(term)) {
+            if (!seen.has(card.id)) {
+              seen.add(card.id);
+              deals.push(card);
+            }
+          }
+        }
+        return { store: code, deals, error: null };
       } catch (error) {
         return { store: code, deals: [], error: error instanceof Error ? error.message : String(error) };
       }
     }),
   );
-  return c.json({ query, results, computedAt: now() });
+  return c.json({ query, terms, results, computedAt: now() });
 });
 
 /** Promotions for the open items; `live=true` also re-searches the stores. */
