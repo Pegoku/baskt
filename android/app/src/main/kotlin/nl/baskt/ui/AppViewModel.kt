@@ -24,6 +24,10 @@ import nl.baskt.data.PurchaseDetail
 import nl.baskt.data.ReceiptScan
 import nl.baskt.data.SpendSummary
 import nl.baskt.data.PricePoint
+import nl.baskt.data.GenerateResponse
+import nl.baskt.data.RecipeDraft
+import nl.baskt.data.StockDish
+import nl.baskt.data.UserRecipe
 import nl.baskt.data.RecipeDetail
 import nl.baskt.data.RecipeFavourite
 import nl.baskt.data.RecipeSummary
@@ -139,6 +143,38 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun closeRecipe() { _recipeDetail.value = null }
+
+    private val _stockDishes = MutableStateFlow<List<StockDish>?>(null)
+    val stockDishes: StateFlow<List<StockDish>?> = _stockDishes
+    fun loadStockDishes() = viewModelScope.launch { _recipesBusy.value = true; _stockDishes.value = runCatching { container.api.dishesFromStock() }.getOrDefault(emptyList()); _recipesBusy.value = false }
+
+    private val _myRecipes = MutableStateFlow<List<UserRecipe>>(emptyList())
+    val myRecipes: StateFlow<List<UserRecipe>> = _myRecipes
+    fun loadMyRecipes() = viewModelScope.launch { _myRecipes.value = runCatching { container.api.myRecipes() }.getOrDefault(emptyList()) }
+    fun deleteMyRecipe(id: String) = viewModelScope.launch { runCatching { container.api.deleteMyRecipe(id) }; loadMyRecipes() }
+    fun saveSiteRecipeAsMine(recipe: RecipeSummary) = viewModelScope.launch {
+        runCatching { container.api.saveMyRecipe(RecipeDraft(title = recipe.displayTitle), origin = "site", fromUrl = recipe.url) }
+        loadMyRecipes()
+    }
+
+    /** Create-recipe flow state. */
+    private val _generate = MutableStateFlow<GenerateResponse?>(null)
+    val generate: StateFlow<GenerateResponse?> = _generate
+    private val _generating = MutableStateFlow(false)
+    val generating: StateFlow<Boolean> = _generating
+    fun findRecipeMatches(description: String) = viewModelScope.launch {
+        _generating.value = true
+        _generate.value = runCatching { container.api.generateRecipe(description, draft = false) }.getOrNull()
+        _generating.value = false
+    }
+    fun draftRecipe(description: String) = viewModelScope.launch {
+        _generating.value = true
+        _generate.value = runCatching { container.api.generateRecipe(description, draft = true) }.getOrNull()
+        _generating.value = false
+    }
+    fun clearGenerate() { _generate.value = null }
+    suspend fun saveRecipe(draft: RecipeDraft, origin: String, existingId: String?): UserRecipe? =
+        runCatching { if (existingId != null) container.api.updateMyRecipe(existingId, draft) else container.api.saveMyRecipe(draft, origin) }.getOrNull().also { loadMyRecipes() }
 
     /** Localized recipe (ingredients + steps) of a folder, for the folder screen. */
     fun openGroupRecipe(groupId: String) = viewModelScope.launch {

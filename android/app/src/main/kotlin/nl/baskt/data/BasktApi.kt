@@ -200,6 +200,29 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 
     suspend fun groupRecipe(groupId: String): RecipeDetail = client.get(url("/basket/groups/$groupId/recipe")) { auth() }.expect()
 
+    suspend fun dishesFromStock(): List<StockDish> = client.get(url("/recipes/from-stock")) { auth() }.expect<StockDishesResponse>().dishes
+
+    suspend fun myRecipes(): List<UserRecipe> = client.get(url("/recipes/mine")) { auth() }.expect<UserRecipesResponse>().recipes
+
+    suspend fun saveMyRecipe(draft: RecipeDraft, origin: String, fromUrl: String? = null): UserRecipe =
+        client.post(url("/recipes/mine")) {
+            auth(); contentType(ContentType.Application.Json); setBody(SaveRecipeRequest(draft.title, draft.description, draft.servings, draft.ingredientLines, draft.steps.map { it.text }, origin, fromUrl))
+        }.expect()
+
+    suspend fun updateMyRecipe(id: String, draft: RecipeDraft): UserRecipe =
+        client.patch(url("/recipes/mine/$id")) {
+            auth(); contentType(ContentType.Application.Json); setBody(SaveRecipeRequest(draft.title, draft.description, draft.servings, draft.ingredientLines, draft.steps.map { it.text }, null, null))
+        }.expect()
+
+    suspend fun deleteMyRecipe(id: String) {
+        client.delete(url("/recipes/mine/$id")) { auth() }.expect<Unit>()
+    }
+
+    suspend fun generateRecipe(description: String, draft: Boolean): GenerateResponse =
+        client.post(url("/recipes/generate")) {
+            auth(); contentType(ContentType.Application.Json); setBody(GenerateRequest(description, draft))
+        }.expect()
+
     suspend fun recipeFavourites(): List<RecipeFavourite> = client.get(url("/recipes/favourites")) { auth() }.expect<RecipeFavouritesResponse>().favourites
 
     suspend fun addRecipeFavourite(recipe: RecipeSummary): RecipeFavourite =
@@ -304,6 +327,8 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 @Serializable private data class BasketRequest(val name: String, val emoji: String? = null)
 @Serializable private data class StockRequest(val text: String)
 @Serializable private data class ConfirmRequest(val items: List<VoiceItem>, val basketId: String)
+@Serializable private data class SaveRecipeRequest(val title: String, val description: String?, val servings: String?, val ingredientLines: List<String>, val steps: List<String>, val origin: String?, val fromUrl: String?)
+@Serializable private data class GenerateRequest(val description: String, val draft: Boolean)
 @Serializable private data class SavePurchaseRequest(val store: String, val purchasedAt: String?, val totalCents: Int?, val lines: List<ReceiptLine>)
 @Serializable private data class TransferRequest(val basketId: String, val copy: Boolean)
 @Serializable private data class GroupFromItemsRequest(val text: String, val itemIds: List<String>)

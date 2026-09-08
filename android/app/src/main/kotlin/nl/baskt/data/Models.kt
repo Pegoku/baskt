@@ -253,15 +253,47 @@ data class StoreDeals(val store: String, val deals: List<DealCard> = emptyList()
 data class AllDealsResponse(val query: String = "", val results: List<StoreDeals> = emptyList(), val computedAt: Long = 0)
 
 @Serializable
-data class RecipeSummary(val title: String, val url: String, val imageUrl: String? = null, val slug: String = "", val titleLocalized: String? = null) {
+data class RecipeSummary(val title: String, val url: String, val imageUrl: String? = null, val slug: String = "", val titleLocalized: String? = null, val source: String? = null, val language: String? = null) {
     val displayTitle: String get() = titleLocalized?.takeIf { it.isNotBlank() } ?: title
 }
+
+@Serializable
+data class StockDish(val title: String, val searchQuery: String, val uses: List<String> = emptyList(), val missing: List<String> = emptyList(), val minutes: Int? = null)
+
+@Serializable
+data class StockDishesResponse(val dishes: List<StockDish> = emptyList())
+
+@Serializable
+data class UserRecipe(
+    val id: String,
+    val title: String,
+    val description: String? = null,
+    val servings: String? = null,
+    val ingredientLines: List<String> = emptyList(),
+    val steps: List<RecipeStep> = emptyList(),
+    val imageUrl: String? = null,
+    val sourceUrl: String? = null,
+    val origin: String = "manual",
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0,
+) {
+    val url: String get() = "baskt://recipe/$id"
+}
+
+@Serializable
+data class UserRecipesResponse(val recipes: List<UserRecipe> = emptyList())
+
+@Serializable
+data class RecipeDraft(val title: String, val description: String? = null, val servings: String? = null, val ingredientLines: List<String> = emptyList(), val steps: List<RecipeStep> = emptyList())
+
+@Serializable
+data class GenerateResponse(val dish: String? = null, val matches: List<RecipeSummary> = emptyList(), val draft: RecipeDraft? = null)
 
 @Serializable
 data class RecipeStep(val text: String, val imageUrl: String? = null)
 
 @Serializable
-data class RecipeSearchResponse(val query: String = "", val results: List<RecipeSummary> = emptyList())
+data class RecipeSearchResponse(val query: String = "", val dish: String? = null, val results: List<RecipeSummary> = emptyList())
 
 @Serializable
 data class RecipeFavourite(val id: String, val title: String, val url: String, val imageUrl: String? = null, val createdAt: Long = 0)
