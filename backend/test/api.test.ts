@@ -466,6 +466,11 @@ describe("api", () => {
     expect(inStock("salt 1 pinch")?.text).toBe("salt");
     expect(inStock("sea salt flakes")?.text).toBe("salt");
     expect(inStock("sugar 100 g")).toBeNull();
+    const scanned = (await (await api("/stock", { method: "POST", body: JSON.stringify({ text: "Verse Halfvolle Melk", productId: "JUMBO:a", imageUrl: "https://img/x.png", barcode: "8712800147008" }) })).json()) as any;
+    expect(scanned.productId).toBe("JUMBO:a");
+    const again = (await (await api("/stock", { method: "POST", body: JSON.stringify({ text: "melk", barcode: "8712800147008" }) })).json()) as any;
+    expect(again.id).toBe(scanned.id);
+    expect((await api(`/stock/${scanned.id}`, { method: "DELETE" })).status).toBe(204);
     expect((await api(`/stock/${list.items[0].id}`, { method: "DELETE" })).status).toBe(204);
     const settings = (await (await api("/settings", { method: "PATCH", body: JSON.stringify({ recipeSkipInStock: false }) })).json()) as any;
     expect(settings.recipeSkipInStock).toBe(false);

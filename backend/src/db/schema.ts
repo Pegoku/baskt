@@ -70,6 +70,10 @@ export const stock = sqliteTable("stock", {
   text: text("text").notNull(),
   canonical: text("canonical").notNull(),
   quantityText: text("quantity_text"),
+  /** Set when the entry came from a scanned/picked product. */
+  productId: text("product_id"),
+  imageUrl: text("image_url"),
+  barcode: text("barcode"),
   addedAt: integer("added_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

@@ -46,9 +46,9 @@ meta.patch("/settings", async (c) => {
 meta.get("/stock", (c) => c.json({ items: listStock() }));
 
 meta.post("/stock", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { text?: string; quantityText?: string | null };
+  const body = (await c.req.json().catch(() => ({}))) as { text?: string; quantityText?: string | null; productId?: string | null; imageUrl?: string | null; barcode?: string | null };
   if (!body.text?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "text is required" } }, 400);
-  return c.json(addStock(body.text, body.quantityText ?? null), 201);
+  return c.json(addStock({ text: body.text, quantityText: body.quantityText ?? null, productId: body.productId ?? null, imageUrl: body.imageUrl ?? null, barcode: body.barcode ?? null }), 201);
 });
 
 meta.delete("/stock/:id", (c) => (removeStock(c.req.param("id")) ? c.body(null, 204) : c.json({ error: { code: "NOT_FOUND", message: "not in stock" } }, 404)));

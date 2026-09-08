@@ -7,16 +7,31 @@ export function listStock(): StockRow[] {
   return db().select().from(stock).orderBy(desc(stock.updatedAt)).all();
 }
 
-export function addStock(text: string, quantityText: string | null = null): StockRow {
-  const canonical = normalizeText(text);
-  const existing = listStock().find((row) => row.canonical === canonical);
+export type StockInput = { text: string; quantityText?: string | null; productId?: string | null; imageUrl?: string | null; barcode?: string | null };
+
+export function addStock(input: string | StockInput, quantityText: string | null = null): StockRow {
+  const data: StockInput = typeof input === "string" ? { text: input, quantityText } : input;
+  const canonical = normalizeText(data.text);
+  const rows = listStock();
+  const existing = rows.find((row) => (data.productId && row.productId === data.productId) || (data.barcode && row.barcode === data.barcode) || row.canonical === canonical);
+  const patch = {
+    quantityText: data.quantityText ?? existing?.quantityText ?? null,
+    productId: data.productId ?? existing?.productId ?? null,
+    imageUrl: data.imageUrl ?? existing?.imageUrl ?? null,
+    barcode: data.barcode ?? existing?.barcode ?? null,
+  };
   if (existing) {
-    db().update(stock).set({ quantityText: quantityText ?? existing.quantityText, updatedAt: now() }).where(eq(stock.id, existing.id)).run();
-    return { ...existing, quantityText: quantityText ?? existing.quantityText, updatedAt: now() };
+    db().update(stock).set({ ...patch, updatedAt: now() }).where(eq(stock.id, existing.id)).run();
+    return { ...existing, ...patch, updatedAt: now() };
   }
-  const row: StockRow = { id: newId(), text: text.trim(), canonical, quantityText, addedAt: now(), updatedAt: now() };
+  const row: StockRow = { id: newId(), text: data.text.trim(), canonical, ...patch, addedAt: now(), updatedAt: now() };
   db().insert(stock).values(row).run();
   return row;
+}
+
+/** Finds the stock entry for a scanned product (by product id or barcode). */
+export function stockForProduct(productId: string | null, barcode: string | null): StockRow | null {
+  return listStock().find((row) => (productId && row.productId === productId) || (barcode && row.barcode === barcode)) ?? null;
 }
 
 export function removeStock(id: string) {

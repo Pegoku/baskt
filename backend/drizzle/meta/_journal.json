@@ -64,6 +64,13 @@
       "when": 1788893285693,
       "tag": "0008_funny_morg",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1788897011595,
+      "tag": "0009_huge_black_bolt",
+      "breakpoints": true
     }
   ]
 }
