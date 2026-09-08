@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import nl.baskt.data.euros
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.ProductRow
@@ -53,8 +54,12 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
     val changes by viewModel.priceChanges.collectAsState()
     var tab by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { viewModel.findDeals(live = false); viewModel.loadPriceChanges() }
+    val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    fun notify(message: String) { scope.launch { snackbar.showSnackbar(message, withDismissAction = true) } }
 
     Scaffold(
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text("Deals") },
@@ -70,7 +75,7 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
                 SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(2, 3)) { Text("Prices") }
             }
             if (tab == 2) {
-                AllDealsTab(viewModel, stores)
+                AllDealsTab(viewModel, stores, onAdded = { notify(it) })
                 return@Column
             }
             if (tab == 1) {
@@ -132,7 +137,7 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
                             ProductRow(deal.product)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                                 if (deal.currentProductId != deal.product.id) {
-                                    Button(onClick = { viewModel.takeDeal(deal) }) { Text("Use this deal") }
+                                    Button(onClick = { viewModel.takeDeal(deal); notify("Switched “${deal.itemText}” to ${deal.product.title}") }) { Text("Use this deal") }
                                 } else {
                                     Text("Already your pick", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
                                 }
@@ -148,7 +153,7 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
 
 /** Store-wide promotions with a store filter and keyword search; each card can be added to the basket. */
 @Composable
-private fun AllDealsTab(viewModel: AppViewModel, stores: List<nl.baskt.data.StoreInfo>) {
+private fun AllDealsTab(viewModel: AppViewModel, stores: List<nl.baskt.data.StoreInfo>, onAdded: (String) -> Unit) {
     val data by viewModel.allDeals.collectAsState()
     val loading by viewModel.loadingAllDeals.collectAsState()
     var query by remember { androidx.compose.runtime.mutableStateOf("") }
@@ -175,6 +180,7 @@ private fun AllDealsTab(viewModel: AppViewModel, stores: List<nl.baskt.data.Stor
         val errors = data?.results?.mapNotNull { it.error } ?: emptyList()
         if (errors.isNotEmpty()) Text(errors.joinToString("; "), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp))
         if (!loading && data != null && cards.isEmpty()) Text("No deals found.", modifier = Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!loading && data != null && cards.isNotEmpty() && query.isNotBlank()) Text("${cards.size} deals for “$query”" + (data?.terms?.takeIf { it.size > 1 }?.let { "  (also searched: ${it.drop(1).joinToString(", ")})" } ?: ""), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
         LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(cards, key = { "${it.store}-${it.id}" }) { card ->
                 Card {
@@ -192,7 +198,7 @@ private fun AllDealsTab(viewModel: AppViewModel, stores: List<nl.baskt.data.Stor
                             val price = listOfNotNull(card.priceCents?.euros(), card.regularPriceCents?.let { "was ${it.euros()}" }, card.validUntil?.let { "until $it" }).joinToString(" · ")
                             if (price.isNotEmpty()) Text(price, style = MaterialTheme.typography.bodySmall)
                         }
-                        TextButton(onClick = { viewModel.addDeal(card) }) { Text("Add") }
+                        TextButton(onClick = { viewModel.addDeal(card); onAdded("Added “${card.title}” to your basket") }) { Text("Add") }
                     }
                 }
             }

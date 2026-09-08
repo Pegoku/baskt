@@ -12,6 +12,8 @@ import nl.baskt.data.AppSettings
 import nl.baskt.data.BasketItem
 import nl.baskt.data.Comparison
 import nl.baskt.data.AllDealsResponse
+import nl.baskt.data.Choice
+import kotlinx.coroutines.flow.update
 import nl.baskt.data.BarcodeResponse
 import nl.baskt.data.DealCard
 import nl.baskt.data.Deal
@@ -261,6 +263,11 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         _deals.value = basket.deals(live)
         _loadingDeals.value = false
     }
+
+    private val _memory = MutableStateFlow<List<Choice>>(emptyList())
+    val memory: StateFlow<List<Choice>> = _memory
+    fun loadMemory() = viewModelScope.launch { _memory.value = runCatching { container.api.memory() }.getOrDefault(emptyList()) }
+    fun deleteMemory(id: String) = viewModelScope.launch { runCatching { container.api.deleteMemory(id) }; _memory.update { list -> list.filterNot { it.id == id } } }
 
     private val _allDeals = MutableStateFlow<AllDealsResponse?>(null)
     val allDeals: StateFlow<AllDealsResponse?> = _allDeals

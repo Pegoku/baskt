@@ -49,7 +49,7 @@ import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.StoreBadge
 
 @Composable
-fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
+fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> Unit = {}) {
     val settings by viewModel.settings.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
     val scope = rememberCoroutineScope()
@@ -126,6 +126,10 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             HorizontalDivider()
             val serverSettings by viewModel.basket.serverSettings.collectAsState()
             LaunchedEffect(Unit) { viewModel.refreshStock() }
+            Text("Learned preferences", style = MaterialTheme.typography.titleMedium)
+            Text("Every pick, thumbs up and thumbs down the matching learns from. Remove anything set by mistake.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = onMemory) { Text("View and manage") }
+            HorizontalDivider()
             Text("Ranking", style = MaterialTheme.typography.titleMedium)
             Text("What counts as the better option when products are equally suitable.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {

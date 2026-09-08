@@ -11,6 +11,7 @@ import nl.baskt.ui.compare.CompareScreen
 import nl.baskt.ui.basket.GroupScreen
 import nl.baskt.ui.item.ItemDetailScreen
 import nl.baskt.ui.settings.SettingsScreen
+import nl.baskt.ui.settings.MemoryScreen
 import nl.baskt.ui.stock.StockScreen
 import nl.baskt.ui.search.SearchScreen
 import nl.baskt.ui.deals.DealsScreen
@@ -31,6 +32,7 @@ import nl.baskt.ui.recipes.RecipeEditorScreen
 @Serializable data class ShopRoute(val store: String) : NavKey
 @Serializable data object PurchasesRoute : NavKey
 @Serializable data class RecipeEditorRoute(val recipeId: String? = null) : NavKey
+@Serializable data object MemoryRoute : NavKey
 
 @Composable
 fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
@@ -74,7 +76,8 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
             entry<CompareRoute> {
                 CompareScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) })
             }
-            entry<SettingsRoute> { SettingsScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
+            entry<SettingsRoute> { SettingsScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onMemory = { backStack.add(MemoryRoute) }) }
+            entry<MemoryRoute> { MemoryScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
         },
     )
 }

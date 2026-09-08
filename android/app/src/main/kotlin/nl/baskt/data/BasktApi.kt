@@ -288,6 +288,12 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 
     suspend fun spendSummary(): SpendSummary = client.get(url("/purchases/summary")) { auth() }.expect()
 
+    suspend fun memory(): List<Choice> = client.get(url("/memory")) { auth() }.expect<ChoicesResponse>().choices
+
+    suspend fun deleteMemory(id: String) {
+        client.delete(url("/memory/$id")) { auth() }.expect<Unit>()
+    }
+
     suspend fun allDeals(query: String, store: String?): AllDealsResponse =
         client.get(url("/basket/deals/all")) { auth(); parameter("q", query); if (store != null) parameter("store", store) }.expect()
 

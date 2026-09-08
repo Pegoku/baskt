@@ -25,6 +25,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.material.icons.filled.Kitchen
@@ -43,6 +45,7 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
@@ -82,11 +85,14 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
     // TextFieldValue so the cursor can be placed at the end when editing starts.
     var titleDraft by remember(item?.text) { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(item?.text ?: "")) }
     var editingTitle by remember { mutableStateOf(false) }
-    var titleHadFocus by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val titleInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     fun commitTitle() {
         val current = item ?: return
+        if (!editingTitle) return
         editingTitle = false
         val value = titleDraft.text.trim()
         if (value.isNotEmpty() && value != current.text) viewModel.rename(current, value) else titleDraft = androidx.compose.ui.text.input.TextFieldValue(current.text)
@@ -96,34 +102,27 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
         topBar = {
             TopAppBar(
                 title = {
-                    if (editingTitle) {
-                        // Inline rename: the title turns into a text field, saved on Done or when focus leaves.
-                        LaunchedEffect(Unit) { titleHadFocus = false; focusRequester.requestFocus() }
-                        androidx.compose.foundation.text.BasicTextField(
-                            value = titleDraft,
-                            onValueChange = { titleDraft = it },
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                            cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { commitTitle() }),
-                            // Only commit on a real blur: the field reports "not focused" once before it receives focus.
-                            modifier = Modifier.fillMaxWidth().focusRequester(focusRequester).onFocusChanged { state ->
-                                if (state.isFocused) titleHadFocus = true else if (titleHadFocus && editingTitle) commitTitle()
-                            },
-                        )
-                    } else {
-                        Text(
-                            item?.text ?: "Item",
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth().clickable(enabled = item != null) {
-                                val text = item?.text ?: ""
-                                titleDraft = androidx.compose.ui.text.input.TextFieldValue(text, selection = androidx.compose.ui.text.TextRange(text.length))
-                                editingTitle = true
-                            },
-                        )
-                    }
+                    // One field that is read-only until tapped: avoids focus glitches from swapping Text and TextField.
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = titleDraft,
+                        onValueChange = { if (editingTitle) titleDraft = it },
+                        readOnly = !editingTitle,
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(if (editingTitle) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { commitTitle(); focusManager.clearFocus(force = true); keyboard?.hide() }),
+                        interactionSource = titleInteraction,
+                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester).onFocusChanged { state ->
+                            if (state.isFocused) {
+                                if (!editingTitle && item != null) {
+                                    val text = item.text
+                                    titleDraft = androidx.compose.ui.text.input.TextFieldValue(text, selection = androidx.compose.ui.text.TextRange(text.length))
+                                    editingTitle = true
+                                }
+                            } else if (editingTitle) commitTitle()
+                        },
+                    )
                 },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
                 actions = {
@@ -153,7 +152,14 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
             Column(modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp)) { Text("This item no longer exists.") }
             return@Scaffold
         }
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding).pointerInput(Unit) {
+                // Tapping anywhere outside the title ends editing and hides the keyboard.
+                detectTapGestures(onTap = { focusManager.clearFocus(force = true); keyboard?.hide() })
+            },
+            contentPadding = PaddingValues(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             item { Header(item, onQuantity = { viewModel.setQuantity(item, it) }) }
             if (item.isProcessing) {
                 item {
@@ -227,7 +233,6 @@ private fun StoreCard(
 ) {
     var showOptions by remember(match?.status, match?.updatedAt) { mutableStateOf(match?.status == "PENDING") }
     var searchText by remember { mutableStateOf("") }
-    var showSearch by remember(match?.status) { mutableStateOf(match?.status == "EXHAUSTED") }
 
     Card {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -256,7 +261,7 @@ private fun StoreCard(
             val chosen = match.chosen
             if (match.status == "CHOSEN" && chosen != null) {
                 ProductRow(chosen) {
-                    IconButton(onClick = { onFeedback(chosen.id, false) }) { Icon(Icons.Default.ThumbDown, contentDescription = "Not this one", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    TooltipIconButton(text = "Not what I meant", icon = Icons.Default.ThumbDown, tint = MaterialTheme.colorScheme.onSurfaceVariant, onClick = { onFeedback(chosen.id, false) })
                 }
                 PriceSparkline(chosen.id, loadHistory)
                 if (match.reason != null && match.chosenBy != "USER") Text(match.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -290,33 +295,24 @@ private fun StoreCard(
                             OutlinedButton(onClick = { onChoose(null) }, modifier = Modifier.weight(1f)) { Text("Skip at ${storeName(store.code, stores)}") }
                         }
                     }
-                    TextButton(onClick = { showSearch = !showSearch }) {
-                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Search ${storeName(store.code, stores)} myself")
-                    }
                 }
             }
 
             if (match.status == "EXHAUSTED") {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    // Asks the server for synonyms / broader terms and searches the store again.
-                    FilledTonalButton(onClick = onReject, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Default.Autorenew, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Text("  Search alternatives")
-                    }
-                    OutlinedButton(onClick = { showSearch = true }, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Text("  Search myself")
-                    }
+                if (match.reason != null) Text(match.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Asks the server for synonyms / broader terms and searches the store again.
+                FilledTonalButton(onClick = onReject, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Autorenew, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Text("  Search alternatives")
                 }
             }
+            val showSearch = match.status != "CHOSEN" || showOptions
             if (showSearch) {
                 OutlinedTextField(
                     value = searchText,
                     onValueChange = { searchText = it },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Search term in Dutch, e.g. halfvolle melk") },
+                    placeholder = { Text("Search ${storeName(store.code, stores)} yourself, e.g. halfvolle melk") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { if (searchText.isNotBlank()) { onSearch(searchText.trim()); searchText = "" } }),
@@ -335,15 +331,13 @@ private fun StoreCard(
 private fun OptionRow(product: Product, equivalence: String?, selected: Boolean, onChoose: () -> Unit, onFeedback: (Boolean) -> Unit) {
     Column {
         ProductRow(product) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (selected) {
-                    Icon(Icons.Default.Check, contentDescription = "Chosen", tint = MaterialTheme.colorScheme.primary)
-                } else {
-                    Button(onClick = onChoose, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text("This") }
-                }
+            if (selected) {
+                Icon(Icons.Default.Check, contentDescription = "Chosen", tint = MaterialTheme.colorScheme.primary)
+            } else {
                 Row {
-                    IconButton(onClick = { onFeedback(true) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.ThumbUp, contentDescription = "Good match", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    IconButton(onClick = { onFeedback(false) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.ThumbDown, contentDescription = "Bad match", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    // Thumbs up = "this is what I want" (chooses it); thumbs down = "not what I meant" (removes it, teaches memory).
+                    TooltipIconButton(text = "This is what I want", icon = Icons.Default.ThumbUp, tint = MaterialTheme.colorScheme.primary, onClick = onChoose)
+                    TooltipIconButton(text = "Not what I meant", icon = Icons.Default.ThumbDown, tint = MaterialTheme.colorScheme.onSurfaceVariant, onClick = { onFeedback(false) })
                 }
             }
         }
@@ -354,6 +348,17 @@ private fun OptionRow(product: Product, equivalence: String?, selected: Boolean,
                 label = { Text(if (equivalence == "EXACT") "exact match" else "substitute", style = MaterialTheme.typography.labelSmall) },
             )
         }
+    }
+}
+
+@Composable
+private fun TooltipIconButton(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tint: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+    androidx.compose.material3.TooltipBox(
+        positionProvider = androidx.compose.material3.TooltipDefaults.rememberTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(text) } },
+        state = androidx.compose.material3.rememberTooltipState(),
+    ) {
+        IconButton(onClick = onClick) { Icon(icon, contentDescription = text, tint = tint) }
     }
 }
 
