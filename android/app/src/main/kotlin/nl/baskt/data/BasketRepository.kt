@@ -106,6 +106,7 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
         api.deleteItems(items.map { it.id })
         val ids = items.map { it.id }.toSet()
         _items.update { list -> list.filterNot { it.id in ids || it.parentId in ids } }
+        countsDirty()
     }
 
     suspend fun transferMany(items: List<BasketItem>, basketId: String, copy: Boolean) = guard {
@@ -167,6 +168,18 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
     private fun replace(item: BasketItem) {
         _items.update { list -> if (list.any { it.id == item.id }) list.map { if (it.id == item.id) item else it } else list + item }
         if (item.isProcessing) startPolling()
+        countsDirty()
+    }
+
+    private var countsJob: Job? = null
+
+    /** Basket counts come from the server; re-read them shortly after any change (debounced). */
+    private fun countsDirty() {
+        countsJob?.cancel()
+        countsJob = scope.launch {
+            delay(600)
+            runCatching { _baskets.value = api.baskets() }
+        }
     }
 
     private suspend fun <T> guard(block: suspend () -> T): T? = try {
@@ -201,11 +214,13 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
     suspend fun delete(item: BasketItem) = guard {
         api.deleteItem(item.id)
         _items.update { list -> list.filterNot { it.id == item.id || it.parentId == item.id } }
+        countsDirty()
     }
 
     suspend fun clearChecked() = guard {
         api.clearChecked(_currentBasketId.value)
         refresh(false)
+        countsDirty()
     }
 
     suspend fun choose(item: BasketItem, store: String, productId: String?) = guard { replace(api.choose(item.id, store, productId)) }

@@ -172,8 +172,13 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                 )
             } else TopAppBar(
                 title = {
+                    // The server's counts lag behind local edits; show live numbers for the open basket.
+                    val liveBaskets = baskets.map { basket ->
+                        if (basket.id != currentBasketId) basket
+                        else basket.copy(itemCount = items.count { !it.isGroup }, openCount = items.count { !it.isGroup && !it.checked })
+                    }
                     BasketSwitcherTitle(
-                        baskets = baskets,
+                        baskets = liveBaskets,
                         currentId = currentBasketId,
                         onSwitch = { viewModel.switchBasket(it) },
                         onCreate = { name, emoji -> viewModel.createBasket(name, emoji) },
