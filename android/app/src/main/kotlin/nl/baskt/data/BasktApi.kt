@@ -112,6 +112,21 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
         client.delete(url("/baskets/$id")) { auth() }.expect<Unit>()
     }
 
+    suspend fun shareLink(basketId: String): ShareLink =
+        client.post(url("/baskets/$basketId/share")) {
+            auth(); contentType(ContentType.Application.Json); setBody(JsonObject(mapOf("baseUrl" to JsonPrimitive(settingsProvider().baseUrl.trimEnd('/')))))
+        }.expect()
+
+    suspend fun groupFromItems(text: String, itemIds: List<String>): GroupResponse =
+        client.post(url("/basket/groups/from-items")) {
+            auth(); contentType(ContentType.Application.Json); setBody(GroupFromItemsRequest(text, itemIds))
+        }.expect()
+
+    suspend fun deleteItems(itemIds: List<String>): Int =
+        client.post(url("/basket/items/delete")) {
+            auth(); contentType(ContentType.Application.Json); setBody(ItemIdsRequest(itemIds))
+        }.expect<DeletedResponse>().deleted
+
     suspend fun transferItem(id: String, basketId: String, copy: Boolean): BasketItem =
         client.post(url("/basket/items/$id/transfer")) {
             auth(); contentType(ContentType.Application.Json); setBody(TransferRequest(basketId, copy))
@@ -288,6 +303,8 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 @Serializable private data class ConfirmRequest(val items: List<VoiceItem>, val basketId: String)
 @Serializable private data class SavePurchaseRequest(val store: String, val purchasedAt: String?, val totalCents: Int?, val lines: List<ReceiptLine>)
 @Serializable private data class TransferRequest(val basketId: String, val copy: Boolean)
+@Serializable private data class GroupFromItemsRequest(val text: String, val itemIds: List<String>)
+@Serializable private data class ItemIdsRequest(val itemIds: List<String>)
 @Serializable private data class QueryRequest(val query: String)
 @Serializable private data class ItemsResponse(val items: List<BasketItem>)
 @Serializable private data class DeletedResponse(val deleted: Int)

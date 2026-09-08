@@ -1,6 +1,17 @@
+@file:OptIn(ExperimentalFoundationApi::class)
+
 package nl.baskt.ui.basket
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.AlertDialog
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -113,6 +124,23 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
     }
     val dictateRequest by viewModel.dictateRequest.collectAsState()
     LaunchedEffect(dictateRequest) { if (dictateRequest) { viewModel.dictateRequest.value = false; startDictation() } }
+    val selection by viewModel.selection.collectAsState()
+    val selectionMode = selection.isNotEmpty()
+    var renaming by remember { mutableStateOf<BasketItem?>(null) }
+    var naming by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    fun shareLink(whatsApp: Boolean) = scope.launch {
+        val link = viewModel.shareLink() ?: return@launch
+        val basketName = baskets.firstOrNull { it.id == currentBasketId }?.name ?: "baskt"
+        shareText(context, "🧺 $basketName — open the list, tick things off, add ideas:\n$link", whatsApp)
+    }
+    if (renaming != null) {
+        val target = renaming!!
+        NameDialog(title = "Rename", initial = target.text, onDismiss = { renaming = null }) { viewModel.rename(target, it); renaming = null; viewModel.clearSelection() }
+    }
+    if (naming) {
+        NameDialog(title = "New folder", initial = "", onDismiss = { naming = false }) { viewModel.groupSelected(it); naming = false }
+    }
     val proposal by viewModel.voiceProposal.collectAsState()
     val interpreting by viewModel.interpreting.collectAsState()
     if (proposal != null || interpreting) {
@@ -126,9 +154,23 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
         viewModel.basket.clearError()
     }
 
+    androidx.activity.compose.BackHandler(enabled = selectionMode) { viewModel.clearSelection() }
     Scaffold(
         topBar = {
-            TopAppBar(
+            if (selectionMode) {
+                val selectedItems = items.filter { it.id in selection }
+                TopAppBar(
+                    title = { Text("${selection.size} selected") },
+                    navigationIcon = { IconButton(onClick = { viewModel.clearSelection() }) { Icon(Icons.Default.Close, contentDescription = "Cancel") } },
+                    actions = {
+                        if (selectedItems.size == 1) IconButton(onClick = { renaming = selectedItems.first() }) { Icon(Icons.Default.Edit, contentDescription = "Rename") }
+                        if (selectedItems.any { !it.isGroup }) IconButton(onClick = { naming = true }) { Icon(Icons.Default.CreateNewFolder, contentDescription = "Folder from selection") }
+                        IconButton(onClick = { viewModel.checkSelected(selectedItems.any { !it.checked }) }) { Icon(Icons.Default.CheckCircle, contentDescription = "Check / uncheck") }
+                        nl.baskt.ui.common.TransferMenu(baskets, currentBasketId) { basketId, copy -> viewModel.transferSelected(basketId, copy) }
+                        IconButton(onClick = { viewModel.deleteSelected() }) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error) }
+                    },
+                )
+            } else TopAppBar(
                 title = {
                     BasketSwitcherTitle(
                         baskets = baskets,
@@ -150,8 +192,9 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                             for (store in enabledStores) {
                                 DropdownMenuItem(text = { Text("Shop at ${store.name}") }, leadingIcon = { Icon(Icons.Default.ShoppingCart, contentDescription = null) }, onClick = { menu = false; onShop(store.code) })
                             }
-                            DropdownMenuItem(text = { Text("Share list") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareText(context, buildShareText(baskets.firstOrNull { it.id == currentBasketId }, items, enabledStores), whatsApp = false) })
-                            DropdownMenuItem(text = { Text("Send to WhatsApp") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareText(context, buildShareText(baskets.firstOrNull { it.id == currentBasketId }, items, enabledStores), whatsApp = true) })
+                            DropdownMenuItem(text = { Text("Share link (live list)") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareLink(whatsApp = false) })
+                            DropdownMenuItem(text = { Text("Send link to WhatsApp") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareLink(whatsApp = true) })
+                            DropdownMenuItem(text = { Text("Share as text") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareText(context, buildShareText(baskets.firstOrNull { it.id == currentBasketId }, items, enabledStores), whatsApp = false) })
                             DropdownMenuItem(text = { Text("Stock") }, leadingIcon = { Icon(Icons.Default.Kitchen, contentDescription = null) }, onClick = { menu = false; onStock() })
                             DropdownMenuItem(text = { Text("Receipts & spending") }, leadingIcon = { Icon(Icons.Default.Receipt, contentDescription = null) }, onClick = { menu = false; onPurchases() })
                             DropdownMenuItem(text = { Text("Refresh") }, leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }, onClick = { menu = false; viewModel.reload() })
@@ -217,13 +260,19 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                 val topLevel = items.filter { it.parentId == null }
                 LazyColumn(contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(topLevel, key = { it.id }) { item ->
-                        DismissibleItem(item, onDelete = { viewModel.delete(item) }) {
-                            if (item.isGroup) {
-                                GroupCard(item, items.filter { it.parentId == item.id }, enabledStores, onClick = { onOpenGroup(item.id) }, onToggle = { viewModel.toggleChecked(item) })
-                            } else {
-                                BasketItemCard(item, enabledStores, onClick = { onOpenItem(item.id) }, onToggle = { viewModel.toggleChecked(item) })
+                        val selected = item.id in selection
+                        val open: () -> Unit = { if (selectionMode) viewModel.toggleSelected(item.id) else if (item.isGroup) onOpenGroup(item.id) else onOpenItem(item.id) }
+                        val longPress: () -> Unit = { viewModel.toggleSelected(item.id) }
+                        val content: @Composable () -> Unit = {
+                            Box(modifier = if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium) else Modifier) {
+                                if (item.isGroup) {
+                                    GroupCard(item, items.filter { it.parentId == item.id }, enabledStores, onClick = open, onLongClick = longPress, onToggle = { viewModel.toggleChecked(item) })
+                                } else {
+                                    BasketItemCard(item, enabledStores, onClick = open, onLongClick = longPress, onToggle = { viewModel.toggleChecked(item) })
+                                }
                             }
                         }
+                        if (selectionMode) content() else DismissibleItem(item, onDelete = { viewModel.delete(item) }) { content() }
                     }
                 }
             }
@@ -254,9 +303,9 @@ private fun DismissibleItem(item: BasketItem, onDelete: () -> Unit, content: @Co
 }
 
 @Composable
-fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Unit, onToggle: () -> Unit) {
+fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, onToggle: () -> Unit) {
     Card(
-        onClick = onClick,
+        modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),
         colors = CardDefaults.cardColors(containerColor = if (item.checked) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Row(modifier = Modifier.padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -312,10 +361,10 @@ fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Uni
 
 /** A folder row: title, child count and per-store totals summed over the children. */
 @Composable
-fun GroupCard(group: BasketItem, children: List<BasketItem>, stores: List<StoreInfo>, onClick: () -> Unit, onToggle: () -> Unit) {
+fun GroupCard(group: BasketItem, children: List<BasketItem>, stores: List<StoreInfo>, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, onToggle: () -> Unit) {
     val allChecked = children.isNotEmpty() && children.all { it.checked }
     Card(
-        onClick = onClick,
+        modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),
         colors = CardDefaults.cardColors(containerColor = if (allChecked) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.secondaryContainer),
     ) {
         Row(modifier = Modifier.padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -365,4 +414,16 @@ fun GroupCard(group: BasketItem, children: List<BasketItem>, stores: List<StoreI
             }
         }
     }
+}
+
+@Composable
+private fun NameDialog(title: String, initial: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var text by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
+        confirmButton = { TextButton(onClick = { if (text.isNotBlank()) onSave(text.trim()) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

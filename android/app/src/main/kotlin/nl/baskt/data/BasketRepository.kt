@@ -95,6 +95,30 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
         if (_currentBasketId.value == id) refresh()
     }
 
+    suspend fun shareLink(): ShareLink? = guard { api.shareLink(_currentBasketId.value) }
+
+    suspend fun groupFromItems(text: String, items: List<BasketItem>) = guard {
+        api.groupFromItems(text, items.map { it.id })
+        refresh(false)
+    }
+
+    suspend fun deleteMany(items: List<BasketItem>) = guard {
+        api.deleteItems(items.map { it.id })
+        val ids = items.map { it.id }.toSet()
+        _items.update { list -> list.filterNot { it.id in ids || it.parentId in ids } }
+    }
+
+    suspend fun transferMany(items: List<BasketItem>, basketId: String, copy: Boolean) = guard {
+        for (item in items) api.transferItem(item.id, basketId, copy)
+        if (!copy) { val ids = items.map { it.id }.toSet(); _items.update { list -> list.filterNot { it.id in ids || it.parentId in ids } } }
+        refreshBaskets()
+    }
+
+    suspend fun setCheckedMany(items: List<BasketItem>, checked: Boolean) = guard {
+        for (item in items) replace(api.updateItem(item.id, checked = checked))
+        refresh(false)
+    }
+
     suspend fun transfer(item: BasketItem, basketId: String, copy: Boolean) = guard {
         api.transferItem(item.id, basketId, copy)
         if (!copy) _items.update { list -> list.filterNot { it.id == item.id || it.parentId == item.id } }

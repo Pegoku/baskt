@@ -274,6 +274,18 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun deleteBasket(id: String) = viewModelScope.launch { basket.deleteBasket(id) }
     fun transfer(item: BasketItem, basketId: String, copy: Boolean) = viewModelScope.launch { basket.transfer(item, basketId, copy) }
 
+    /** Multi-select in the basket list. */
+    val selection = MutableStateFlow<Set<String>>(emptySet())
+    fun toggleSelected(id: String) { selection.value = if (id in selection.value) selection.value - id else selection.value + id }
+    fun clearSelection() { selection.value = emptySet() }
+    private fun selectedItems() = basket.items.value.filter { it.id in selection.value }
+    fun deleteSelected() = viewModelScope.launch { basket.deleteMany(selectedItems()); clearSelection() }
+    fun groupSelected(name: String) = viewModelScope.launch { basket.groupFromItems(name, selectedItems().filter { !it.isGroup }); clearSelection() }
+    fun transferSelected(basketId: String, copy: Boolean) = viewModelScope.launch { basket.transferMany(selectedItems(), basketId, copy); clearSelection() }
+    fun checkSelected(checked: Boolean) = viewModelScope.launch { basket.setCheckedMany(selectedItems(), checked); clearSelection() }
+
+    suspend fun shareLink(): String? = basket.shareLink()?.url
+
     fun setLanguage(language: String) = viewModelScope.launch {
         container.settingsStore.saveLanguage(language)
         val current = container.awaitSettings()

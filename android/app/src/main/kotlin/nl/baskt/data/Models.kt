@@ -95,6 +95,9 @@ data class Basket(
 data class BasketsResponse(val baskets: List<Basket>)
 
 @Serializable
+data class ShareLink(val token: String, val url: String)
+
+@Serializable
 data class BasketItem(
     val id: String,
     val basketId: String = "default",
