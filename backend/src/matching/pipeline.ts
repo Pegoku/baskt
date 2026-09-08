@@ -257,6 +257,21 @@ export function feedback(itemId: string, store: string, productId: string, up: b
   });
 }
 
+/** Re-enables a skipped store: back to the options it had (or "nothing found" so the smart search can be used). */
+export function unskipMatch(itemId: string, store: string) {
+  const match = getMatch(itemId, store);
+  if (!match || match.status !== "NONE") return match;
+  return saveMatch({
+    ...match,
+    status: match.candidateIds.length ? "PENDING" : "EXHAUSTED",
+    chosenProductId: null,
+    chosenBy: match.candidateIds.length ? "AI" : null,
+    windowStart: 0,
+    shownCount: Math.min(OPTIONS_PER_PAGE, match.candidateIds.length),
+    updatedAt: now(),
+  });
+}
+
 /** "None of them fit": remember the rejection and show the next options, searching wider when needed. */
 export async function rejectShown(itemId: string, store: string) {
   const item = getItem(itemId);

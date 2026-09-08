@@ -145,6 +145,15 @@ describe("api", () => {
     expect(match.options.map((option: any) => option.id)).toEqual(["AH:9"]);
   });
 
+  test("a skipped store can be re-enabled", async () => {
+    let item = (await (await api(`/basket/items/${itemId}/matches/JUMBO/choose`, { method: "POST", body: JSON.stringify({ productId: null }) })).json()) as any;
+    expect(item.matches.find((m: any) => m.store === "JUMBO").status).toBe("NONE");
+    item = (await (await api(`/basket/items/${itemId}/matches/JUMBO/unskip`, { method: "POST" })).json()) as any;
+    const jumbo = item.matches.find((m: any) => m.store === "JUMBO");
+    expect(jumbo.status).toBe("PENDING");
+    expect(jumbo.options.length).toBeGreaterThan(0);
+  });
+
   test("choosing records the choice and confirms the match", async () => {
     const response = await api(`/basket/items/${itemId}/matches/JUMBO/choose`, { method: "POST", body: JSON.stringify({ productId: "JUMBO:b" }) });
     expect(response.status).toBe(200);

@@ -7,7 +7,7 @@ import { defaultServings, rankBy, skipInStock } from "@/db/settings";
 import { inStock, listStock } from "@/stock";
 import { enabledStoreCodes } from "@/db/settings";
 import { compareBasket, type CompareMatch } from "@/matching/compare";
-import { chooseMatch, enqueue, feedback, getItem, getMatches, isRunning, rejectShown, rematchItem, searchMoreCandidates } from "@/matching/pipeline";
+import { chooseMatch, enqueue, feedback, getItem, getMatches, isRunning, rejectShown, rematchItem, searchMoreCandidates, unskipMatch } from "@/matching/pipeline";
 import { splitShoppingText } from "@/matching/parse";
 import { suggest } from "@/matching/suggest";
 import { buildRecipeGroup, itemsForServings, looksLikeRecipe, type RecipeItem } from "@/matching/recipes";
@@ -504,6 +504,15 @@ basket.post("/items/:id/matches/:store/feedback", async (c) => {
   if (!body.productId || typeof body.up !== "boolean") return c.json({ error: { code: "BAD_REQUEST", message: "productId and up are required" } }, 400);
   const match = feedback(c.req.param("id"), store, body.productId, body.up);
   if (!match) return c.json({ error: { code: "NOT_FOUND", message: "item, store or product not found" } }, 404);
+  return c.json(viewOf(c.req.param("id")));
+});
+
+basket.post("/items/:id/matches/:store/unskip", (c) => {
+  const store = c.req.param("store");
+  const invalid = storeGuard(store);
+  if (invalid) return c.json(invalid, 400);
+  const match = unskipMatch(c.req.param("id"), store);
+  if (!match) return c.json({ error: { code: "NOT_FOUND", message: "item or store not found" } }, 404);
   return c.json(viewOf(c.req.param("id")));
 });
 
