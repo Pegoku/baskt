@@ -5,6 +5,7 @@ import { basket } from "@/routes/basket";
 import { basketsRoute } from "@/routes/baskets";
 import { recipes } from "@/routes/recipes";
 import { purchasesRoute } from "@/routes/purchases";
+import { share } from "@/routes/share";
 import { meta } from "@/routes/meta";
 
 function constantTimeEqual(a: string, b: string) {
@@ -20,6 +21,8 @@ export function createApp(options: { token?: string; log?: boolean } = {}) {
   if (options.log ?? true) app.use(logger());
 
   app.get("/", (c) => c.json({ name: "baskt", docs: "/api/v1/health" }));
+  // Share pages authenticate with the basket's own token instead of the app bearer.
+  app.route("/share", share);
 
   app.use("/api/v1/*", async (c, next) => {
     if (!token) return next();

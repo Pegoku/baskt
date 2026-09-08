@@ -23,7 +23,7 @@ export function createDb(path: string) {
 function ensureDefaultBasket(db: ReturnType<typeof drizzle>) {
   const existing = db.select({ id: schema.baskets.id }).from(schema.baskets).all();
   if (!existing.length) {
-    db.insert(schema.baskets).values({ id: schema.DEFAULT_BASKET_ID, name: "Personal", emoji: "🧺", sortOrder: 0, createdAt: Date.now(), updatedAt: Date.now() }).run();
+    db.insert(schema.baskets).values({ id: schema.DEFAULT_BASKET_ID, name: "Personal", emoji: "🧺", sortOrder: 0, shareToken: null, createdAt: Date.now(), updatedAt: Date.now() }).run();
   }
 }
 

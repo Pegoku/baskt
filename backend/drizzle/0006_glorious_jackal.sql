@@ -1,0 +1,1 @@
+ALTER TABLE `baskets` ADD `share_token` text;

@@ -29,7 +29,7 @@ basketsRoute.post("/", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { name?: string; emoji?: string };
   if (!body.name?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "name is required" } }, 400);
   const last = listBaskets().at(-1);
-  const basket = { id: newId(), name: body.name.trim(), emoji: body.emoji?.trim() || null, sortOrder: (last?.sortOrder ?? -1) + 1, createdAt: now(), updatedAt: now() };
+  const basket = { id: newId(), name: body.name.trim(), emoji: body.emoji?.trim() || null, sortOrder: (last?.sortOrder ?? -1) + 1, shareToken: null, createdAt: now(), updatedAt: now() };
   db().insert(baskets).values(basket).run();
   return c.json({ ...basket, itemCount: 0, openCount: 0 }, 201);
 });
@@ -49,6 +49,27 @@ basketsRoute.patch("/:id", async (c) => {
     .where(eq(baskets.id, basket.id))
     .run();
   return c.json(withCounts().find((entry) => entry.id === basket.id));
+});
+
+/** Creates (or returns) the share link of a basket; `rotate=true` invalidates the old link. */
+basketsRoute.post("/:id/share", async (c) => {
+  const basket = getBasket(c.req.param("id"));
+  if (!basket) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
+  const body = (await c.req.json().catch(() => ({}))) as { rotate?: boolean; baseUrl?: string };
+  let token = basket.shareToken;
+  if (!token || body.rotate) {
+    token = crypto.randomUUID().replace(/-/g, "");
+    db().update(baskets).set({ shareToken: token, updatedAt: now() }).where(eq(baskets.id, basket.id)).run();
+  }
+  const origin = (body.baseUrl ?? new URL(c.req.url).origin).replace(/\/$/, "");
+  return c.json({ token, url: `${origin}/share/${basket.id}?t=${token}` });
+});
+
+basketsRoute.delete("/:id/share", (c) => {
+  const basket = getBasket(c.req.param("id"));
+  if (!basket) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
+  db().update(baskets).set({ shareToken: null, updatedAt: now() }).where(eq(baskets.id, basket.id)).run();
+  return c.body(null, 204);
 });
 
 basketsRoute.delete("/:id", (c) => {

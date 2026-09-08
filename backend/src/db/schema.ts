@@ -58,6 +58,8 @@ export const baskets = sqliteTable("baskets", {
   name: text("name").notNull(),
   emoji: text("emoji"),
   sortOrder: integer("sort_order").notNull().default(0),
+  /** Secret in the share link; anyone with it can view and check items of this basket in a browser. */
+  shareToken: text("share_token"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

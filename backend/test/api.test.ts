@@ -341,6 +341,39 @@ describe("api", () => {
     await api(`/basket/items/${id}`, { method: "DELETE" });
   });
 
+  test("existing items can be grouped into a folder and bulk deleted", async () => {
+    const a = (await (await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "melk" }) })).json()) as any;
+    const b = (await (await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "eieren" }) })).json()) as any;
+    const grouped = await api("/basket/groups/from-items", { method: "POST", body: JSON.stringify({ text: "Breakfast", itemIds: [a.id, b.id] }) });
+    expect(grouped.status).toBe(201);
+    const body = (await grouped.json()) as any;
+    expect(body.group.kind).toBe("group");
+    expect(body.items.map((i: any) => i.id).sort()).toEqual([a.id, b.id].sort());
+    expect(body.items.every((i: any) => i.parentId === body.group.id)).toBe(true);
+    const removed = (await (await api("/basket/items/delete", { method: "POST", body: JSON.stringify({ itemIds: [body.group.id] }) })).json()) as any;
+    expect(removed.deleted).toBe(1);
+    const after = (await (await api("/basket?since=1")).json()) as any;
+    expect(after.deletedIds).toContain(a.id);
+  });
+
+  test("share links expose a basket without the bearer and allow checking items", async () => {
+    const created = (await (await api("/baskets/default/share", { method: "POST", body: JSON.stringify({ baseUrl: "http://example" }) })).json()) as any;
+    expect(created.url).toBe(`http://example/share/default?t=${created.token}`);
+    const item = (await (await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "kaas" }) })).json()) as any;
+    const page = await app.request(`/share/default?t=${created.token}`);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Personal");
+    expect((await app.request("/share/default?t=wrong")).status).toBe(401);
+    const data = (await (await app.request(`/share/default/api?t=${created.token}`)).json()) as any;
+    expect(data.items.some((i: any) => i.id === item.id)).toBe(true);
+    const toggled = await app.request(`/share/default/api/items/${item.id}/checked?t=${created.token}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ checked: true }) });
+    expect(toggled.status).toBe(200);
+    expect(((await (await api("/basket")).json()) as any).items.find((i: any) => i.id === item.id).checked).toBe(true);
+    expect((await api("/baskets/default/share", { method: "DELETE" })).status).toBe(204);
+    expect((await app.request(`/share/default/api?t=${created.token}`)).status).toBe(401);
+    await api(`/basket/items/${item.id}`, { method: "DELETE" });
+  });
+
   test("multiple baskets: create, add into, move and copy items, delete", async () => {
     const created = await api("/baskets", { method: "POST", body: JSON.stringify({ name: "Sweets", emoji: "🍫" }) });
     expect(created.status).toBe(201);

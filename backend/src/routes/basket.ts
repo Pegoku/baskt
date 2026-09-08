@@ -83,6 +83,11 @@ function createItem(text: string, quantity: number, parentId: string | null = nu
   return item;
 }
 
+/** Used by the browser share page (no bearer): a plain item in the given basket. */
+export function createItemForShare(text: string, basketId: string) {
+  return looksLikeRecipe(text) ? createGroup(text, undefined, basketId) : createItem(text, 1, null, "item", basketId);
+}
+
 /** Creates child items, leaving out (and reporting) ingredients already in stock. */
 function createChildren(groupId: string, items: RecipeItem[]) {
   const stockRows = skipInStock() ? listStock() : [];
@@ -277,6 +282,34 @@ basket.post("/groups", async (c) => {
   const items = Array.isArray(body.items) ? body.items.filter((value): value is string => typeof value === "string" && value.trim().length > 0) : undefined;
   const group = createGroup(body.text, items, basketId);
   return c.json({ group: viewOf(group.id), items: loadViews(childrenOf(group.id)) }, 201);
+});
+
+/** Groups existing items into a new folder, keeping their matches. */
+basket.post("/groups/from-items", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { text?: string; itemIds?: string[] };
+  const ids = Array.isArray(body.itemIds) ? body.itemIds.filter((id): id is string => typeof id === "string") : [];
+  const rows = ids.map((id) => getItem(id)).filter((row): row is BasketItemRow => Boolean(row) && row!.kind === "item");
+  if (!body.text?.trim() || !rows.length) return c.json({ error: { code: "BAD_REQUEST", message: "text and itemIds are required" } }, 400);
+  const group = createItem(body.text, 1, null, "group", rows[0].basketId);
+  db().update(basketItems).set({ status: "MATCHED" }).where(eq(basketItems.id, group.id)).run();
+  db().update(basketItems).set({ parentId: group.id, basketId: rows[0].basketId, updatedAt: now() }).where(inArray(basketItems.id, rows.map((row) => row.id))).run();
+  return c.json({ group: viewOf(group.id), items: loadViews(childrenOf(group.id)) }, 201);
+});
+
+/** Deletes several items/folders at once. */
+basket.post("/items/delete", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { itemIds?: string[] };
+  const ids = Array.isArray(body.itemIds) ? body.itemIds.filter((id): id is string => typeof id === "string") : [];
+  let deleted = 0;
+  for (const id of ids) {
+    const children = childrenOf(id).map((child) => child.id);
+    const removed = db().delete(basketItems).where(eq(basketItems.id, id)).returning({ id: basketItems.id }).all();
+    if (!removed.length) continue;
+    if (children.length) db().delete(basketItems).where(inArray(basketItems.id, children)).run();
+    tombstone([id, ...children]);
+    deleted += 1;
+  }
+  return c.json({ deleted });
 });
 
 /** The folder's recipe (title, ingredients, steps) in the app language. */
