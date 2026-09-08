@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -68,10 +69,28 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val dateFormat = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
     LaunchedEffect(Unit) { viewModel.loadPurchases() }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(5)) { uris: List<Uri> ->
-        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+    fun upload(uris: List<Uri>) {
+        if (uris.isEmpty()) return
         val images = uris.mapIndexedNotNull { index, uri -> context.contentResolver.openInputStream(uri)?.use { "receipt-$index.jpg" to it.readBytes() } }
         viewModel.scanReceipt(images, null)
+    }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(5)) { uris: List<Uri> -> upload(uris) }
+    // ML Kit document scanner: camera with automatic edge detection, crop, filters and multi-page capture.
+    val documentScanner = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        val scanned = com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult.fromActivityResultIntent(result.data)
+        upload(scanned?.pages?.map { it.imageUri } ?: emptyList())
+    }
+    fun startCamera() {
+        val activity = context as? android.app.Activity ?: return
+        val options = com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.Builder()
+            .setGalleryImportAllowed(true)
+            .setPageLimit(5)
+            .setResultFormats(com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
+            .setScannerMode(com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.SCANNER_MODE_FULL)
+            .build()
+        com.google.mlkit.vision.documentscanner.GmsDocumentScanning.getClient(options).getStartScanIntent(activity)
+            .addOnSuccessListener { intent -> documentScanner.launch(androidx.activity.result.IntentSenderRequest.Builder(intent).build()) }
+            .addOnFailureListener { error -> android.widget.Toast.makeText(context, error.message ?: "Scanner unavailable", android.widget.Toast.LENGTH_SHORT).show() }
     }
 
     Scaffold(
@@ -82,11 +101,16 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                icon = { Icon(Icons.Default.DocumentScanner, contentDescription = null) },
-                text = { Text("Scan receipt") },
-            )
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                androidx.compose.material3.SmallFloatingActionButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
+                    Icon(Icons.Default.Image, contentDescription = "From photos")
+                }
+                ExtendedFloatingActionButton(
+                    onClick = { startCamera() },
+                    icon = { Icon(Icons.Default.DocumentScanner, contentDescription = null) },
+                    text = { Text("Scan receipt") },
+                )
+            }
         },
     ) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

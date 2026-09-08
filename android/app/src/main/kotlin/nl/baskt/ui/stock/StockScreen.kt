@@ -19,6 +19,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddShoppingCart
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -90,7 +92,13 @@ fun StockScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                     ListItem(
                         headlineContent = { Text(item.text) },
                         supportingContent = item.quantityText?.let { { Text(it) } },
-                        trailingContent = { IconButton(onClick = { viewModel.removeStock(item) }) { Icon(Icons.Default.Delete, contentDescription = "Remove") } },
+                        leadingContent = item.imageUrl?.let { url -> { coil3.compose.AsyncImage(model = url, contentDescription = null, modifier = Modifier.padding(2.dp).then(Modifier.size(44.dp))) } },
+                        trailingContent = {
+                            Row {
+                                IconButton(onClick = { viewModel.add(item.text, 1) }) { Icon(Icons.Default.AddShoppingCart, contentDescription = "Add to shopping list") }
+                                IconButton(onClick = { viewModel.removeStock(item) }) { Icon(Icons.Default.Delete, contentDescription = "Remove") }
+                            }
+                        },
                     )
                 }
             }

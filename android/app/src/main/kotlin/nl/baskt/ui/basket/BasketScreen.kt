@@ -96,6 +96,7 @@ import nl.baskt.data.euros
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.BasketSwitcherTitle
 import nl.baskt.ui.common.StoreBadge
+import nl.baskt.ui.common.storeName
 
 @Composable
 fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit, onStock: () -> Unit, onSearch: () -> Unit, onDeals: () -> Unit, onRecipes: () -> Unit, onShop: (String) -> Unit, onPurchases: () -> Unit) {
@@ -143,6 +144,22 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
     }
     val whatsapp by viewModel.whatsapp.collectAsState()
     LaunchedEffect(Unit) { viewModel.loadWhatsApp() }
+    val scanResult by viewModel.scanResult.collectAsState()
+    val searching by viewModel.searching.collectAsState()
+    val stock by viewModel.basket.stock.collectAsState()
+    if (scanResult != null || searching) {
+        ScanResultSheet(
+            result = scanResult,
+            searching = searching,
+            stores = enabledStores,
+            stockEntryFor = { product -> stock.firstOrNull { it.productId == product.id || (scanResult?.gtin != null && it.barcode == scanResult?.gtin) } },
+            onDismiss = { viewModel.clearSearch() },
+            onAddToList = { product -> viewModel.addFromProduct(product); viewModel.clearSearch(); scope.launch { snackbar.showSnackbar("Added ${product.title} to the list") } },
+            onAddToStock = { product -> viewModel.addProductToStock(product, scanResult?.gtin); viewModel.clearSearch(); scope.launch { snackbar.showSnackbar("${product.title} is now in stock") } },
+            onRemoveFromStock = { entry -> viewModel.removeStock(entry); viewModel.clearSearch(); scope.launch { snackbar.showSnackbar("Removed ${entry.text} from stock") } },
+            onSearchInstead = { viewModel.clearSearch(); onSearch() },
+        )
+    }
     fun sendBot() = scope.launch {
         viewModel.sendToWhatsApp().fold(
             { count -> snackbar.showSnackbar("Sent $count items to WhatsApp — react ✅ to check them off") },
@@ -442,4 +459,54 @@ private fun NameDialog(title: String, initial: String, onDismiss: () -> Unit, on
         confirmButton = { TextButton(onClick = { if (text.isNotBlank()) onSave(text.trim()) }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+/** After a barcode scan: what was found per store, and what to do with it. */
+@Composable
+private fun ScanResultSheet(
+    result: nl.baskt.data.BarcodeResponse?,
+    searching: Boolean,
+    stores: List<StoreInfo>,
+    stockEntryFor: (nl.baskt.data.Product) -> nl.baskt.data.StockItem?,
+    onDismiss: () -> Unit,
+    onAddToList: (nl.baskt.data.Product) -> Unit,
+    onAddToStock: (nl.baskt.data.Product) -> Unit,
+    onRemoveFromStock: (nl.baskt.data.StockItem) -> Unit,
+    onSearchInstead: () -> Unit,
+) {
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            val found = result?.results?.mapNotNull { it.product } ?: emptyList()
+            when {
+                searching || result == null -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { LoadingIndicator(); Text("Looking up the barcode…") }
+                found.isEmpty() -> {
+                    Text("No store knows barcode ${result.gtin}", style = MaterialTheme.typography.titleMedium)
+                    Text("You can still search the product by name.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = onSearchInstead) { Text("Search products") }
+                }
+                else -> {
+                    val primary = found.first()
+                    Text("Scanned", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    for (product in found) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StoreBadge(product.store, stores)
+                            Text(product.title, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        }
+                    }
+                    nl.baskt.ui.common.ProductRow(primary)
+                    val inStock = stockEntryFor(primary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        androidx.compose.material3.Button(onClick = { onAddToList(primary) }, modifier = Modifier.weight(1f)) { Text("Add to list") }
+                        if (inStock != null) {
+                            androidx.compose.material3.OutlinedButton(onClick = { onRemoveFromStock(inStock) }, modifier = Modifier.weight(1f)) { Text("Remove from stock") }
+                        } else {
+                            androidx.compose.material3.FilledTonalButton(onClick = { onAddToStock(primary) }, modifier = Modifier.weight(1f)) { Text("Add to stock") }
+                        }
+                    }
+                    if (inStock != null) Text("Already in your stock since you added “${inStock.text}”.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Adding to the list pins ${storeName(primary.store, stores)} to this product and matches the other stores.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
 }

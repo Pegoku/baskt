@@ -44,6 +44,10 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
 
     suspend fun refreshStock() = guard { _stock.value = api.stock() }
     suspend fun addStock(text: String) = guard { api.addStock(text); refreshStock() }
+    suspend fun addProductToStock(product: Product, barcode: String?) = guard {
+        api.addStock(text = product.title.replace(Regex("^(AH|Jumbo(?:'s)?)\\s+"), ""), quantityText = product.quantityText, productId = product.id, imageUrl = product.imageUrl, barcode = barcode)
+        refreshStock()
+    }
     suspend fun removeStock(item: StockItem) = guard { api.removeStock(item.id); _stock.update { list -> list.filterNot { it.id == item.id } } }
     suspend fun refreshServerSettings() = guard { _serverSettings.value = api.serverSettings() }
     suspend fun setSkipInStock(enabled: Boolean) = guard { _serverSettings.value = api.setSkipInStock(enabled) }

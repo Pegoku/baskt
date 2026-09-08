@@ -337,6 +337,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun switchBasket(id: String) = viewModelScope.launch { basket.switchBasket(id) }
     fun refreshStock() = viewModelScope.launch { basket.refreshStock(); basket.refreshServerSettings() }
     fun addStock(text: String) = viewModelScope.launch { basket.addStock(text) }
+    fun addProductToStock(product: Product, barcode: String?) = viewModelScope.launch { basket.addProductToStock(product, barcode) }
+    fun stockEntryFor(product: Product, barcode: String?): StockItem? = basket.stock.value.firstOrNull { it.productId == product.id || (barcode != null && it.barcode == barcode) }
     fun addToStockFromItem(item: BasketItem) = viewModelScope.launch { basket.addStock(item.parsed?.canonicalName ?: item.text) }
     fun removeStock(item: StockItem) = viewModelScope.launch { basket.removeStock(item) }
     fun setSkipInStock(enabled: Boolean) = viewModelScope.launch { basket.setSkipInStock(enabled) }

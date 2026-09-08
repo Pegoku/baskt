@@ -69,8 +69,8 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 
     suspend fun stock(): List<StockItem> = client.get(url("/stock")) { auth() }.expect<StockResponse>().items
 
-    suspend fun addStock(text: String): StockItem =
-        client.post(url("/stock")) { auth(); contentType(ContentType.Application.Json); setBody(StockRequest(text)) }.expect()
+    suspend fun addStock(text: String, quantityText: String? = null, productId: String? = null, imageUrl: String? = null, barcode: String? = null): StockItem =
+        client.post(url("/stock")) { auth(); contentType(ContentType.Application.Json); setBody(StockRequest(text, quantityText, productId, imageUrl, barcode)) }.expect()
 
     suspend fun removeStock(id: String) {
         client.delete(url("/stock/$id")) { auth() }.expect<Unit>()
@@ -355,7 +355,7 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 @Serializable private data class AddGroupRequest(val text: String, val items: List<String>? = null, val basketId: String = "default")
 @Serializable private data class FromTextRequest(val text: String, val basketId: String = "default")
 @Serializable private data class BasketRequest(val name: String, val emoji: String? = null)
-@Serializable private data class StockRequest(val text: String)
+@Serializable private data class StockRequest(val text: String, val quantityText: String? = null, val productId: String? = null, val imageUrl: String? = null, val barcode: String? = null)
 @Serializable private data class ConfirmRequest(val items: List<VoiceItem>, val basketId: String)
 @Serializable private data class SaveRecipeRequest(val title: String, val description: String?, val servings: String?, val ingredientLines: List<String>, val steps: List<String>, val origin: String?, val fromUrl: String?)
 @Serializable private data class GenerateRequest(val description: String, val draft: Boolean)
