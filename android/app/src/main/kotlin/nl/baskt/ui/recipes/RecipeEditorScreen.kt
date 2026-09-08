@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -55,14 +57,14 @@ fun RecipeEditorScreen(viewModel: AppViewModel, recipeId: String?, onBack: () ->
     var title by remember(existing?.id) { mutableStateOf(existing?.title ?: "") }
     var servings by remember(existing?.id) { mutableStateOf(existing?.servings ?: "") }
     var ingredients by remember(existing?.id) { mutableStateOf(existing?.ingredientLines?.joinToString("\n") ?: "") }
-    var steps by remember(existing?.id) { mutableStateOf(existing?.steps?.joinToString("\n") { it.text } ?: "") }
+    var steps by remember(existing?.id) { mutableStateOf(existing?.steps?.map { it.text }?.ifEmpty { listOf("") } ?: listOf("")) }
     var origin by remember { mutableStateOf(existing?.origin ?: "manual") }
     var showEditor by remember { mutableStateOf(existing != null) }
     var noneFit by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { viewModel.clearGenerate(); if (recipeId != null && existing == null) viewModel.loadMyRecipes() }
     LaunchedEffect(generate?.draft) {
         val draft = generate?.draft ?: return@LaunchedEffect
-        title = draft.title; servings = draft.servings ?: ""; ingredients = draft.ingredientLines.joinToString("\n"); steps = draft.steps.joinToString("\n") { it.text }
+        title = draft.title; servings = draft.servings ?: ""; ingredients = draft.ingredientLines.joinToString("\n"); steps = draft.steps.map { it.text }.ifEmpty { listOf("") }
         origin = "ai"; showEditor = true
     }
     fun currentDraft() = RecipeDraft(
@@ -70,7 +72,7 @@ fun RecipeEditorScreen(viewModel: AppViewModel, recipeId: String?, onBack: () ->
         description = description.trim().ifBlank { existing?.description },
         servings = servings.trim().ifBlank { null },
         ingredientLines = ingredients.lines().map { it.trim().trimStart('-', '•', '*').trim() }.filter { it.isNotEmpty() },
-        steps = steps.lines().map { it.trim().replace(Regex("^\\d+[.)]\\s*"), "") }.filter { it.isNotEmpty() }.map { RecipeStep(it) },
+        steps = steps.map { it.trim().replace(Regex("^\\d+[.)]\\s*"), "") }.filter { it.isNotEmpty() }.map { RecipeStep(it) },
     )
 
     Scaffold(
@@ -113,9 +115,28 @@ fun RecipeEditorScreen(viewModel: AppViewModel, recipeId: String?, onBack: () ->
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = servings, onValueChange = { servings = it }, label = { Text("Servings") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = ingredients, onValueChange = { ingredients = it }, label = { Text("Ingredients, one per line, with amounts") }, minLines = 5, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = steps, onValueChange = { steps = it }, label = { Text("Steps, one per line") }, minLines = 5, modifier = Modifier.fillMaxWidth())
+                Text("Steps", style = MaterialTheme.typography.titleSmall)
+                for ((index, step) in steps.withIndex()) {
+                    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("${index + 1}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 16.dp))
+                        OutlinedTextField(
+                            value = step,
+                            onValueChange = { value -> steps = steps.toMutableList().also { it[index] = value } },
+                            placeholder = { Text("What to do in this step") },
+                            minLines = 2,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = { steps = if (steps.size == 1) listOf("") else steps.filterIndexed { i, _ -> i != index } }, modifier = Modifier.padding(top = 8.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "Remove step")
+                        }
+                    }
+                }
+                TextButton(onClick = { steps = steps + "" }) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Text("  Add step")
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { scope.launch { if (viewModel.saveRecipe(currentDraft(), origin, existing?.id) != null) onBack() } }, enabled = title.isNotBlank() && ingredients.isNotBlank()) { Text(if (existing != null) "Save changes" else "Save recipe") }
+                    Button(onClick = { scope.launch { if (viewModel.saveRecipe(currentDraft(), origin, existing?.id) != null) onBack() } }, enabled = title.isNotBlank() && ingredients.isNotBlank() && steps.any { it.isNotBlank() }) { Text(if (existing != null) "Save changes" else "Save recipe") }
                     TextButton(onClick = onBack) { Text("Cancel") }
                 }
             }

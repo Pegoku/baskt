@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -224,11 +225,15 @@ private fun StockDishList(dishes: List<nl.baskt.data.StockDish>, busy: Boolean, 
     LazyColumn(contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(dishes, key = { it.title }) { dish ->
             Card(onClick = { onSearch(dish.searchQuery) }) {
+                if (dish.imageUrl != null) {
+                    AsyncImage(model = dish.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(140.dp))
+                }
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(dish.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                         dish.minutes?.let { Text("$it min", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
+                    if (dish.source != null) Text("Photo: ${dish.source}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (dish.uses.isNotEmpty()) Text("Uses: ${dish.uses.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (dish.missing.isEmpty()) AssistChip(onClick = {}, label = { Text("Everything in stock") })

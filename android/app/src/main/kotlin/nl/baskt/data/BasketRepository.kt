@@ -235,6 +235,9 @@ class BasketRepository(private val api: BasktApi, private val scope: CoroutineSc
 
     suspend fun compare(): Comparison? = guard { api.compare(_currentBasketId.value) }
 
+    suspend fun assign(mode: String) = guard { _items.value = api.assign(_currentBasketId.value, mode) }
+    suspend fun assignItem(item: BasketItem, store: String?) = guard { replace(api.assignItem(item.id, store)) }
+
     suspend fun searchProducts(query: String, force: Boolean = false): ProductSearchResponse? = guard { api.searchProducts(query, force = force) }
 
     suspend fun deals(live: Boolean): DealsResponse? = guard { api.deals(_currentBasketId.value, live) }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -49,7 +50,7 @@ import nl.baskt.ui.common.StoreBadge
 import nl.baskt.ui.common.storeName
 
 @Composable
-fun CompareScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String) -> Unit) {
+fun CompareScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String) -> Unit, onOrder: () -> Unit = {}) {
     val comparison by viewModel.comparison.collectAsState()
     val comparing by viewModel.comparing.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
@@ -59,9 +60,18 @@ fun CompareScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (Stri
     LaunchedEffect(items) { viewModel.compare() }
 
     Scaffold(
+        floatingActionButton = {
+            if (comparison != null) {
+                androidx.compose.material3.ExtendedFloatingActionButton(
+                    onClick = onOrder,
+                    icon = { Icon(androidx.compose.material.icons.Icons.Default.ShoppingCart, contentDescription = null) },
+                    text = { Text("Order") },
+                )
+            }
+        },
         topBar = {
             TopAppBar(
-                title = { Text("Compare") },
+                title = { Text("Review") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
                 actions = { IconButton(onClick = { viewModel.compare(refreshPrices = true) }) { Icon(Icons.Default.Refresh, contentDescription = "Refresh prices") } },
             )

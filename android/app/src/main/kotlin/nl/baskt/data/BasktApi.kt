@@ -187,6 +187,16 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
             auth(); contentType(ContentType.Application.Json); setBody(QueryRequest(query))
         }.expect()
 
+    suspend fun assign(basketId: String, mode: String): List<BasketItem> =
+        client.post(url("/basket/assign")) {
+            auth(); contentType(ContentType.Application.Json); setBody(JsonObject(mapOf("basketId" to JsonPrimitive(basketId), "mode" to JsonPrimitive(mode))))
+        }.expect<ItemsResponse>().items
+
+    suspend fun assignItem(id: String, store: String?): BasketItem =
+        client.patch(url("/basket/items/$id")) {
+            auth(); contentType(ContentType.Application.Json); setBody(JsonObject(mapOf("assignedStore" to (store?.let { JsonPrimitive(it) } ?: JsonNull))))
+        }.expect()
+
     suspend fun compare(basketId: String): Comparison = client.get(url("/basket/compare")) { auth(); parameter("basketId", basketId) }.expect()
 
     suspend fun suggest(text: String): SuggestResponse =

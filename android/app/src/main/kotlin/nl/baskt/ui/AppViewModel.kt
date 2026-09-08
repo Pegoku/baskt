@@ -377,6 +377,9 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun rematch(item: BasketItem) = viewModelScope.launch { basket.rematch(item) }
     fun setEnabledStores(codes: List<String>) = viewModelScope.launch { basket.setEnabledStores(codes); basket.refresh(false) }
 
+    fun assign(mode: String) = viewModelScope.launch { basket.assign(mode); _comparison.value = basket.compare() }
+    fun assignItem(item: BasketItem, store: String?) = viewModelScope.launch { basket.assignItem(item, store); _comparison.value = basket.compare() }
+
     fun compare(refreshPrices: Boolean = false) = viewModelScope.launch {
         _comparing.value = true
         if (refreshPrices) runCatching { container.api.refreshPrices() }

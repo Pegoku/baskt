@@ -48,7 +48,9 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
-    val shopping = items.filter { !it.isGroup }.mapNotNull { item -> item.match(store)?.effective?.let { item to it } }
+    // When the order step assigned stores, shop only those items; otherwise everything matched here.
+    val assigned = items.any { !it.isGroup && it.assignedStore != null }
+    val shopping = items.filter { !it.isGroup && (!assigned || it.assignedStore == store) }.mapNotNull { item -> item.match(store)?.effective?.let { item to it } }
     val remaining = shopping.filter { !it.first.checked }
     val total = shopping.sumOf { (item, product) -> product.priceCents * item.quantity }
     val sections = shopping.groupBy { it.second.category?.substringBefore(" / ")?.ifBlank { null } ?: "Other" }.toSortedMap()
@@ -91,7 +93,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                         HorizontalDivider()
                     }
                 }
-                val missing = items.filter { !it.isGroup && !it.checked && it.match(store)?.effective == null }
+                val missing = items.filter { !it.isGroup && !it.checked && (!assigned || it.assignedStore == store) && it.match(store)?.effective == null }
                 if (missing.isNotEmpty()) {
                     item("missing") {
                         Column(modifier = Modifier.padding(16.dp)) {

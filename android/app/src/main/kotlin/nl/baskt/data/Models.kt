@@ -104,6 +104,7 @@ data class BasketItem(
     val kind: String = "item", // item | group
     val parentId: String? = null,
     val recipe: RecipeInfo? = null,
+    val assignedStore: String? = null,
     val text: String,
     val quantity: Int = 1,
     val checked: Boolean = false,
@@ -197,8 +198,15 @@ data class Comparison(
     val missingEverywhere: List<String> = emptyList(),
     val computedAt: Long = 0,
     val rankBy: String = "price",
+    val order: OrderSummary = OrderSummary(),
     val products: Map<String, Product> = emptyMap(),
 )
+
+@Serializable
+data class OrderStoreTotal(val totalCents: Int = 0, val count: Int = 0)
+
+@Serializable
+data class OrderSummary(val perStore: Map<String, OrderStoreTotal> = emptyMap(), val unassigned: List<String> = emptyList())
 
 @Serializable
 data class SuggestResponse(val suggestions: List<String> = emptyList(), val source: String = "none", val recipe: RecipeSuggestion? = null)
@@ -264,7 +272,7 @@ data class RecipeSummary(val title: String, val url: String, val imageUrl: Strin
 }
 
 @Serializable
-data class StockDish(val title: String, val searchQuery: String, val uses: List<String> = emptyList(), val missing: List<String> = emptyList(), val minutes: Int? = null)
+data class StockDish(val title: String, val searchQuery: String, val uses: List<String> = emptyList(), val missing: List<String> = emptyList(), val minutes: Int? = null, val imageUrl: String? = null, val recipeUrl: String? = null, val source: String? = null)
 
 @Serializable
 data class StockDishesResponse(val dishes: List<StockDish> = emptyList())

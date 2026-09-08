@@ -8,6 +8,7 @@ import androidx.navigation3.ui.NavDisplay
 import kotlinx.serialization.Serializable
 import nl.baskt.ui.basket.BasketScreen
 import nl.baskt.ui.compare.CompareScreen
+import nl.baskt.ui.compare.OrderScreen
 import nl.baskt.ui.basket.GroupScreen
 import nl.baskt.ui.item.ItemDetailScreen
 import nl.baskt.ui.settings.SettingsScreen
@@ -33,6 +34,7 @@ import nl.baskt.ui.recipes.RecipeEditorScreen
 @Serializable data object PurchasesRoute : NavKey
 @Serializable data class RecipeEditorRoute(val recipeId: String? = null) : NavKey
 @Serializable data object MemoryRoute : NavKey
+@Serializable data object OrderRoute : NavKey
 
 @Composable
 fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
@@ -74,7 +76,10 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
             }
             entry<ItemRoute> { route -> ItemDetailScreen(viewModel, route.itemId, onBack = { backStack.removeLastOrNull() }) }
             entry<CompareRoute> {
-                CompareScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) })
+                CompareScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) }, onOrder = { backStack.add(OrderRoute) })
+            }
+            entry<OrderRoute> {
+                OrderScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onShop = { backStack.add(ShopRoute(it)) })
             }
             entry<SettingsRoute> { SettingsScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onMemory = { backStack.add(MemoryRoute) }) }
             entry<MemoryRoute> { MemoryScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
