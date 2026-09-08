@@ -36,6 +36,11 @@ import nl.baskt.ui.recipes.RecipeEditorScreen
 fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
     val backStack = rememberNavBackStack(BasketRoute)
     if (startAtSettings && backStack.size == 1) backStack.add(SettingsRoute)
+    // Close the keyboard and drop focus whenever the visible screen changes.
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val top = backStack.lastOrNull()
+    androidx.compose.runtime.LaunchedEffect(top) { focusManager.clearFocus(force = true); keyboard?.hide() }
     NavDisplay(
         backStack = backStack,
         onBack = { backStack.removeLastOrNull() },

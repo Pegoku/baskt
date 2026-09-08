@@ -81,6 +81,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
 
     var titleDraft by remember(item?.text) { mutableStateOf(item?.text ?: "") }
     var editingTitle by remember { mutableStateOf(false) }
+    var titleHadFocus by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     fun commitTitle() {
@@ -96,7 +97,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
                 title = {
                     if (editingTitle) {
                         // Inline rename: the title turns into a text field, saved on Done or when focus leaves.
-                        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+                        LaunchedEffect(Unit) { titleHadFocus = false; focusRequester.requestFocus() }
                         androidx.compose.foundation.text.BasicTextField(
                             value = titleDraft,
                             onValueChange = { titleDraft = it },
@@ -105,7 +106,10 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
                             cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                             keyboardActions = KeyboardActions(onDone = { commitTitle() }),
-                            modifier = Modifier.fillMaxWidth().focusRequester(focusRequester).onFocusChanged { if (!it.isFocused && editingTitle) commitTitle() },
+                            // Only commit on a real blur: the field reports "not focused" once before it receives focus.
+                            modifier = Modifier.fillMaxWidth().focusRequester(focusRequester).onFocusChanged { state ->
+                                if (state.isFocused) titleHadFocus = true else if (titleHadFocus && editingTitle) commitTitle()
+                            },
                         )
                     } else {
                         Text(
@@ -234,7 +238,7 @@ private fun StoreCard(
                         }
                         "PENDING" -> "Pick the product you mean"
                         "NONE" -> "Not buying this here"
-                        "EXHAUSTED" -> "Nothing fitting found"
+                        "EXHAUSTED" -> "Nothing fitting found yet"
                         else -> match.status
                     },
                     style = MaterialTheme.typography.labelLarge,
@@ -274,7 +278,7 @@ private fun StoreCard(
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        if (match.hasMore || options.isNotEmpty()) {
+                        if (options.isNotEmpty()) {
                             FilledTonalButton(onClick = onReject, modifier = Modifier.weight(1f)) { Text("None of these fit") }
                         }
                         if (match.status != "NONE") {
@@ -289,6 +293,19 @@ private fun StoreCard(
                 }
             }
 
+            if (match.status == "EXHAUSTED") {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    // Asks the server for synonyms / broader terms and searches the store again.
+                    FilledTonalButton(onClick = onReject, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Default.Autorenew, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Text("  Search alternatives")
+                    }
+                    OutlinedButton(onClick = { showSearch = true }, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Text("  Search myself")
+                    }
+                }
+            }
             if (showSearch) {
                 OutlinedTextField(
                     value = searchText,
