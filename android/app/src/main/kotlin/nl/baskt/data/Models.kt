@@ -385,6 +385,18 @@ data class TopProduct(val name: String, val times: Int, val totalCents: Int)
 data class SpendSummary(val months: List<SpendMonth> = emptyList(), val totalCents: Int = 0, val purchases: Int = 0, val topProducts: List<TopProduct> = emptyList())
 
 @Serializable
+data class WhatsAppStatus(val enabled: Boolean = false, val status: String = "disabled", val me: String? = null, val hasQr: Boolean = false, val lastError: String? = null, val chatId: String? = null, val chatName: String? = null)
+
+@Serializable
+data class WhatsAppQr(val qr: String? = null, val status: String = "")
+
+@Serializable
+data class WhatsAppChat(val id: String, val name: String? = null, val isGroup: Boolean = false)
+
+@Serializable
+data class WhatsAppChats(val chats: List<WhatsAppChat> = emptyList())
+
+@Serializable
 data class HealthResponse(
     val ok: Boolean,
     val version: String = "",

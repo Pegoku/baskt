@@ -141,6 +141,14 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
     if (naming) {
         NameDialog(title = "New folder", initial = "", onDismiss = { naming = false }) { viewModel.groupSelected(it); naming = false }
     }
+    val whatsapp by viewModel.whatsapp.collectAsState()
+    LaunchedEffect(Unit) { viewModel.loadWhatsApp() }
+    fun sendBot() = scope.launch {
+        viewModel.sendToWhatsApp().fold(
+            { count -> snackbar.showSnackbar("Sent $count items to WhatsApp — react ✅ to check them off") },
+            { error -> snackbar.showSnackbar(error.message ?: "WhatsApp bridge failed", actionLabel = "Settings").also { if (it == androidx.compose.material3.SnackbarResult.ActionPerformed) onSettings() } },
+        )
+    }
     val proposal by viewModel.voiceProposal.collectAsState()
     val interpreting by viewModel.interpreting.collectAsState()
     if (proposal != null || interpreting) {
@@ -196,6 +204,9 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             for (store in enabledStores) {
                                 DropdownMenuItem(text = { Text("Shop at ${store.name}") }, leadingIcon = { Icon(Icons.Default.ShoppingCart, contentDescription = null) }, onClick = { menu = false; onShop(store.code) })
+                            }
+                            if (whatsapp?.enabled == true) {
+                                DropdownMenuItem(text = { Text("Send items to WhatsApp bot") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; sendBot() })
                             }
                             DropdownMenuItem(text = { Text("Share link (live list)") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareLink(whatsApp = false) })
                             DropdownMenuItem(text = { Text("Send link to WhatsApp") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareLink(whatsApp = true) })

@@ -13,6 +13,8 @@ import nl.baskt.data.BasketItem
 import nl.baskt.data.Comparison
 import nl.baskt.data.AllDealsResponse
 import nl.baskt.data.Choice
+import nl.baskt.data.WhatsAppChat
+import nl.baskt.data.WhatsAppStatus
 import kotlinx.coroutines.flow.update
 import nl.baskt.data.BarcodeResponse
 import nl.baskt.data.DealCard
@@ -263,6 +265,20 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         _deals.value = basket.deals(live)
         _loadingDeals.value = false
     }
+
+    private val _whatsapp = MutableStateFlow<WhatsAppStatus?>(null)
+    val whatsapp: StateFlow<WhatsAppStatus?> = _whatsapp
+    private val _whatsappQr = MutableStateFlow<String?>(null)
+    val whatsappQr: StateFlow<String?> = _whatsappQr
+    private val _whatsappChats = MutableStateFlow<List<WhatsAppChat>>(emptyList())
+    val whatsappChats: StateFlow<List<WhatsAppChat>> = _whatsappChats
+    fun loadWhatsApp() = viewModelScope.launch {
+        _whatsapp.value = runCatching { container.api.whatsappStatus() }.getOrNull()
+        _whatsappQr.value = if (_whatsapp.value?.hasQr == true) runCatching { container.api.whatsappQr().qr }.getOrNull() else null
+        _whatsappChats.value = if (_whatsapp.value?.status == "connected") runCatching { container.api.whatsappChats() }.getOrDefault(emptyList()) else emptyList()
+    }
+    fun setWhatsAppChat(chat: WhatsAppChat) = viewModelScope.launch { runCatching { container.api.whatsappSetChat(chat) }; loadWhatsApp() }
+    suspend fun sendToWhatsApp(store: String? = null): Result<Int> = runCatching { container.api.whatsappSend(basket.currentBasketId.value, store) }
 
     private val _memory = MutableStateFlow<List<Choice>>(emptyList())
     val memory: StateFlow<List<Choice>> = _memory

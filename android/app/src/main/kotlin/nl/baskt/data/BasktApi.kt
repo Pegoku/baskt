@@ -298,6 +298,18 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 
     suspend fun spendSummary(): SpendSummary = client.get(url("/purchases/summary")) { auth() }.expect()
 
+    suspend fun whatsappStatus(): WhatsAppStatus = client.get(url("/whatsapp/status")) { auth() }.expect()
+    suspend fun whatsappQr(): WhatsAppQr = client.get(url("/whatsapp/qr")) { auth() }.expect()
+    suspend fun whatsappChats(): List<WhatsAppChat> = client.get(url("/whatsapp/chats")) { auth() }.expect<WhatsAppChats>().chats
+    suspend fun whatsappSetChat(chat: WhatsAppChat) {
+        client.patch(url("/whatsapp/settings")) { auth(); contentType(ContentType.Application.Json); setBody(JsonObject(mapOf("chatId" to JsonPrimitive(chat.id), "chatName" to JsonPrimitive(chat.name ?: chat.id)))) }.expect<JsonObject>()
+    }
+    suspend fun whatsappSend(basketId: String, store: String?): Int =
+        client.post(url("/whatsapp/send")) {
+            auth(); contentType(ContentType.Application.Json)
+            setBody(JsonObject(mapOf("basketId" to JsonPrimitive(basketId), "store" to (store?.let { JsonPrimitive(it) } ?: JsonNull))))
+        }.expect<JsonObject>()["sent"]?.toString()?.toIntOrNull() ?: 0
+
     suspend fun memory(): List<Choice> = client.get(url("/memory")) { auth() }.expect<ChoicesResponse>().choices
 
     suspend fun deleteMemory(id: String) {

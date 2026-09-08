@@ -43,6 +43,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.layout.size
 import kotlinx.coroutines.launch
 import nl.baskt.data.LANGUAGE_OPTIONS
 import nl.baskt.ui.AppViewModel
@@ -126,6 +128,41 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
             HorizontalDivider()
             val serverSettings by viewModel.basket.serverSettings.collectAsState()
             LaunchedEffect(Unit) { viewModel.refreshStock() }
+            Text("WhatsApp bot", style = MaterialTheme.typography.titleMedium)
+            val whatsapp by viewModel.whatsapp.collectAsState()
+            val qr by viewModel.whatsappQr.collectAsState()
+            val chats by viewModel.whatsappChats.collectAsState()
+            LaunchedEffect(Unit) { viewModel.loadWhatsApp() }
+            when {
+                whatsapp == null || whatsapp?.enabled == false -> Text("Not set up. Run backend/whatsapp and set WHATSAPP_URL on the server; then the basket menu gets “Send items to WhatsApp bot”: one message per item, react ✅ to check it off.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                whatsapp?.status == "connected" -> {
+                    Text("Connected as ${whatsapp?.me ?: "?"} · sending to: ${whatsapp?.chatName ?: "no chat chosen"}", style = MaterialTheme.typography.bodySmall)
+                    var pick by remember { mutableStateOf(false) }
+                    Box {
+                        OutlinedButton(onClick = { pick = true; viewModel.loadWhatsApp() }) { Text("Choose chat") }
+                        DropdownMenu(expanded = pick, onDismissRequest = { pick = false }) {
+                            if (chats.isEmpty()) DropdownMenuItem(text = { Text("Loading chats…") }, onClick = {})
+                            for (chat in chats) DropdownMenuItem(text = { Text((chat.name ?: chat.id) + if (chat.isGroup) "  (group)" else "") }, onClick = { pick = false; viewModel.setWhatsAppChat(chat) })
+                        }
+                    }
+                }
+                qr != null -> {
+                    Text("Scan this code in WhatsApp → Linked devices to connect the bot.", style = MaterialTheme.typography.bodySmall)
+                    val bitmap = remember(qr) {
+                        runCatching {
+                            val bytes = android.util.Base64.decode(qr!!.substringAfter("base64,"), android.util.Base64.DEFAULT)
+                            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        }.getOrNull()
+                    }
+                    if (bitmap != null) androidx.compose.foundation.Image(bitmap = bitmap.asImageBitmap(), contentDescription = "WhatsApp QR", modifier = Modifier.size(240.dp))
+                    OutlinedButton(onClick = { viewModel.loadWhatsApp() }) { Text("Refresh") }
+                }
+                else -> {
+                    Text("Bridge status: ${whatsapp?.status}${whatsapp?.lastError?.let { " · $it" } ?: ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedButton(onClick = { viewModel.loadWhatsApp() }) { Text("Refresh") }
+                }
+            }
+            HorizontalDivider()
             Text("Learned preferences", style = MaterialTheme.typography.titleMedium)
             Text("Every pick, thumbs up and thumbs down the matching learns from. Remove anything set by mistake.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = onMemory) { Text("View and manage") }
