@@ -5,10 +5,13 @@ import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
+import androidx.compose.animation.togetherWith
 import kotlinx.serialization.Serializable
 import nl.baskt.ui.basket.BasketScreen
 import nl.baskt.ui.compare.CompareScreen
 import nl.baskt.ui.compare.OrderScreen
+import androidx.compose.ui.Modifier
+import nl.baskt.ui.common.swipeNavigation
 import nl.baskt.ui.basket.GroupScreen
 import nl.baskt.ui.item.ItemDetailScreen
 import nl.baskt.ui.settings.SettingsScreen
@@ -47,9 +50,21 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val top = backStack.lastOrNull()
     androidx.compose.runtime.LaunchedEffect(top) { focusManager.clearFocus(force = true); keyboard?.hide() }
+    // Shared-axis motion: the new screen slides in from the right over a fading old one; back mirrors it.
+    val enter = androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(380, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { it / 3 } +
+        androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(260))
+    val exit = androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(380, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { -it / 5 } +
+        androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(220))
+    val popEnter = androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(380, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { -it / 5 } +
+        androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(260))
+    val popExit = androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(380, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { it / 3 } +
+        androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(220))
     NavDisplay(
         backStack = backStack,
         onBack = { backStack.removeLastOrNull() },
+        transitionSpec = { enter togetherWith exit },
+        popTransitionSpec = { popEnter togetherWith popExit },
+        predictivePopTransitionSpec = { popEnter togetherWith popExit },
         entryProvider = entryProvider {
             entry<BasketRoute> {
                 BasketScreen(
@@ -61,6 +76,7 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
                     onStock = { backStack.add(StockRoute) },
                     onSearch = { backStack.add(SearchRoute) },
                     onScan = { backStack.add(ScannerRoute) },
+                    onSwipeToCompare = { backStack.add(CompareRoute) },
                     onDeals = { backStack.add(DealsRoute) },
                     onRecipes = { backStack.add(RecipesRoute) },
                     onShop = { backStack.add(ShopRoute(it)) },
@@ -79,11 +95,11 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
             }
             entry<ItemRoute> { route -> ItemDetailScreen(viewModel, route.itemId, onBack = { backStack.removeLastOrNull() }) }
             entry<CompareRoute> {
-                CompareScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) }, onOrder = { backStack.add(OrderRoute) })
+                CompareScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) }, onOrder = { backStack.add(OrderRoute) }, swipe = { onLeft, onRight -> Modifier.swipeNavigation(onLeft, onRight) })
             }
             entry<ScannerRoute> { ScannerScreen(viewModel, onClose = { backStack.removeLastOrNull() }) }
             entry<OrderRoute> {
-                OrderScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onShop = { backStack.add(ShopRoute(it)) })
+                OrderScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onShop = { backStack.add(ShopRoute(it)) }, swipeBack = Modifier.swipeNavigation(onSwipeRight = { backStack.removeLastOrNull() }))
             }
             entry<SettingsRoute> { SettingsScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onMemory = { backStack.add(MemoryRoute) }) }
             entry<MemoryRoute> { MemoryScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }

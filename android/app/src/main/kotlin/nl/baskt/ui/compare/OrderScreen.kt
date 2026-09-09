@@ -41,7 +41,7 @@ import nl.baskt.ui.common.StoreBadge
  * overrides; then jump into shopping mode for each store with only its assigned items.
  */
 @Composable
-fun OrderScreen(viewModel: AppViewModel, onBack: () -> Unit, onShop: (String) -> Unit) {
+fun OrderScreen(viewModel: AppViewModel, onBack: () -> Unit, onShop: (String) -> Unit, swipeBack: Modifier = Modifier) {
     val items by viewModel.basket.items.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
     val comparison by viewModel.comparison.collectAsState()
@@ -57,7 +57,7 @@ fun OrderScreen(viewModel: AppViewModel, onBack: () -> Unit, onShop: (String) ->
             )
         },
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+        Column(modifier = Modifier.fillMaxSize().padding(padding).then(swipeBack)) {
             Text("Where do you buy what?", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             Row(modifier = Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (store in enabled) FilterChip(selected = open.isNotEmpty() && open.all { it.assignedStore == store.code || it.match(store.code)?.effective == null }, onClick = { viewModel.assign("store:${store.code}") }, label = { Text("All ${store.name}") })
