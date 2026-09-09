@@ -50,7 +50,7 @@ import nl.baskt.ui.common.StoreBadge
 import nl.baskt.ui.common.storeName
 
 @Composable
-fun CompareScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String) -> Unit, onOrder: () -> Unit = {}, swipe: (onLeft: () -> Unit, onRight: () -> Unit) -> Modifier = { _, _ -> Modifier }) {
+fun CompareScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String) -> Unit, onOrder: () -> Unit = {}) {
     val comparison by viewModel.comparison.collectAsState()
     val comparing by viewModel.comparing.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
@@ -77,7 +77,7 @@ fun CompareScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (Stri
             )
         },
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).then(swipe(onOrder, onBack))) {
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             nl.baskt.ui.common.OfflineBanner(viewModel, needsServer = "Showing the last comparison.")
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Per store") }

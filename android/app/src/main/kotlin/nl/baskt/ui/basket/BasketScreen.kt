@@ -98,10 +98,9 @@ import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.BasketSwitcherTitle
 import nl.baskt.ui.common.StoreBadge
 import nl.baskt.ui.common.storeName
-import nl.baskt.ui.common.swipeNavigation
 
 @Composable
-fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit, onStock: () -> Unit, onSearch: () -> Unit, onDeals: () -> Unit, onRecipes: () -> Unit, onShop: (String) -> Unit, onPurchases: () -> Unit, onScan: () -> Unit = {}, onSwipeToCompare: () -> Unit = {}) {
+fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit, onStock: () -> Unit, onSearch: () -> Unit, onDeals: () -> Unit, onRecipes: () -> Unit, onShop: (String) -> Unit, onPurchases: () -> Unit, onScan: () -> Unit = {}) {
     val items by viewModel.basket.items.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
     val baskets by viewModel.basket.baskets.collectAsState()
@@ -295,8 +294,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        // Swipe left anywhere in the list area to review and compare.
-        Column(modifier = Modifier.fillMaxSize().padding(padding).swipeNavigation(onSwipeLeft = { if (items.any { !it.checked }) onSwipeToCompare() })) {
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
         nl.baskt.ui.common.OfflineBanner(viewModel, needsServer = "New ideas are matched once you're back online.")
         Box(modifier = Modifier.fillMaxSize()) {
             if (items.isEmpty()) {
