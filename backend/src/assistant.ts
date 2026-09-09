@@ -114,6 +114,8 @@ export function progressFor(basketId: string) {
 }
 function report(basketId: string, step: string) {
   const steps = progress.get(basketId) ?? [];
+  // "Thinking" is transient: replace it with the next real step instead of stacking it in the trace.
+  if (steps.length && steps[steps.length - 1] === "Thinking") steps.pop();
   steps.push(step);
   progress.set(basketId, steps.slice(-12));
 }
@@ -275,7 +277,7 @@ Change types for proposals (use real itemIds/productIds from tool results only):
 - {"type":"skip","itemId":..,"text":..,"store":..}
 - {"type":"add_recipe_folder","url":..,"title":..}
 Rules: when asked to change products (e.g. "swap 1 kg bags for 500 g"), first list_basket, then search_products per store for each item that matches; propose "replace" ONLY for items where you actually found a fitting product, and say which ones you could not find.
-The app itself asks the user to confirm every change: NEVER ask for permission in text ("would you like…?"). Whenever you have found concrete changes, put ALL of them in "proposal" in the same turn and describe them briefly in "reply"; the user ticks what they want. When the user wants a recipe, ALWAYS call search_recipes first and put real results in "recipes" (max 5) so the app can show cards; never invent a recipe in the text. Use read_recipe when the user is specific about what they want. "reply" is plain text without markdown. Stop using tools once you have what you need and give the final reply.`;
+The app itself asks the user to confirm every change: NEVER ask for permission in text ("would you like…?"). Whenever you have found concrete changes, put ALL of them in "proposal" in the same turn and describe them briefly in "reply"; the user ticks what they want. When the user wants a recipe, ALWAYS call search_recipes first and put real results in "recipes" (max 5) so the app can show cards; never invent a recipe in the text. Whenever you tell the user they need or lack items, ALWAYS also put an "add" change for each of them in "proposal". Use read_recipe when the user is specific about what they want. "reply" is plain text without markdown. Stop using tools once you have what you need and give the final reply.`;
 
 function sanitizeProposal(raw: unknown): Proposal | null {
   if (!raw || typeof raw !== "object") return null;
