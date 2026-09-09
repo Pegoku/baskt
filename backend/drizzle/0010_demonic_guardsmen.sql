@@ -1,0 +1,1 @@
+ALTER TABLE `basket_items` ADD `skipped_reason` text;

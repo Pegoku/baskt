@@ -27,6 +27,7 @@ export type BasketItemView = {
   parentId: string | null;
   recipe: BasketItemRow["recipeJson"];
   assignedStore: string | null;
+  skippedReason: string | null;
   text: string;
   quantity: number;
   checked: boolean;
@@ -70,6 +71,7 @@ export function itemView(item: BasketItemRow, matches: BasketMatchRow[], product
     parentId: item.parentId ?? null,
     recipe: item.recipeJson ?? null,
     assignedStore: item.assignedStore ?? null,
+    skippedReason: item.skippedReason ?? null,
     text: item.text,
     quantity: item.quantity,
     checked: item.checked,

@@ -457,6 +457,17 @@ describe("api", () => {
     await api(`/basket/items/${copied.id}`, { method: "DELETE" });
   });
 
+  test("an idea already in stock arrives checked with the reason", async () => {
+    const zout = (await (await api("/stock", { method: "POST", body: JSON.stringify({ text: "zout" }) })).json()) as any;
+    const item = (await (await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "zout" }) })).json()) as any;
+    expect(item.checked).toBe(true);
+    expect(item.skippedReason).toBe("in stock: zout");
+    const unchecked = (await (await api(`/basket/items/${item.id}`, { method: "PATCH", body: JSON.stringify({ checked: false }) })).json()) as any;
+    expect(unchecked.skippedReason).toBeNull();
+    await api(`/basket/items/${item.id}`, { method: "DELETE" });
+    await api(`/stock/${zout.id}`, { method: "DELETE" });
+  });
+
   test("stock entries are matched against ingredient texts", async () => {
     const added = await api("/stock", { method: "POST", body: JSON.stringify({ text: "salt" }) });
     expect(added.status).toBe(201);

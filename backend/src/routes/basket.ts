@@ -64,6 +64,8 @@ function viewOf(itemId: string) {
 function createItem(text: string, quantity: number, parentId: string | null = null, kind: BasketItemRow["kind"] = "item", basketId = DEFAULT_BASKET_ID) {
   const database = db();
   const last = database.select({ sortOrder: basketItems.sortOrder }).from(basketItems).orderBy(desc(basketItems.sortOrder)).get();
+  // Ideas you already have at home arrive checked, with the reason, instead of being bought twice.
+  const have = kind === "item" && skipInStock() ? inStock(text) : null;
   const item: BasketItemRow = {
     id: newId(),
     basketId: parentId ? getItem(parentId)?.basketId ?? basketId : basketId,
@@ -71,9 +73,10 @@ function createItem(text: string, quantity: number, parentId: string | null = nu
     parentId,
     recipeJson: null,
     assignedStore: null,
+    skippedReason: have ? `in stock: ${have.text}` : null,
     text: text.trim(),
     quantity: Math.max(1, Math.floor(quantity || 1)),
-    checked: false,
+    checked: Boolean(have),
     sortOrder: (last?.sortOrder ?? -1) + 1,
     status: "NEW",
     error: null,
@@ -242,6 +245,7 @@ basket.post("/items/from-product", async (c) => {
     parentId: body.parentId ?? null,
     recipeJson: null,
     assignedStore: null,
+    skippedReason: null,
     text,
     quantity: Math.max(1, Math.floor(body.quantity ?? 1)),
     checked: false,
@@ -411,7 +415,10 @@ basket.patch("/items/:id", async (c) => {
   if (body.assignedStore === null || (typeof body.assignedStore === "string" && hasStore(body.assignedStore))) patch.assignedStore = body.assignedStore;
   if (typeof body.text === "string" && body.text.trim()) patch.text = body.text.trim();
   if (typeof body.quantity === "number" && body.quantity >= 1) patch.quantity = Math.floor(body.quantity);
-  if (typeof body.checked === "boolean") patch.checked = body.checked;
+  if (typeof body.checked === "boolean") {
+    patch.checked = body.checked;
+    if (!body.checked) patch.skippedReason = null;
+  }
   if (typeof body.sortOrder === "number") patch.sortOrder = body.sortOrder;
   if (body.parentId !== undefined && item.kind === "item") {
     if (body.parentId && getItem(body.parentId)?.kind !== "group") return c.json({ error: { code: "BAD_REQUEST", message: "parentId is not a folder" } }, 400);

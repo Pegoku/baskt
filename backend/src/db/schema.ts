@@ -155,6 +155,8 @@ export const basketItems = sqliteTable("basket_items", {
   recipeJson: text("recipe_json", { mode: "json" }).$type<RecipeInfo | null>(),
   /** Store this item will be bought at (set in the order step); null = not decided yet. */
   assignedStore: text("assigned_store"),
+  /** Why the item was created already checked, e.g. "in stock: zout". */
+  skippedReason: text("skipped_reason"),
   text: text("text").notNull(),
   quantity: integer("quantity").notNull().default(1),
   checked: integer("checked", { mode: "boolean" }).notNull().default(false),
