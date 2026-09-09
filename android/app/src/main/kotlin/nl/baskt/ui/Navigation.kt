@@ -94,6 +94,13 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
                 HomePager(viewModel, startPage = 1, onOpenItem = { backStack.add(ItemRoute(it)) }, onOpenGroup = { backStack.add(GroupRoute(it)) }, onSettings = { backStack.add(SettingsRoute) }, onStock = { backStack.add(StockRoute) }, onSearch = { backStack.add(SearchRoute) }, onDeals = { backStack.add(DealsRoute) }, onRecipes = { backStack.add(RecipesRoute) }, onShop = { backStack.add(ShopRoute(it)) }, onPurchases = { backStack.add(PurchasesRoute) }, onScan = { backStack.add(ScannerRoute) })
             }
             entry<ScannerRoute> { ScannerScreen(viewModel, onClose = { backStack.removeLastOrNull() }) }
+            entry<PurchasesRoute> { PurchasesScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
+            entry<ShopRoute> { route -> ShopModeScreen(viewModel, route.store, onBack = { backStack.removeLastOrNull() }) }
+            entry<RecipesRoute> { RecipesScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onFolderAdded = { backStack.removeLastOrNull() }, onCreate = { backStack.add(RecipeEditorRoute(it)) }) }
+            entry<RecipeEditorRoute> { route -> RecipeEditorScreen(viewModel, route.recipeId, onBack = { backStack.removeLastOrNull() }) }
+            entry<DealsRoute> { DealsScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) }) }
+            entry<SearchRoute> { SearchScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) }) }
+            entry<StockRoute> { StockScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
             entry<SettingsRoute> { SettingsScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onMemory = { backStack.add(MemoryRoute) }) }
             entry<MemoryRoute> { MemoryScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
         },
