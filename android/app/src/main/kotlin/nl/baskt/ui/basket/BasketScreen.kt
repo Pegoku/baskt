@@ -200,12 +200,6 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
         VoiceConfirmSheet(proposal ?: emptyList(), interpreting, onDismiss = { viewModel.dismissProposal() }, onConfirm = { viewModel.confirmProposal(it) })
     }
 
-    LaunchedEffect(error) {
-        val message = error ?: return@LaunchedEffect
-        val result = snackbar.showSnackbar(message, actionLabel = "Settings")
-        if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) onSettings()
-        viewModel.basket.clearError()
-    }
 
     androidx.activity.compose.BackHandler(enabled = selectionMode) { viewModel.clearSelection() }
     Scaffold(

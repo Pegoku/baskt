@@ -74,6 +74,7 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
     val stockDishes by viewModel.stockDishes.collectAsState()
     val detail by viewModel.recipeDetail.collectAsState()
     val busy by viewModel.recipesBusy.collectAsState()
+    val searchMessage by viewModel.recipeMessage.collectAsState()
     var query by remember { mutableStateOf("") }
     var tab by remember { mutableIntStateOf(0) }
     var selected by remember { mutableStateOf<RecipeSummary?>(null) }
@@ -125,7 +126,7 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
             when (tab) {
                 0 -> RecipeList(
                     list = results,
-                    empty = "Type a dish, e.g. \"arroz cubano\" or \"iets met kip\". baskt understands it, searches Allerhande, Leuke Recepten, BBC Good Food, RecetasGratis, Cookpad and TheMealDB, and shows results in your language.",
+                    empty = searchMessage ?: "Type a dish, e.g. \"arroz cubano\" or \"iets met kip\". baskt understands it, searches Allerhande, Leuke Recepten, BBC Good Food, RecetasGratis, Cookpad and TheMealDB, and shows results in your language.",
                     busy = busy,
                     isFavourite = ::isFavourite,
                     onOpen = { selected = it; viewModel.openRecipe(it.url) },

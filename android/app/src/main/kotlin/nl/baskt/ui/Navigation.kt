@@ -15,6 +15,9 @@ import nl.baskt.ui.compare.OrderScreen
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import nl.baskt.ui.home.HomePager
 import nl.baskt.ui.basket.GroupScreen
 import nl.baskt.ui.item.ItemDetailScreen
@@ -63,6 +66,9 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
         androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(260))
     val popExit = androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(380, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { it / 3 } +
         androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(220))
+    // Global messages: anything that fails or finishes elsewhere is announced here, on top of every screen.
+    val snackbar = androidx.compose.runtime.remember { androidx.compose.material3.SnackbarHostState() }
+    androidx.compose.runtime.LaunchedEffect(Unit) { viewModel.notices.collect { message -> snackbar.showSnackbar(message, withDismissAction = true) } }
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(androidx.compose.material3.MaterialTheme.colorScheme.background)) {
     NavDisplay(
         backStack = backStack,
@@ -105,5 +111,6 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
             entry<MemoryRoute> { MemoryScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
         },
     )
+    androidx.compose.material3.SnackbarHost(snackbar, modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter).padding(bottom = 96.dp).zIndex(2f))
     }
 }

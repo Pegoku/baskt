@@ -125,15 +125,38 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     private val _recipesBusy = MutableStateFlow(false)
     val recipesBusy: StateFlow<Boolean> = _recipesBusy
 
+    /** One-line messages for the user (failures, outcomes), shown by a global snackbar. */
+    val notices = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 8)
+    fun notify(message: String) { notices.tryEmit(message) }
+
+    /** Runs a server call and turns any failure into a visible message instead of silence. */
+    private suspend fun <T> attempt(what: String, block: suspend () -> T): T? = try {
+        block()
+    } catch (e: Exception) {
+        val offline = e is java.io.IOException || e is io.ktor.client.plugins.HttpRequestTimeoutException || e is io.ktor.client.network.sockets.ConnectTimeoutException
+        notify(if (offline) "You're offline — $what needs the server" else "$what failed: ${e.message ?: "unknown error"}")
+        null
+    }
+
+    /** Why the last recipe search shows nothing (from the server, or a failure). */
+    private val _recipeMessage = MutableStateFlow<String?>(null)
+    val recipeMessage: StateFlow<String?> = _recipeMessage
+
     fun searchRecipes(query: String) = viewModelScope.launch {
         _recipesBusy.value = true
-        _recipeResults.value = runCatching { container.api.searchRecipes(query).results }.getOrElse { basket.run { }; emptyList() }
+        _recipeMessage.value = null
+        val response = attempt("Recipe search") { container.api.searchRecipes(query) }
+        _recipeResults.value = response?.results ?: emptyList()
+        _recipeMessage.value = response?.message ?: if (response == null) "The search could not be completed." else null
+        if (response != null && response.errors.isNotEmpty() && response.results.isNotEmpty()) notify("Some sites did not answer: ${response.errors.joinToString { it.source }}")
         _recipesBusy.value = false
     }
 
     /** Loads from the server and caches the result; when offline returns the last cached copy. */
     private inline fun <reified T> cachedLoad(name: String, fallback: T, fetch: () -> T): T =
-        runCatching(fetch).map { container.offline.save(name, it); it }.getOrElse { container.offline.load<T>(name) ?: fallback }
+        runCatching(fetch).map { container.offline.save(name, it); it }.getOrElse { error ->
+            container.offline.load<T>(name) ?: run { notify("Could not load ${name.replace('-', ' ')}: ${error.message ?: "server unreachable"}"); fallback }
+        }
 
     val online get() = basket.online
     val pending get() = basket.pending
@@ -144,14 +167,14 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     fun toggleRecipeFavourite(recipe: RecipeSummary) = viewModelScope.launch {
         val existing = _recipeFavourites.value.firstOrNull { it.url == recipe.url }
-        runCatching { if (existing != null) container.api.removeRecipeFavourite(existing.id) else container.api.addRecipeFavourite(recipe) }
+        attempt(if (existing != null) "Removing favourite" else "Saving favourite") { if (existing != null) container.api.removeRecipeFavourite(existing.id) else container.api.addRecipeFavourite(recipe) }
         loadRecipeFavourites()
     }
 
     fun openRecipe(recipeUrl: String) = viewModelScope.launch {
         _recipeDetail.value = null
         _recipesBusy.value = true
-        _recipeDetail.value = runCatching { container.api.fetchRecipe(recipeUrl) }.getOrNull()
+        _recipeDetail.value = attempt("Loading the recipe") { container.api.fetchRecipe(recipeUrl) }
         _recipesBusy.value = false
     }
 
@@ -177,12 +200,12 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     val generating: StateFlow<Boolean> = _generating
     fun findRecipeMatches(description: String) = viewModelScope.launch {
         _generating.value = true
-        _generate.value = runCatching { container.api.generateRecipe(description, draft = false) }.getOrNull()
+        _generate.value = attempt("Finding matching recipes") { container.api.generateRecipe(description, draft = false) }
         _generating.value = false
     }
     fun draftRecipe(description: String) = viewModelScope.launch {
         _generating.value = true
-        _generate.value = runCatching { container.api.generateRecipe(description, draft = true) }.getOrNull()
+        _generate.value = attempt("Writing the recipe") { container.api.generateRecipe(description, draft = true) }
         _generating.value = false
     }
     fun clearGenerate() { _generate.value = null }
@@ -201,7 +224,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     private val _priceChanges = MutableStateFlow<PriceChangesResponse?>(null)
     val priceChanges: StateFlow<PriceChangesResponse?> = _priceChanges
-    fun loadPriceChanges() = viewModelScope.launch { _priceChanges.value = runCatching { container.api.priceChanges() }.getOrNull() }
+    fun loadPriceChanges() = viewModelScope.launch { _priceChanges.value = attempt("Loading price changes") { container.api.priceChanges() } }
 
     suspend fun priceHistory(productId: String): List<PricePoint> = runCatching { container.api.priceHistory(productId) }.getOrDefault(emptyList())
 
@@ -271,7 +294,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     fun findDeals(live: Boolean) = viewModelScope.launch {
         _loadingDeals.value = true
-        _deals.value = basket.deals(live)
+        _deals.value = attempt("Finding deals") { container.api.deals(basket.currentBasketId.value, live) }
         _loadingDeals.value = false
     }
 
@@ -328,7 +351,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     fun loadAllDeals(query: String, store: String?) = viewModelScope.launch {
         _loadingAllDeals.value = true
-        _allDeals.value = runCatching { container.api.allDeals(query, store) }.getOrNull()
+        _allDeals.value = attempt("Loading deals") { container.api.allDeals(query, store) }
         _loadingAllDeals.value = false
     }
 
@@ -354,6 +377,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     init {
+        // Repository failures (adds, picks, deletes…) become visible on whatever screen is open.
+        viewModelScope.launch {
+            basket.error.collect { message -> if (message != null) { notify(message); basket.clearError() } }
+        }
         viewModelScope.launch {
             _settings.value = container.awaitSettings()
             container.settingsStore.settings.collect { _settings.value = it }
