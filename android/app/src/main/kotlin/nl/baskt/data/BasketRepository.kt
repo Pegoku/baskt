@@ -37,9 +37,27 @@ class BasketRepository(
         e is java.io.IOException || e is io.ktor.client.plugins.HttpRequestTimeoutException || e is io.ktor.client.network.sockets.ConnectTimeoutException ||
             e is io.ktor.client.network.sockets.SocketTimeoutException || (e.cause != null && e.cause !== e && isConnectivityError(e.cause!!))
 
+    private var probing = false
+
+    /**
+     * A failed request only means "offline" if a quick health probe fails too; one slow or aborted
+     * call must not flip the whole app into offline mode.
+     */
     private fun wentOffline() {
-        if (online.value) online.value = false
+        if (!online.value || probing) return
+        probing = true
+        scope.launch {
+            try {
+                val ok = kotlinx.coroutines.withTimeoutOrNull(4000) { runCatching { api.health() }.isSuccess } == true
+                if (!ok) online.value = false
+            } finally {
+                probing = false
+            }
+        }
     }
+
+    /** Quick check used by the periodic monitor: true when the server answers. */
+    suspend fun probe(): Boolean = kotlinx.coroutines.withTimeoutOrNull(4000) { runCatching { api.health() }.isSuccess } == true
 
     private fun enqueue(op: PendingOp) {
         pending.update { it + op }
@@ -116,11 +134,7 @@ class BasketRepository(
 
     /** Called when the network comes back (or on demand): replay the queue, then reload everything. */
     suspend fun tryReconnect() {
-        try {
-            api.health()
-        } catch (e: Exception) {
-            if (isConnectivityError(e)) { wentOffline(); return }
-        }
+        if (!probe()) { online.value = false; return }
         online.value = true
         replayQueue()
         if (pending.value.isEmpty()) {

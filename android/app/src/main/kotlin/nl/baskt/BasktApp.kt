@@ -39,11 +39,11 @@ class AppContainer(app: Application) {
                 scope.launch { basket.tryReconnect() }
             }
         })
-        // While offline, probe the server every 20 s in case only the server (not the network) was unreachable.
+        // Automatic connectivity monitor: every 10 s while offline (reconnect + replay), every 60 s while online.
         scope.launch {
             while (true) {
-                kotlinx.coroutines.delay(20_000)
-                if (!basket.online.value) basket.tryReconnect()
+                kotlinx.coroutines.delay(if (basket.online.value) 60_000 else 10_000)
+                if (!basket.online.value) basket.tryReconnect() else if (!basket.probe()) basket.online.value = false
             }
         }
         scope.launch {
