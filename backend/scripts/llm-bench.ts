@@ -412,9 +412,9 @@ async function pool<T>(items: T[], limit: number, worker: (item: T) => Promise<v
 
 async function runModel(model: string, meta: ModelMeta | undefined): Promise<ModelResult> {
   env.ai.model = model;
-  // gpt-oss only accepts an effort level; other thinking models are told not to think (hidden reasoning
+  // OpenAI models (gpt-oss, gpt-5) only accept an effort level; other thinking models are told not to think (hidden reasoning
   // eats the small token budgets these tasks use); models without the parameter get nothing.
-  env.ai.reasoning = !meta?.reasoning ? "none" : model.includes("gpt-oss") ? "low" : "off";
+  env.ai.reasoning = !meta?.reasoning ? "none" : model.startsWith("openai/") ? "low" : "off";
   const pinned = model === productionModel;
   env.ai.providerOrder = pinned ? productionProvider.order : [];
   env.ai.providerQuantizations = pinned ? productionProvider.quantizations : [];
