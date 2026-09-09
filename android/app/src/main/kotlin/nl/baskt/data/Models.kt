@@ -419,6 +419,8 @@ data class ProposedChange(
     val url: String? = null,
     val title: String? = null,
     val inStock: Boolean? = null,
+    val stockName: String? = null,
+    val inList: String? = null,
 )
 
 @Serializable

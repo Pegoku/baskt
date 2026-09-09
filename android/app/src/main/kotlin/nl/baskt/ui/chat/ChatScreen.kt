@@ -212,7 +212,7 @@ private fun ProposalCard(message: ChatMessage, summary: String, changes: List<Pr
     // First time: everything ticked except items already in stock. After applying some, start from nothing so the
     // remaining ones are a deliberate choice ("Apply 0").
     var selected by remember(message.id, applied.size) {
-        mutableStateOf(if (applied.isEmpty()) changes.indices.filter { changes[it].inStock != true }.toSet() else emptySet())
+        mutableStateOf(if (applied.isEmpty()) changes.indices.filter { changes[it].inStock != true && changes[it].inList == null }.toSet() else emptySet())
     }
     Card {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -257,7 +257,11 @@ private fun changeTitle(change: ProposedChange): String = when (change.type) {
 }
 
 private fun changeDetail(change: ProposedChange, storeNames: Map<String, String>): String? = when (change.type) {
-    "add" -> if (change.inStock == true) "Already in stock" else null
+    "add" -> when {
+        change.inList != null -> "Already in your list as “${change.inList}”"
+        change.inStock == true -> if (change.stockName != null) "Already in stock: “${change.stockName}”" else "Already in stock"
+        else -> null
+    }
     "replace" -> "${change.from ?: "current pick"} → ${change.to}"
     "add_recipe_folder" -> change.url
     else -> null
