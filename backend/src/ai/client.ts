@@ -48,7 +48,10 @@ export async function chatJson<T>(
         },
         body: JSON.stringify({
           model: env.ai.model,
-          messages,
+          // Some providers (Alibaba's Qwen) refuse JSON mode unless the prompt literally mentions JSON.
+          messages: messages.some((message) => /json/i.test(message.content))
+            ? messages
+            : [...messages, { role: "system", content: "Respond with a single JSON object." }],
           temperature: 0,
           max_tokens: maxTokens,
           response_format: { type: "json_object" },
