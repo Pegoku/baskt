@@ -126,7 +126,12 @@ export async function chatJson<T>(
         );
         continue;
       }
-      return JSON.parse(stripFences(content)) as T;
+      try {
+        return JSON.parse(stripFences(content)) as T;
+      } catch (error) {
+        // Show what came back so model quirks (prose, truncation) are diagnosable from the log.
+        throw new Error(`${error instanceof Error ? error.message : String(error)}; reply started with: ${content.slice(0, 160).replace(/\s+/g, " ")}`);
+      }
     } catch (error) {
       failures += 1;
       console.warn(
