@@ -24,6 +24,21 @@ Without `AI_API_KEY`/`AI_MODEL` the API still works: ideas are searched as typed
 5. The app shows 3 options per store. `choose` confirms one, `reject` ("none of them fit") records the rejected titles and reveals the next 3, searching wider (AI-suggested alternative query) when the list runs out. Every choice/rejection is stored in `choices` and fed back into later rankings; an identical idea is auto-matched to what was chosen before.
 6. `GET /api/v1/basket/compare` computes per-store totals (full and "comparable" over items present everywhere), cheapest store per item, unit-price-aware hints and a mix-and-match minimum.
 
+## Choosing an AI model
+
+`bun run bench` runs the app's real AI tasks (idea parsing, alternative queries, candidate ranking, deal
+search expansion, recipe localisation and full assistant turns with tools) against several models and writes
+a markdown report to `bench/` with pass rate, latency and cost per model. It uses an in-memory database, so
+your data and caches are untouched; the API key comes from `.env`.
+
+```bash
+bun run bench                                             # default model list
+bun run bench -- --models openai/gpt-oss-20b,openai/gpt-oss-120b --runs 2
+bun run bench -- --only assistant                         # one group: parse, alternatives, rank, deals, localize, assistant
+```
+
+Add a check by appending to `cases` in `scripts/llm-bench.ts`; add a model by listing its OpenRouter id.
+
 ## Adding a supermarket
 
 Implement `StoreAdapter` (`src/stores/types.ts`) in `src/stores/<store>.ts` and add it to the list in `src/stores/registry.ts`. Nothing else changes: the app reads the store list from `GET /api/v1/stores`.
