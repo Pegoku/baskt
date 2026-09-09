@@ -157,10 +157,18 @@ function providerField() {
   };
 }
 
+/**
+ * Pulls the JSON object out of a reply. Some models ignore response_format and add prose ("Here is the
+ * JSON: …") or code fences, so fall back to the outermost {...} block.
+ */
 function stripFences(content: string) {
   const trimmed = content.trim();
-  const fence = trimmed.match(/^```(?:json)?\s*([\s\S]*?)```$/i);
-  return fence ? fence[1] : trimmed;
+  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const body = fence ? fence[1].trim() : trimmed;
+  if (body.startsWith("{") || body.startsWith("[")) return body;
+  const start = body.indexOf("{");
+  const end = body.lastIndexOf("}");
+  return start >= 0 && end > start ? body.slice(start, end + 1) : body;
 }
 
 /** Wraps chatJson with the ai_cache table. */
