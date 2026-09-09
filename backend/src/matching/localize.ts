@@ -4,7 +4,7 @@ import { aiConfigured } from "@/env";
 import { normalizeText, sha256 } from "@/lib/text";
 import type { Recipe } from "@/matching/recipes";
 
-export const L10N_PROMPT_VERSION = "v2";
+export const L10N_PROMPT_VERSION = "v3";
 
 export type LocalizedRecipe = Recipe & { originalTitle: string; language: string };
 
@@ -22,7 +22,7 @@ export async function localizeRecipe(recipe: Recipe): Promise<LocalizedRecipe> {
     [
       {
         role: "system",
-        content: `Rewrite this recipe in ${appLanguageName()} (translate when needed). Ingredient lines: keep amounts and units, same count and order. Steps: keep the same count and order, but turn each into a clean, self-contained cooking instruction: remove links, "see this article", tips about other recipes, ads, and chatty filler; keep times, temperatures and techniques. Return ONLY {"title": string, "ingredientLines": string[], "steps": string[]}.`,
+        content: `Translate this recipe into ${appLanguageName()}. The title and EVERY ingredient line must be in ${appLanguageName()} (e.g. "250 g tarwebloem" becomes "250 g wheat flour" in English): keep amounts and units, same count and order, translate the words. Steps: keep the same count and order, but turn each into a clean, self-contained cooking instruction in ${appLanguageName()}: remove links, "see this article", tips about other recipes, ads, and chatty filler; keep times, temperatures and techniques. Return ONLY {"title": string, "ingredientLines": string[], "steps": string[]}.`,
       },
       { role: "user", content: JSON.stringify({ title: recipe.title, ingredientLines: recipe.ingredientLines, steps: steps.map((step) => step.text) }) },
     ],
