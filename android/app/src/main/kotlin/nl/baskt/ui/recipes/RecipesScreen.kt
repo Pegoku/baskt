@@ -101,7 +101,14 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(onClick = { onCreate(null) }, icon = { Icon(Icons.Default.Add, contentDescription = null) }, text = { Text("New recipe") })
+            // While something is typed, the button becomes the search (or link import) action.
+            val typing = query.isNotBlank()
+            val isLink = query.trim().startsWith("http://") || query.trim().startsWith("https://")
+            ExtendedFloatingActionButton(
+                onClick = { if (typing) submit() else onCreate(null) },
+                icon = { Icon(if (!typing) Icons.Default.Add else if (isLink) Icons.Default.Link else Icons.Default.Search, contentDescription = null) },
+                text = { Text(if (!typing) "New recipe" else if (isLink) "Add as folder" else "Search") },
+            )
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
