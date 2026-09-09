@@ -412,7 +412,9 @@ async function pool<T>(items: T[], limit: number, worker: (item: T) => Promise<v
 
 async function runModel(model: string, meta: ModelMeta | undefined): Promise<ModelResult> {
   env.ai.model = model;
-  env.ai.reasoning = meta?.reasoning ? "low" : "none";
+  // gpt-oss only accepts an effort level; other thinking models are told not to think (hidden reasoning
+  // eats the small token budgets these tasks use); models without the parameter get nothing.
+  env.ai.reasoning = !meta?.reasoning ? "none" : model.includes("gpt-oss") ? "low" : "off";
   const pinned = model === productionModel;
   env.ai.providerOrder = pinned ? productionProvider.order : [];
   env.ai.providerQuantizations = pinned ? productionProvider.quantizations : [];
@@ -510,7 +512,7 @@ function report(all: ModelResult[], meta: Map<string, ModelMeta>) {
 const meta = await loadModelMeta();
 const all: ModelResult[] = [];
 for (const model of models) {
-  console.log(`\n=== ${model} ${meta.get(model)?.reasoning ? "(reasoning: low)" : ""}`);
+  console.log(`\n=== ${model}`);
   all.push(await runModel(model, meta.get(model)));
   const last = all[all.length - 1];
   console.log(`  → ${last.results.filter((r) => r.ok).length}/${last.results.length} passed in ${(last.wallMs / 1000).toFixed(0)}s, ${last.failures} failed AI calls`);

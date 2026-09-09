@@ -36,6 +36,7 @@ export async function chatJson<T>(
 ): Promise<T | null> {
   if (!aiConfigured()) return null;
   const retries = options.retries ?? 2;
+  let maxTokens = options.maxTokens ?? 1500;
   for (let attempt = 1; attempt <= retries; attempt += 1) {
     calls += 1;
     try {
@@ -49,7 +50,7 @@ export async function chatJson<T>(
           model: env.ai.model,
           messages,
           temperature: 0,
-          max_tokens: options.maxTokens ?? 1500,
+          max_tokens: maxTokens,
           response_format: { type: "json_object" },
           ...(options.tools?.length
             ? { tools: options.tools, tool_choice: "auto" }
@@ -129,6 +130,8 @@ export async function chatJson<T>(
       try {
         return JSON.parse(stripFences(content)) as T;
       } catch (error) {
+        // Thinking models can burn the budget on hidden reasoning and get cut off mid-JSON: give the retry room.
+        if (choice?.finish_reason === "length") maxTokens *= 3;
         // Show what came back so model quirks (prose, truncation) are diagnosable from the log.
         throw new Error(`${error instanceof Error ? error.message : String(error)}; reply started with: ${content.slice(0, 160).replace(/\s+/g, " ")}`);
       }
