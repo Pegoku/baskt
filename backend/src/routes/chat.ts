@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { DEFAULT_BASKET_ID } from "@/db/schema";
-import { applyProposal, chat, clearHistory, history } from "@/assistant";
+import { applyProposal, chat, clearHistory, history, progressFor } from "@/assistant";
 import { basketExists } from "@/routes/baskets";
 
 /** Assistant chat: persistent per-basket history, tool-using turns, confirm-before-apply proposals. */
@@ -10,6 +10,13 @@ chatRoute.get("/", (c) => {
   const basketId = c.req.query("basketId") ?? DEFAULT_BASKET_ID;
   if (!basketExists(basketId)) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
   return c.json({ basketId, messages: history(basketId) });
+});
+
+/** Live steps of the turn in progress (empty when idle); the app polls this while waiting. */
+chatRoute.get("/progress", (c) => {
+  const basketId = c.req.query("basketId") ?? DEFAULT_BASKET_ID;
+  const steps = progressFor(basketId);
+  return c.json({ busy: steps.length > 0, steps });
 });
 
 chatRoute.post("/", async (c) => {

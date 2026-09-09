@@ -56,6 +56,30 @@ function basketSnapshot(basketId: string) {
 
 type ToolCall = { name: string; args: Record<string, unknown> };
 
+/** What the assistant is doing right now, per basket, for the app to show while it waits. */
+const progress = new Map<string, string[]>();
+export function progressFor(basketId: string) {
+  return progress.get(basketId) ?? [];
+}
+function report(basketId: string, step: string) {
+  const steps = progress.get(basketId) ?? [];
+  steps.push(step);
+  progress.set(basketId, steps.slice(-12));
+}
+
+function describeTool(call: ToolCall): string {
+  const args = call.args ?? {};
+  const storeName = (code: unknown) => allStores().find((store) => store.code === code)?.name ?? String(code ?? "");
+  switch (call.name) {
+    case "list_basket": return "Reading your basket";
+    case "list_stock": return "Checking what you have in stock";
+    case "search_products": return `Searching ${storeName(args.store)} for “${String(args.query ?? "")}”`;
+    case "search_recipes": return `Looking for recipes: “${String(args.query ?? "")}”`;
+    case "read_recipe": return `Reading a recipe (${String(args.url ?? "").replace(/^https?:\/\/(www\.)?/, "").split("/")[0]})`;
+    default: return `Using ${call.name}`;
+  }
+}
+
 async function runTool(call: ToolCall, basketId: string): Promise<unknown> {
   const args = call.args ?? {};
   switch (call.name) {
@@ -191,6 +215,8 @@ export async function chat(basketId: string, text: string): Promise<ChatMessageR
   let reply = "";
   let proposal: Proposal | null = null;
   let recipes: RecipeCard[] | null = null;
+  progress.set(basketId, []);
+  report(basketId, "Thinking about your request");
   for (let step = 0; step < MAX_STEPS; step += 1) {
     const raw = await chatJson<{ reply?: unknown; tool?: unknown; proposal?: unknown; recipes?: unknown }>(messages, { maxTokens: 4000 });
     if (!raw) {
@@ -202,11 +228,14 @@ export async function chat(basketId: string, text: string): Promise<ChatMessageR
     recipes = sanitizeRecipes(raw.recipes) ?? recipes;
     const tool = raw.tool && typeof raw.tool === "object" && typeof (raw.tool as ToolCall).name === "string" ? (raw.tool as ToolCall) : null;
     if (!tool) break;
+    report(basketId, describeTool(tool));
     const result = await runTool(tool, basketId);
+    report(basketId, "Thinking");
     messages.push({ role: "system", content: `ASSISTANT called ${tool.name}(${JSON.stringify(tool.args ?? {})})` });
     messages.push({ role: "user", content: `TOOL RESULT ${tool.name}: ${JSON.stringify(result).slice(0, 6000)}` });
   }
   if (!reply) reply = proposal ? proposal.summary : recipes ? "Here are some recipes." : "Done.";
+  progress.delete(basketId);
   return [userRow, save({ basketId, role: "assistant", content: reply, proposalJson: proposal, recipesJson: recipes })];
 }
 
