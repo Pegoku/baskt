@@ -10,8 +10,46 @@ import { fetchRecipeFromUrl, searchAllSources, SITE_SOURCES } from "@/matching/s
 
 export const recipes = new Hono();
 
+/** Fetched recipes are kept for a day so opening one that was prefetched is instant. */
+const recipeCache = new Map<string, { at: number; recipe: Recipe | null }>();
+const RECIPE_TTL = 24 * 60 * 60 * 1000;
+const inflight = new Map<string, Promise<Recipe | null>>();
+
 export async function fetchRecipe(url: string): Promise<Recipe | null> {
-  return fetchRecipeFromUrl(url);
+  const cached = recipeCache.get(url);
+  if (cached && Date.now() - cached.at < RECIPE_TTL) return cached.recipe;
+  let pending = inflight.get(url);
+  if (!pending) {
+    pending = fetchRecipeFromUrl(url)
+      .then((recipe) => {
+        recipeCache.set(url, { at: Date.now(), recipe });
+        return recipe;
+      })
+      .finally(() => inflight.delete(url));
+    inflight.set(url, pending);
+  }
+  return pending;
+}
+
+/**
+ * Warms the cache for the results the user is most likely to open (the first ones on screen): page fetch plus
+ * the translated version. Runs in the background, a few at a time, and never blocks the response.
+ */
+export function prefetchRecipes(urls: string[], concurrency = 3) {
+  const queue = urls.filter((url) => !recipeCache.has(url));
+  if (!queue.length) return;
+  const worker = async () => {
+    while (queue.length) {
+      const url = queue.shift()!;
+      try {
+        const recipe = await fetchRecipe(url);
+        if (recipe) await localizeRecipe(recipe);
+      } catch {
+        // best effort
+      }
+    }
+  };
+  void Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
 }
 
 export function getUserRecipe(id: string): UserRecipeRow | null {
@@ -37,6 +75,8 @@ recipes.get("/search", async (c) => {
     : errors.length
       ? `Recipe sites did not answer (${errors.map((entry) => entry.source).join(", ")}). Try again in a moment.`
       : `No recipes found for “${understood.dish}” on any site.`;
+  // Warm the first results while the user is still reading the list.
+  prefetchRecipes(hits.slice(0, 8).map((hit) => hit.url));
   return c.json({ query, dish: understood.dish, queries: understood.queries, results: hits.map((hit, index) => ({ ...hit, titleLocalized: localized[index], slug: "" })), errors, message });
 });
 
