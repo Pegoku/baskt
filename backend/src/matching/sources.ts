@@ -138,14 +138,25 @@ export async function fetchRecipeFromUrl(url: string): Promise<Recipe | null> {
 }
 
 /** Searches every source with the query in its language; failures of one site never hide the others. */
-export async function searchAllSources(queries: { en: string; nl: string; es: string }, options: { sources?: string[] } = {}): Promise<RecipeHit[]> {
+export type SourceError = { source: string; message: string };
+
+export async function searchAllSources(
+  queries: { en: string; nl: string; es: string },
+  options: { sources?: string[] } = {},
+): Promise<{ hits: RecipeHit[]; errors: SourceError[] }> {
   const wanted = options.sources;
+  const errors: SourceError[] = [];
   const tasks: Array<Promise<RecipeHit[]>> = [];
+  const guard = (name: string, task: Promise<RecipeHit[]>) =>
+    task.catch((error) => {
+      errors.push({ source: name, message: error instanceof Error ? error.message : String(error) });
+      return [] as RecipeHit[];
+    });
   for (const site of SITE_SOURCES) {
     if (wanted && !wanted.includes(site.id)) continue;
-    tasks.push(searchSite(site, queries[site.language]).catch(() => []));
+    tasks.push(guard(site.name, searchSite(site, queries[site.language])));
   }
-  if (!wanted || wanted.includes("themealdb")) tasks.push(searchMealDb(queries.en).catch(() => []));
+  if (!wanted || wanted.includes("themealdb")) tasks.push(guard("TheMealDB", searchMealDb(queries.en)));
   const results = await Promise.all(tasks);
   const seen = new Set<string>();
   const merged: RecipeHit[] = [];
@@ -160,5 +171,5 @@ export async function searchAllSources(queries: { en: string; nl: string; es: st
       }
     }
   }
-  return merged;
+  return { hits: merged, errors };
 }

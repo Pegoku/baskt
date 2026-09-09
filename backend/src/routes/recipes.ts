@@ -29,9 +29,15 @@ recipes.get("/search", async (c) => {
   const query = c.req.query("q")?.trim();
   if (!query) return c.json({ error: { code: "BAD_REQUEST", message: "q is required" } }, 400);
   const understood = await dishQueries(query);
-  const hits = await searchAllSources(understood.queries);
+  const { hits, errors } = await searchAllSources(understood.queries);
   const localized = await localizeTitles(hits.map((hit) => hit.title));
-  return c.json({ query, dish: understood.dish, queries: understood.queries, results: hits.map((hit, index) => ({ ...hit, titleLocalized: localized[index], slug: "" })) });
+  // Always say why a list is empty: nothing matched, or the sites could not be reached.
+  const message = hits.length
+    ? null
+    : errors.length
+      ? `Recipe sites did not answer (${errors.map((entry) => entry.source).join(", ")}). Try again in a moment.`
+      : `No recipes found for “${understood.dish}” on any site.`;
+  return c.json({ query, dish: understood.dish, queries: understood.queries, results: hits.map((hit, index) => ({ ...hit, titleLocalized: localized[index], slug: "" })), errors, message });
 });
 
 /** Full recipe (ingredients, steps) for a URL from any supported site, in the app language. */
@@ -64,7 +70,7 @@ recipes.post("/generate", async (c) => {
     return c.json({ draft });
   }
   const understood = await dishQueries(body.description);
-  const hits = (await searchAllSources(understood.queries)).slice(0, 8);
+  const hits = (await searchAllSources(understood.queries)).hits.slice(0, 8);
   const localized = await localizeTitles(hits.map((hit) => hit.title));
   return c.json({ dish: understood.dish, matches: hits.map((hit, index) => ({ ...hit, titleLocalized: localized[index] })) });
 });
