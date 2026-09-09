@@ -13,6 +13,7 @@ import nl.baskt.ui.basket.BasketScreen
 import nl.baskt.ui.compare.CompareScreen
 import nl.baskt.ui.compare.OrderScreen
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
@@ -115,6 +116,7 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
             entry<MemoryRoute> { MemoryScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
         },
     )
-    androidx.compose.material3.SnackbarHost(snackbar, modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter).padding(bottom = 96.dp).zIndex(2f))
+    // imePadding keeps failure messages visible above the keyboard (e.g. while typing in the assistant).
+    androidx.compose.material3.SnackbarHost(snackbar, modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter).imePadding().padding(bottom = 96.dp).zIndex(2f))
     }
 }

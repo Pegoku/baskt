@@ -36,6 +36,7 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
         install(HttpTimeout) {
             requestTimeoutMillis = 60_000
             connectTimeoutMillis = 10_000
+            socketTimeoutMillis = 60_000 // OkHttp's default read timeout is 10 s, too short for AI-backed calls
         }
         expectSuccess = false
     }
@@ -318,7 +319,7 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
     suspend fun chatSend(basketId: String, text: String): List<ChatMessage> =
         client.post(url("/chat")) {
             auth(); contentType(ContentType.Application.Json); setBody(JsonObject(mapOf("basketId" to JsonPrimitive(basketId), "text" to JsonPrimitive(text))))
-            timeout { requestTimeoutMillis = 300_000 }
+            timeout { requestTimeoutMillis = 300_000; socketTimeoutMillis = 300_000 }
         }.expect<ChatReply>().messages
 
     suspend fun chatProgress(basketId: String): ChatProgress = client.get(url("/chat/progress")) { auth(); parameter("basketId", basketId) }.expect()
