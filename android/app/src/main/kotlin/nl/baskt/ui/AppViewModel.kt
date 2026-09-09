@@ -375,7 +375,15 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun addStock(text: String) = viewModelScope.launch { basket.addStock(text) }
     fun addProductToStock(product: Product, barcode: String?) = viewModelScope.launch { basket.addProductToStock(product, barcode) }
     fun stockEntryFor(product: Product, barcode: String?): StockItem? = basket.stock.value.firstOrNull { it.productId == product.id || (barcode != null && it.barcode == barcode) }
-    fun addToStockFromItem(item: BasketItem) = viewModelScope.launch { basket.addStock(item.parsed?.canonicalName ?: item.text) }
+    fun addToStockFromItem(item: BasketItem) = viewModelScope.launch { basket.addItemToStock(item) }
+
+    /** Shopping mode: buying an item puts it in stock with the product you bought. */
+    fun markBought(item: BasketItem, product: Product) = viewModelScope.launch {
+        basket.setChecked(item, true)
+        basket.addItemToStock(item, product)
+    }
+    val lastAdded get() = basket.lastAdded
+    fun consumeLastAdded() { basket.lastAdded.value = null }
     fun removeStock(item: StockItem) = viewModelScope.launch { basket.removeStock(item) }
     fun setSkipInStock(enabled: Boolean) = viewModelScope.launch { basket.setSkipInStock(enabled) }
     fun addSkipped(group: BasketItem) = viewModelScope.launch { basket.addSkipped(group) }

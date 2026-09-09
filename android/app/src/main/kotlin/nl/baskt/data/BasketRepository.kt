@@ -169,6 +169,14 @@ class BasketRepository(
             _stock.update { list -> list + StockItem(id = localId(), text = text, canonical = text.lowercase()) }
         }) { api.addStock(text); refreshStock() }
     }
+    /** Stocks an idea using its picked product for the picture and size. */
+    suspend fun addItemToStock(item: BasketItem, product: Product? = item.anyProduct) {
+        val text = item.parsed?.canonicalName?.takeIf { it.isNotBlank() } ?: item.text
+        queued(PendingOp(type = "stockAdd", text = text, productId = product?.id), optimistic = {
+            _stock.update { list -> list + StockItem(id = localId(), text = text, canonical = text.lowercase(), quantityText = product?.quantityText, productId = product?.id, imageUrl = product?.imageUrl) }
+        }) { api.addStock(text = text, quantityText = product?.quantityText, productId = product?.id, imageUrl = product?.imageUrl); refreshStock() }
+    }
+
     suspend fun addProductToStock(product: Product, barcode: String?) {
         val text = product.title.replace(Regex("^(AH|Jumbo(?:'s)?)\\s+"), "")
         queued(PendingOp(type = "stockAdd", text = text, productId = product.id), optimistic = {
@@ -359,10 +367,15 @@ class BasketRepository(
         status = "QUEUED", sortOrder = (_items.value.maxOfOrNull { it.sortOrder } ?: -1) + 1, createdAt = System.currentTimeMillis(), updatedAt = System.currentTimeMillis(),
     )
 
+    /** Last item created online; the UI uses it to explain "already in stock" once. */
+    val lastAdded = MutableStateFlow<BasketItem?>(null)
+
     suspend fun add(text: String, quantity: Int, parentId: String? = null) {
         val local = localItem(text, quantity, parentId)
         queued(PendingOp(type = "add", text = text, quantity = quantity, parentId = parentId, basketId = _currentBasketId.value, itemId = local.id), optimistic = { _items.update { it + local } }) {
-            replace(api.addItem(text, quantity, _currentBasketId.value, parentId))
+            val created = api.addItem(text, quantity, _currentBasketId.value, parentId)
+            replace(created)
+            lastAdded.value = created
         }
     }
 

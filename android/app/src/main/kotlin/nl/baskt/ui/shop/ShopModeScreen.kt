@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -72,12 +74,14 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                         Text(section, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
                     }
                     items(entries, key = { it.first.id }) { (item, product) ->
+                        // Buying (checking) here also puts the product in stock.
+                        val buy = { if (item.checked) viewModel.toggleChecked(item) else viewModel.markBought(item, product) }
                         Row(
-                            modifier = Modifier.fillMaxWidth().clickable { viewModel.toggleChecked(item) }.padding(horizontal = 8.dp, vertical = 6.dp),
+                            modifier = Modifier.fillMaxWidth().clickable { buy() }.padding(horizontal = 8.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Checkbox(checked = item.checked, onCheckedChange = { viewModel.toggleChecked(item) }, modifier = Modifier.padding(4.dp))
+                            Checkbox(checked = item.checked, onCheckedChange = { buy() }, modifier = Modifier.padding(4.dp))
                             ProductThumb(product, size = 44)
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
@@ -86,7 +90,10 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                     textDecoration = if (item.checked) TextDecoration.LineThrough else null,
                                     color = if (item.checked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                                 )
-                                Text("${product.quantityText} · for “${item.text}”", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    if (item.checked) Icon(Icons.Default.Kitchen, contentDescription = "In stock", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(if (item.checked) "Bought · in stock" else "${product.quantityText} · for “${item.text}”", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                             Text((product.priceCents * item.quantity).euros(), fontWeight = FontWeight.SemiBold)
                         }

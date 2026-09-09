@@ -145,6 +145,15 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
     }
     val whatsapp by viewModel.whatsapp.collectAsState()
     LaunchedEffect(Unit) { viewModel.loadWhatsApp() }
+    val lastAdded by viewModel.lastAdded.collectAsState()
+    LaunchedEffect(lastAdded?.id) {
+        val added = lastAdded ?: return@LaunchedEffect
+        viewModel.consumeLastAdded()
+        if (added.inStock) {
+            val result = snackbar.showSnackbar("“${added.text}” is already in your stock — marked as done", actionLabel = "Buy anyway", withDismissAction = true)
+            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) viewModel.toggleChecked(added)
+        }
+    }
     /** Opens the Google code scanner straight away; the result shows in the scan sheet below. */
     fun startScan(context: android.content.Context) {
         val options = com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions.Builder()
@@ -380,6 +389,10 @@ fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Uni
                 }
                 Spacer(Modifier.height(4.dp))
                 when {
+                    item.inStock -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(Icons.Default.Kitchen, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Already in stock", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     item.isQueued -> Text("Waiting for connection — will be matched later", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
                     item.isProcessing -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         LoadingIndicator(modifier = Modifier.size(20.dp))

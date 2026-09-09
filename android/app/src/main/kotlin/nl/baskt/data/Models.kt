@@ -105,6 +105,7 @@ data class BasketItem(
     val parentId: String? = null,
     val recipe: RecipeInfo? = null,
     val assignedStore: String? = null,
+    val skippedReason: String? = null,
     val text: String,
     val quantity: Int = 1,
     val checked: Boolean = false,
@@ -121,6 +122,10 @@ data class BasketItem(
     /** Created while offline; waits for the connection to be sent. */
     val isQueued: Boolean get() = status == "QUEUED" || id.startsWith("local-")
     val isGroup: Boolean get() = kind == "group"
+    /** Checked automatically because the idea was already in stock. */
+    val inStock: Boolean get() = checked && skippedReason != null
+    /** The product picked (or suggested) at any store, preferring confirmed picks. */
+    val anyProduct: Product? get() = matches.firstOrNull { it.status == "CHOSEN" }?.chosen ?: matches.firstOrNull { it.effective != null }?.effective
     fun match(store: String) = matches.firstOrNull { it.store == store }
 }
 
