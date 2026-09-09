@@ -91,7 +91,7 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
     var openRecipe by remember { mutableStateOf<RecipeCard?>(null) }
     val listState = rememberLazyListState()
     LaunchedEffect(Unit) { viewModel.loadChat() }
-    LaunchedEffect(messages.size, busy) { if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size + (if (busy) 1 else 0)) }
+    LaunchedEffect(messages.size, busy, steps.size) { if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size + (if (busy) 1 else 0), scrollOffset = Int.MAX_VALUE / 2) }
     fun send() {
         val text = input.trim()
         if (text.isEmpty() || busy) return
