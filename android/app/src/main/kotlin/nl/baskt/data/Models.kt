@@ -418,6 +418,7 @@ data class ProposedChange(
     val productId: String? = null,
     val url: String? = null,
     val title: String? = null,
+    val inStock: Boolean? = null,
 )
 
 @Serializable

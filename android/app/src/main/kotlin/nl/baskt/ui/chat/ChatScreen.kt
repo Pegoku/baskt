@@ -209,7 +209,11 @@ private fun AssistantMessage(message: ChatMessage, storeNames: Map<String, Strin
 
 @Composable
 private fun ProposalCard(message: ChatMessage, summary: String, changes: List<ProposedChange>, applied: List<Int>, storeNames: Map<String, String>, onApply: (List<Int>) -> Unit) {
-    var selected by remember(message.id, applied.size) { mutableStateOf(changes.indices.filter { it !in applied }.toSet()) }
+    // First time: everything ticked except items already in stock. After applying some, start from nothing so the
+    // remaining ones are a deliberate choice ("Apply 0").
+    var selected by remember(message.id, applied.size) {
+        mutableStateOf(if (applied.isEmpty()) changes.indices.filter { changes[it].inStock != true }.toSet() else emptySet())
+    }
     Card {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(summary, style = MaterialTheme.typography.titleSmall)
@@ -253,6 +257,7 @@ private fun changeTitle(change: ProposedChange): String = when (change.type) {
 }
 
 private fun changeDetail(change: ProposedChange, storeNames: Map<String, String>): String? = when (change.type) {
+    "add" -> if (change.inStock == true) "Already in stock" else null
     "replace" -> "${change.from ?: "current pick"} → ${change.to}"
     "add_recipe_folder" -> change.url
     else -> null
