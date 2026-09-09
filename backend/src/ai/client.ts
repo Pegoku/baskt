@@ -20,7 +20,7 @@ export function aiStats() {
 /** Calls an OpenAI-compatible chat-completions endpoint and parses the JSON object it returns. */
 export async function chatJson<T>(
   messages: ChatMessage[],
-  options: { maxTokens?: number; retries?: number } = {},
+  options: { maxTokens?: number; retries?: number; tools?: unknown[] } = {},
 ): Promise<T | null> {
   if (!aiConfigured()) return null;
   const retries = options.retries ?? 2;
@@ -39,6 +39,9 @@ export async function chatJson<T>(
           temperature: 0,
           max_tokens: options.maxTokens ?? 1500,
           response_format: { type: "json_object" },
+          ...(options.tools?.length
+            ? { tools: options.tools, tool_choice: "auto" }
+            : {}),
           ...reasoningField(),
           ...providerField(),
         }),
@@ -57,12 +60,45 @@ export async function chatJson<T>(
             content?: string;
             reasoning?: string;
             reasoning_content?: string;
+            tool_calls?: Array<{
+              function?: { name?: string; arguments?: string };
+            }>;
           };
           finish_reason?: string;
         }>;
       };
       const choice = payload.choices?.[0];
       const content = choice?.message?.content;
+      // Some models (gpt-oss) emit a native function call when the prompt describes tools, even though
+      // none are declared. Translate it into the JSON "tool" field the assistant protocol expects.
+      const nativeCall = choice?.message?.tool_calls?.[0]?.function;
+      if (!content && nativeCall?.name) {
+        let args: unknown = {};
+        try {
+          args = nativeCall.arguments ? JSON.parse(nativeCall.arguments) : {};
+        } catch {
+          args = {};
+        }
+        return { tool: { name: nativeCall.name, args } } as T;
+      }
+      // Last resort: the model sometimes leaves the tool JSON in its reasoning and returns no content.
+      const reasoningText =
+        choice?.message?.reasoning ?? choice?.message?.reasoning_content ?? "";
+      const buried =
+        !content && options.tools?.length
+          ? /\{\s*"name"\s*:\s*"([a-z_]+)"[^]*\}/.exec(reasoningText)
+          : null;
+      if (buried) {
+        try {
+          const parsed = JSON.parse(buried[0]) as {
+            name: string;
+            args?: unknown;
+          };
+          return { tool: { name: parsed.name, args: parsed.args ?? {} } } as T;
+        } catch {
+          // fall through to the retry below
+        }
+      }
       if (!content) {
         failures += 1;
         // gpt-oss sometimes spends the whole turn in reasoning and returns no content; log the tail so we can see why.

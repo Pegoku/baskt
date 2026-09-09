@@ -143,6 +143,50 @@ function describeTool(call: ToolCall): string {
   }
 }
 
+/** Native function-calling specs; gpt-oss prefers this channel over describing tools in JSON text. */
+const TOOL_SPECS = [
+  {
+    name: "list_basket",
+    description: "Items in the basket with the chosen product per store.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "list_stock",
+    description: "What the household already has at home.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "search_products",
+    description: "Search a supermarket's catalogue.",
+    parameters: {
+      type: "object",
+      properties: {
+        store: { type: "string", description: "store code, e.g. AH or JUMBO" },
+        query: { type: "string" },
+      },
+      required: ["store", "query"],
+    },
+  },
+  {
+    name: "search_recipes",
+    description: "Find recipe cards from several recipe sites.",
+    parameters: {
+      type: "object",
+      properties: { query: { type: "string" } },
+      required: ["query"],
+    },
+  },
+  {
+    name: "read_recipe",
+    description: "Read a recipe's full ingredients and steps.",
+    parameters: {
+      type: "object",
+      properties: { url: { type: "string" } },
+      required: ["url"],
+    },
+  },
+].map((fn) => ({ type: "function", function: fn }));
+
 async function runTool(call: ToolCall, basketId: string): Promise<unknown> {
   const args = call.args ?? {};
   switch (call.name) {
@@ -179,14 +223,12 @@ async function runTool(call: ToolCall, basketId: string): Promise<unknown> {
       if (!query) return { error: "query required" };
       const understood = await dishQueries(query);
       const { hits } = await searchAllSources(understood.queries);
-      return hits
-        .slice(0, 8)
-        .map((hit) => ({
-          title: hit.title,
-          url: hit.url,
-          source: hit.source,
-          imageUrl: hit.imageUrl,
-        }));
+      return hits.slice(0, 8).map((hit) => ({
+        title: hit.title,
+        url: hit.url,
+        source: hit.source,
+        imageUrl: hit.imageUrl,
+      }));
     }
     case "read_recipe": {
       const url = String(args.url ?? "");
@@ -415,6 +457,7 @@ export async function chat(
   let reply = "";
   let proposal: Proposal | null = null;
   let recipes: RecipeCard[] | null = null;
+  let lastRecipeHits: RecipeCard[] = [];
   progress.set(basketId, []);
   report(basketId, "Thinking about your request");
   try {
@@ -424,7 +467,7 @@ export async function chat(
         tool?: unknown;
         proposal?: unknown;
         recipes?: unknown;
-      }>(messages, { maxTokens: 4000 });
+      }>(messages, { maxTokens: 4000, tools: TOOL_SPECS });
       if (!raw) {
         reply =
           reply || "I could not reach the AI right now. Please try again.";
@@ -443,6 +486,16 @@ export async function chat(
       if (!tool) break;
       report(basketId, describeTool(tool));
       const result = await runTool(tool, basketId);
+      console.log(
+        `[assistant] ${tool.name}(${JSON.stringify(tool.args ?? {})}) -> ${Array.isArray(result) ? `${result.length} results` : JSON.stringify(result).slice(0, 120)}`,
+      );
+      // Make sure recipe results reach the user as cards even if the model only describes them in text.
+      if (
+        tool.name === "search_recipes" &&
+        Array.isArray(result) &&
+        result.length
+      )
+        lastRecipeHits = result as RecipeCard[];
       report(basketId, "Thinking");
       messages.push({
         role: "system",
@@ -463,6 +516,8 @@ export async function chat(
   } finally {
     progress.delete(basketId);
   }
+  if (!recipes && lastRecipeHits.length)
+    recipes = sanitizeRecipes(lastRecipeHits);
   if (!reply)
     reply = proposal
       ? proposal.summary
