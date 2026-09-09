@@ -407,6 +407,49 @@ data class WhatsAppChat(val id: String, val name: String? = null, val isGroup: B
 data class WhatsAppChats(val chats: List<WhatsAppChat> = emptyList())
 
 @Serializable
+data class ProposedChange(
+    val type: String,
+    val itemId: String? = null,
+    val text: String? = null,
+    val quantity: Int? = null,
+    val from: String? = null,
+    val to: String? = null,
+    val store: String? = null,
+    val productId: String? = null,
+    val url: String? = null,
+    val title: String? = null,
+)
+
+@Serializable
+data class Proposal(val summary: String, val changes: List<ProposedChange> = emptyList(), val applied: List<Int>? = null)
+
+@Serializable
+data class RecipeCard(val title: String, val url: String, val source: String? = null, val imageUrl: String? = null)
+
+@Serializable
+data class ChatMessage(
+    val id: String,
+    val basketId: String = "default",
+    val role: String,
+    val content: String,
+    val proposalJson: Proposal? = null,
+    val recipesJson: List<RecipeCard>? = null,
+    val createdAt: Long = 0,
+)
+
+@Serializable
+data class ChatHistory(val basketId: String = "default", val messages: List<ChatMessage> = emptyList())
+
+@Serializable
+data class ChatReply(val messages: List<ChatMessage> = emptyList())
+
+@Serializable
+data class ApplyResult(val index: Int, val ok: Boolean, val error: String? = null)
+
+@Serializable
+data class ApplyResponse(val message: ChatMessage, val results: List<ApplyResult> = emptyList())
+
+@Serializable
 data class HealthResponse(
     val ok: Boolean,
     val version: String = "",

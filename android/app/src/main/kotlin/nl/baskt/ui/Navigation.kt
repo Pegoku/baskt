@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import nl.baskt.ui.home.HomePager
+import nl.baskt.ui.chat.ChatScreen
 import nl.baskt.ui.basket.GroupScreen
 import nl.baskt.ui.item.ItemDetailScreen
 import nl.baskt.ui.settings.SettingsScreen
@@ -45,6 +46,7 @@ import nl.baskt.ui.recipes.RecipeEditorScreen
 @Serializable data object PurchasesRoute : NavKey
 @Serializable data class RecipeEditorRoute(val recipeId: String? = null) : NavKey
 @Serializable data object MemoryRoute : NavKey
+@Serializable data object ChatRoute : NavKey
 @Serializable data object OrderRoute : NavKey
 @Serializable data object ScannerRoute : NavKey
 
@@ -90,8 +92,10 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
                     onShop = { backStack.add(ShopRoute(it)) },
                     onPurchases = { backStack.add(PurchasesRoute) },
                     onScan = { backStack.add(ScannerRoute) },
+                    onChat = { backStack.add(ChatRoute) },
                 )
             }
+            entry<ChatRoute> { ChatScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onFolderAdded = { backStack.removeLastOrNull() }) }
             entry<GroupRoute> { route ->
                 GroupScreen(viewModel, route.groupId, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) })
             }

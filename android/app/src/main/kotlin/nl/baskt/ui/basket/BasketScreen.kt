@@ -36,6 +36,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
@@ -100,7 +102,7 @@ import nl.baskt.ui.common.StoreBadge
 import nl.baskt.ui.common.storeName
 
 @Composable
-fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit, onStock: () -> Unit, onSearch: () -> Unit, onDeals: () -> Unit, onRecipes: () -> Unit, onShop: (String) -> Unit, onPurchases: () -> Unit, onScan: () -> Unit = {}) {
+fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit, onStock: () -> Unit, onSearch: () -> Unit, onDeals: () -> Unit, onRecipes: () -> Unit, onShop: (String) -> Unit, onPurchases: () -> Unit, onScan: () -> Unit = {}, onChat: () -> Unit = {}) {
     val items by viewModel.basket.items.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
     val baskets by viewModel.basket.baskets.collectAsState()
@@ -291,6 +293,12 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
         nl.baskt.ui.common.OfflineBanner(viewModel, needsServer = "New ideas are matched once you're back online.")
         Box(modifier = Modifier.fillMaxSize()) {
+            // Assistant button: bottom-left, level with the Compare button.
+            androidx.compose.material3.FloatingActionButton(
+                onClick = onChat,
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp).zIndex(1f),
+            ) { Icon(Icons.Default.AutoAwesome, contentDescription = "Assistant") }
             if (items.isEmpty()) {
                 Column(
                     modifier = Modifier.fillMaxSize().padding(32.dp),

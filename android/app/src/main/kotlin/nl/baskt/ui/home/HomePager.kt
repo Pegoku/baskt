@@ -35,6 +35,7 @@ fun HomePager(
     onShop: (String) -> Unit,
     onPurchases: () -> Unit,
     onScan: () -> Unit,
+    onChat: () -> Unit = {},
 ) {
     val pager = rememberPagerState(initialPage = startPage) { 3 }
     val scope = rememberCoroutineScope()
@@ -66,6 +67,7 @@ fun HomePager(
                     onShop = onShop,
                     onPurchases = onPurchases,
                     onScan = onScan,
+                    onChat = onChat,
                 )
                 1 -> CompareScreen(viewModel, onBack = { go(0) }, onOpenItem = onOpenItem, onOrder = { go(2) })
                 else -> OrderScreen(viewModel, onBack = { go(1) }, onShop = onShop)

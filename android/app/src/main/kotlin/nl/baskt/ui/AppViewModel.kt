@@ -12,6 +12,7 @@ import nl.baskt.data.AppSettings
 import nl.baskt.data.BasketItem
 import nl.baskt.data.Comparison
 import nl.baskt.data.AllDealsResponse
+import nl.baskt.data.ChatMessage
 import nl.baskt.data.Choice
 import nl.baskt.data.WhatsAppChat
 import nl.baskt.data.WhatsAppStatus
@@ -337,6 +338,32 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
     fun markScan(gtin: String, done: String) { scans.update { list -> list.map { if (it.gtin == gtin) it.copy(done = done) else it } } }
     fun clearScans() { scans.value = emptyList(); lastSeen = null }
+
+    /** Assistant chat for the current basket. */
+    private val _chat = MutableStateFlow<List<ChatMessage>>(emptyList())
+    val chat: StateFlow<List<ChatMessage>> = _chat
+    private val _chatBusy = MutableStateFlow(false)
+    val chatBusy: StateFlow<Boolean> = _chatBusy
+    fun loadChat() = viewModelScope.launch { _chat.value = cachedLoad("chat-${basket.currentBasketId.value}", emptyList()) { container.api.chatHistory(basket.currentBasketId.value) } }
+    fun sendChat(text: String) = viewModelScope.launch {
+        _chatBusy.value = true
+        // Show the user's line immediately; the server returns both lines once the assistant is done.
+        _chat.update { it + ChatMessage(id = "local-${System.currentTimeMillis()}", role = "user", content = text) }
+        val reply = attempt("The assistant") { container.api.chatSend(basket.currentBasketId.value, text) }
+        if (reply != null) {
+            _chat.update { list -> list.filterNot { it.id.startsWith("local-") } + reply }
+            container.offline.save("chat-${basket.currentBasketId.value}", _chat.value)
+        }
+        _chatBusy.value = false
+    }
+    fun clearChat() = viewModelScope.launch { attempt("Clearing the chat") { container.api.chatClear(basket.currentBasketId.value) }; _chat.value = emptyList() }
+    fun applyProposal(message: ChatMessage, indices: List<Int>) = viewModelScope.launch {
+        val result = attempt("Applying changes") { container.api.applyProposal(message.id, indices) } ?: return@launch
+        _chat.update { list -> list.map { if (it.id == message.id) result.message else it } }
+        val failed = result.results.filter { !it.ok }
+        notify(if (failed.isEmpty()) "Applied ${result.results.size} change${if (result.results.size == 1) "" else "s"}" else "${result.results.size - failed.size} applied, ${failed.size} failed: ${failed.first().error}")
+        basket.refresh(false)
+    }
 
     private val _memory = MutableStateFlow<List<Choice>>(emptyList())
     val memory: StateFlow<List<Choice>> = _memory

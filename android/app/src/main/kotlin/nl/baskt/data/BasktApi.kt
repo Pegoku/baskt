@@ -13,6 +13,7 @@ import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.plugins.timeout
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
@@ -311,6 +312,23 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
             auth(); contentType(ContentType.Application.Json)
             setBody(JsonObject(mapOf("basketId" to JsonPrimitive(basketId), "store" to (store?.let { JsonPrimitive(it) } ?: JsonNull))))
         }.expect<JsonObject>()["sent"]?.toString()?.toIntOrNull() ?: 0
+
+    suspend fun chatHistory(basketId: String): List<ChatMessage> = client.get(url("/chat")) { auth(); parameter("basketId", basketId) }.expect<ChatHistory>().messages
+
+    suspend fun chatSend(basketId: String, text: String): List<ChatMessage> =
+        client.post(url("/chat")) {
+            auth(); contentType(ContentType.Application.Json); setBody(JsonObject(mapOf("basketId" to JsonPrimitive(basketId), "text" to JsonPrimitive(text))))
+            timeout { requestTimeoutMillis = 300_000 }
+        }.expect<ChatReply>().messages
+
+    suspend fun chatClear(basketId: String) {
+        client.delete(url("/chat")) { auth(); parameter("basketId", basketId) }.expect<Unit>()
+    }
+
+    suspend fun applyProposal(messageId: String, indices: List<Int>): ApplyResponse =
+        client.post(url("/chat/proposals/$messageId/apply")) {
+            auth(); contentType(ContentType.Application.Json); setBody(JsonObject(mapOf("indices" to kotlinx.serialization.json.JsonArray(indices.map { JsonPrimitive(it) }))))
+        }.expect()
 
     suspend fun memory(): List<Choice> = client.get(url("/memory")) { auth() }.expect<ChoicesResponse>().choices
 
