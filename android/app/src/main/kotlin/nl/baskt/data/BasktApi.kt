@@ -321,6 +321,8 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
             timeout { requestTimeoutMillis = 300_000 }
         }.expect<ChatReply>().messages
 
+    suspend fun chatProgress(basketId: String): ChatProgress = client.get(url("/chat/progress")) { auth(); parameter("basketId", basketId) }.expect()
+
     suspend fun chatClear(basketId: String) {
         client.delete(url("/chat")) { auth(); parameter("basketId", basketId) }.expect<Unit>()
     }

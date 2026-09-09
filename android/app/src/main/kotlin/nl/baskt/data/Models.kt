@@ -444,6 +444,9 @@ data class ChatHistory(val basketId: String = "default", val messages: List<Chat
 data class ChatReply(val messages: List<ChatMessage> = emptyList())
 
 @Serializable
+data class ChatProgress(val busy: Boolean = false, val steps: List<String> = emptyList())
+
+@Serializable
 data class ApplyResult(val index: Int, val ok: Boolean, val error: String? = null)
 
 @Serializable

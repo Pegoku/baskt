@@ -84,6 +84,7 @@ import nl.baskt.ui.recipes.RecipeSheet
 fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () -> Unit) {
     val messages by viewModel.chat.collectAsState()
     val busy by viewModel.chatBusy.collectAsState()
+    val steps by viewModel.chatSteps.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
     val recipeDetail by viewModel.recipeDetail.collectAsState()
     var input by remember { mutableStateOf("") }
@@ -142,9 +143,20 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
                     else AssistantMessage(message, stores.map { it.code to it.name }.toMap(), onApply = { indices -> viewModel.applyProposal(message, indices) }, onOpenRecipe = { openRecipe = it; viewModel.openRecipe(it.url) }, onAddFolder = { viewModel.addRecipeFolder(it.url); onFolderAdded() })
                 }
                 if (busy) item("busy") {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        LoadingIndicator(modifier = Modifier.size(22.dp))
-                        Text("Looking things up…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // Live trace of the assistant's work: earlier steps dimmed, the current one with the spinner.
+                    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)) {
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp).widthIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            for (step in steps.dropLast(1).takeLast(4)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(step, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                LoadingIndicator(modifier = Modifier.size(18.dp))
+                                Text(steps.lastOrNull() ?: "Thinking…", style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
                     }
                 }
             }

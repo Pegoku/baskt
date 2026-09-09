@@ -345,8 +345,21 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     private val _chatBusy = MutableStateFlow(false)
     val chatBusy: StateFlow<Boolean> = _chatBusy
     fun loadChat() = viewModelScope.launch { _chat.value = cachedLoad("chat-${basket.currentBasketId.value}", emptyList()) { container.api.chatHistory(basket.currentBasketId.value) } }
+    /** What the assistant is doing right now (polled from the server while a turn runs). */
+    private val _chatSteps = MutableStateFlow<List<String>>(emptyList())
+    val chatSteps: StateFlow<List<String>> = _chatSteps
+    private var stepsJob: Job? = null
+
     fun sendChat(text: String) = viewModelScope.launch {
         _chatBusy.value = true
+        _chatSteps.value = listOf("Sending…")
+        stepsJob?.cancel()
+        stepsJob = viewModelScope.launch {
+            while (true) {
+                delay(700)
+                runCatching { container.api.chatProgress(basket.currentBasketId.value) }.getOrNull()?.let { if (it.steps.isNotEmpty()) _chatSteps.value = it.steps }
+            }
+        }
         // Show the user's line immediately; the server returns both lines once the assistant is done.
         _chat.update { it + ChatMessage(id = "local-${System.currentTimeMillis()}", role = "user", content = text) }
         val reply = attempt("The assistant") { container.api.chatSend(basket.currentBasketId.value, text) }
@@ -354,6 +367,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
             _chat.update { list -> list.filterNot { it.id.startsWith("local-") } + reply }
             container.offline.save("chat-${basket.currentBasketId.value}", _chat.value)
         }
+        stepsJob?.cancel()
+        _chatSteps.value = emptyList()
         _chatBusy.value = false
     }
     fun clearChat() = viewModelScope.launch { attempt("Clearing the chat") { container.api.chatClear(basket.currentBasketId.value) }; _chat.value = emptyList() }
