@@ -7,6 +7,8 @@ export type ChatMessage = { role: "system" | "user"; content: string };
 
 let calls = 0;
 let failures = 0;
+let promptTokens = 0;
+let completionTokens = 0;
 
 export function aiStats() {
   return {
@@ -14,7 +16,17 @@ export function aiStats() {
     model: env.ai.model || null,
     calls,
     failures,
+    promptTokens,
+    completionTokens,
   };
+}
+
+/** Zeroes the counters (used by the model benchmark between models). */
+export function resetAiStats() {
+  calls = 0;
+  failures = 0;
+  promptTokens = 0;
+  completionTokens = 0;
 }
 
 /** Calls an OpenAI-compatible chat-completions endpoint and parses the JSON object it returns. */
@@ -68,6 +80,9 @@ export async function chatJson<T>(
         }>;
       };
       const choice = payload.choices?.[0];
+      const usage = (payload as { usage?: { prompt_tokens?: number; completion_tokens?: number } }).usage;
+      promptTokens += usage?.prompt_tokens ?? 0;
+      completionTokens += usage?.completion_tokens ?? 0;
       const content = choice?.message?.content;
       // Some models (gpt-oss) emit a native function call when the prompt describes tools, even though
       // none are declared. Translate it into the JSON "tool" field the assistant protocol expects.

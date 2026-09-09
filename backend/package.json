@@ -8,7 +8,8 @@
     "start": "bun src/index.ts",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit",
-    "db:generate": "bunx drizzle-kit generate"
+    "db:generate": "bunx drizzle-kit generate",
+    "bench": "bun scripts/llm-bench.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.44.0",
