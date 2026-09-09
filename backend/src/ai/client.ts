@@ -9,11 +9,19 @@ let calls = 0;
 let failures = 0;
 
 export function aiStats() {
-  return { configured: aiConfigured(), model: env.ai.model || null, calls, failures };
+  return {
+    configured: aiConfigured(),
+    model: env.ai.model || null,
+    calls,
+    failures,
+  };
 }
 
 /** Calls an OpenAI-compatible chat-completions endpoint and parses the JSON object it returns. */
-export async function chatJson<T>(messages: ChatMessage[], options: { maxTokens?: number; retries?: number } = {}): Promise<T | null> {
+export async function chatJson<T>(
+  messages: ChatMessage[],
+  options: { maxTokens?: number; retries?: number } = {},
+): Promise<T | null> {
   if (!aiConfigured()) return null;
   const retries = options.retries ?? 2;
   for (let attempt = 1; attempt <= retries; attempt += 1) {
@@ -21,7 +29,10 @@ export async function chatJson<T>(messages: ChatMessage[], options: { maxTokens?
     try {
       const response = await fetch(`${env.ai.baseUrl}/chat/completions`, {
         method: "POST",
-        headers: { authorization: `Bearer ${env.ai.apiKey}`, "content-type": "application/json" },
+        headers: {
+          authorization: `Bearer ${env.ai.apiKey}`,
+          "content-type": "application/json",
+        },
         body: JSON.stringify({
           model: env.ai.model,
           messages,
@@ -35,20 +46,41 @@ export async function chatJson<T>(messages: ChatMessage[], options: { maxTokens?
       });
       if (!response.ok) {
         failures += 1;
-        console.warn(`[ai] HTTP ${response.status}: ${(await response.text()).slice(0, 200)}`);
+        console.warn(
+          `[ai] HTTP ${response.status}: ${(await response.text()).slice(0, 200)}`,
+        );
         continue;
       }
-      const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string }; finish_reason?: string }> };
-      const content = payload.choices?.[0]?.message?.content;
+      const payload = (await response.json()) as {
+        choices?: Array<{
+          message?: {
+            content?: string;
+            reasoning?: string;
+            reasoning_content?: string;
+          };
+          finish_reason?: string;
+        }>;
+      };
+      const choice = payload.choices?.[0];
+      const content = choice?.message?.content;
       if (!content) {
         failures += 1;
-        console.warn(`[ai] empty content (finish_reason=${payload.choices?.[0]?.finish_reason ?? "?"}), attempt ${attempt}/${retries}`);
+        // gpt-oss sometimes spends the whole turn in reasoning and returns no content; log the tail so we can see why.
+        const reasoning =
+          choice?.message?.reasoning ??
+          choice?.message?.reasoning_content ??
+          "";
+        console.warn(
+          `[ai] empty content (finish_reason=${choice?.finish_reason ?? "?"}), attempt ${attempt}/${retries}${reasoning ? `; reasoning tail: ${reasoning.slice(-300).replace(/\s+/g, " ")}` : ""}`,
+        );
         continue;
       }
       return JSON.parse(stripFences(content)) as T;
     } catch (error) {
       failures += 1;
-      console.warn(`[ai] attempt ${attempt}/${retries} failed: ${error instanceof Error ? error.message : error}`);
+      console.warn(
+        `[ai] attempt ${attempt}/${retries} failed: ${error instanceof Error ? error.message : error}`,
+      );
     }
   }
   return null;
@@ -61,11 +93,14 @@ function reasoningField() {
 }
 
 function providerField() {
-  if (!env.ai.providerOrder.length && !env.ai.providerQuantizations.length) return {};
+  if (!env.ai.providerOrder.length && !env.ai.providerQuantizations.length)
+    return {};
   return {
     provider: {
       ...(env.ai.providerOrder.length ? { order: env.ai.providerOrder } : {}),
-      ...(env.ai.providerQuantizations.length ? { quantizations: env.ai.providerQuantizations } : {}),
+      ...(env.ai.providerQuantizations.length
+        ? { quantizations: env.ai.providerQuantizations }
+        : {}),
       allow_fallbacks: true,
     },
   };
@@ -78,16 +113,33 @@ function stripFences(content: string) {
 }
 
 /** Wraps chatJson with the ai_cache table. */
-export async function cachedChatJson<T>(kind: string, key: string, messages: ChatMessage[], options: { maxTokens?: number } = {}): Promise<T | null> {
+export async function cachedChatJson<T>(
+  kind: string,
+  key: string,
+  messages: ChatMessage[],
+  options: { maxTokens?: number } = {},
+): Promise<T | null> {
   const database = db();
-  const hit = database.select().from(aiCache).where(and(eq(aiCache.kind, kind), eq(aiCache.key, key))).get();
+  const hit = database
+    .select()
+    .from(aiCache)
+    .where(and(eq(aiCache.kind, kind), eq(aiCache.key, key)))
+    .get();
   if (hit) return JSON.parse(hit.responseJson) as T;
   const result = await chatJson<T>(messages, options);
   if (result !== null) {
     database
       .insert(aiCache)
-      .values({ kind, key, responseJson: JSON.stringify(result), createdAt: now() })
-      .onConflictDoUpdate({ target: [aiCache.kind, aiCache.key], set: { responseJson: JSON.stringify(result), createdAt: now() } })
+      .values({
+        kind,
+        key,
+        responseJson: JSON.stringify(result),
+        createdAt: now(),
+      })
+      .onConflictDoUpdate({
+        target: [aiCache.kind, aiCache.key],
+        set: { responseJson: JSON.stringify(result), createdAt: now() },
+      })
       .run();
   }
   return result;
