@@ -25,7 +25,7 @@ import {
 } from "@/routes/basket";
 import { fetchRecipe } from "@/routes/recipes";
 import { collectProductIds, itemView } from "@/serialize";
-import { inStock, listStock } from "@/stock";
+import { inStock, listStock, matchByText } from "@/stock";
 import { allStores } from "@/stores/registry";
 import { productsByIds, searchStore } from "@/stores/search";
 
@@ -278,13 +278,20 @@ Change types for proposals (use real itemIds/productIds from tool results only):
 - {"type":"skip","itemId":..,"text":..,"store":..}
 - {"type":"add_recipe_folder","url":..,"title":..}
 Rules: when asked to change products (e.g. "swap 1 kg bags for 500 g"), first list_basket, then search_products per store for each item that matches; propose "replace" ONLY for items where you actually found a fitting product, and say which ones you could not find.
-The app itself asks the user to confirm every change: NEVER ask for permission in text ("would you like…?"). Whenever you have found concrete changes, put ALL of them in "proposal" in the same turn; the app shows them as a card titled with "summary" (e.g. "What you still need to buy for pancakes") and the user ticks what they want. "answer" is ONLY for answering a question the user asked (e.g. cooking time) or an important warning; it must be an empty string when the card says it all, and it must NEVER name the items that are in "changes" (that would duplicate the card). When the user wants a recipe, ALWAYS call search_recipes first and put real results in "recipes" (max 5) so the app can show cards; never invent a recipe in the text. Whenever the user needs or lacks items, put an "add" change for each of them instead of listing them. Before proposing adds for missing ingredients ALWAYS call list_stock and list_basket first, and skip what is already there. When the user explicitly asks to add items, ALWAYS include every one of them, with "inStock": true for those already at home. An add's "text" is a short generic idea like "penne 500 g" or "eggs 10", never a brand's product title. Previous turns show which proposed changes the user APPLIED: treat applied adds as already in the basket and "not applied" ones as still missing. Use read_recipe when the user is specific about what they want. "answer" is plain text without markdown. Stop using tools once you have what you need and give the final answer.`;
+The app itself asks the user to confirm every change: NEVER ask for permission in text ("would you like…?"). Whenever you have found concrete changes, put ALL of them in "proposal" in the same turn; the app shows them as a card titled with "summary" (e.g. "What you still need to buy for pancakes") and the user ticks what they want. "answer" is ONLY for answering a question the user asked (e.g. cooking time) or an important warning; it must be an empty string when the card says it all, and it must NEVER name the items that are in "changes" (that would duplicate the card). When the user wants a recipe, ALWAYS call search_recipes first and put real results in "recipes" (max 5) so the app can show cards; never invent a recipe in the text. Whenever the user needs or lacks items, put an "add" change for each of them instead of listing them. Before proposing adds for missing ingredients ALWAYS call list_stock and list_basket first, and skip what is already there. When the user explicitly names items to add, include EVERY one of them as "add" changes even if they are already in the basket or in stock: the app labels duplicates itself ("already in your list as …") and lets the user decide. Never silently drop a named item. An add's "text" is a short generic idea like "penne 500 g" or "eggs 10", never a brand's product title. Previous turns show which proposed changes the user APPLIED: treat applied adds as already in the basket and "not applied" ones as still missing. Use read_recipe when the user is specific about what they want. "answer" is plain text without markdown. Stop using tools once you have what you need and give the final answer.`;
 
 /** Short text for a change, used to tell the model what it proposed earlier and what the user accepted. */
 function describeChange(change: ProposedChange): string {
   switch (change.type) {
     case "add":
-      return `add "${change.text}"${change.quantity > 1 ? ` x${change.quantity}` : ""}`;
+      return (
+        `add "${change.text}"${change.quantity > 1 ? ` x${change.quantity}` : ""}` +
+        (change.inList
+          ? ` (already in the list as "${change.inList}")`
+          : change.stockName
+            ? ` (already in stock: "${change.stockName}")`
+            : "")
+      );
     case "delete":
       return `delete "${change.text}"`;
     case "rename":
@@ -300,32 +307,40 @@ function describeChange(change: ProposedChange): string {
   }
 }
 
-function sanitizeProposal(raw: unknown): Proposal | null {
+function sanitizeProposal(raw: unknown, basketId: string): Proposal | null {
   if (!raw || typeof raw !== "object") return null;
   const record = raw as { summary?: unknown; changes?: unknown };
   const changes: ProposedChange[] = [];
   const stockRows = listStock();
+  const listRows = db()
+    .select()
+    .from(basketItems)
+    .where(eq(basketItems.basketId, basketId))
+    .all()
+    .filter((item) => item.kind === "item");
   for (const entry of Array.isArray(record.changes) ? record.changes : []) {
     if (!entry || typeof entry !== "object") continue;
     const change = entry as Record<string, unknown>;
     const itemId = typeof change.itemId === "string" ? change.itemId : null;
     const item = itemId ? getItem(itemId) : null;
     switch (change.type) {
-      case "add":
-        if (typeof change.text === "string" && change.text.trim())
-          changes.push({
-            type: "add",
-            text: change.text.trim(),
-            quantity:
-              typeof change.quantity === "number" && change.quantity > 0
-                ? Math.floor(change.quantity)
-                : 1,
-            // Flagged so the app can show "already in stock" and leave it unticked.
-            inStock:
-              change.inStock === true ||
-              Boolean(inStock(change.text.trim(), stockRows)),
-          });
+      case "add": {
+        if (typeof change.text !== "string" || !change.text.trim()) break;
+        const have = inStock(change.text.trim(), stockRows);
+        changes.push({
+          type: "add",
+          text: change.text.trim(),
+          quantity:
+            typeof change.quantity === "number" && change.quantity > 0
+              ? Math.floor(change.quantity)
+              : 1,
+          // Flagged so the app can show "already in stock" / "already in your list" and leave it unticked.
+          inStock: change.inStock === true || Boolean(have),
+          stockName: have?.text ?? null,
+          inList: matchByText(change.text.trim(), listRows)?.text ?? null,
+        });
         break;
+      }
       case "delete":
         if (item)
           changes.push({ type: "delete", itemId: item.id, text: item.text });
@@ -509,7 +524,7 @@ export async function chat(
       }
       const answer = typeof raw.answer === "string" ? raw.answer : raw.reply;
       if (typeof answer === "string" && answer.trim()) reply = answer.trim();
-      proposal = sanitizeProposal(raw.proposal) ?? proposal;
+      proposal = sanitizeProposal(raw.proposal, basketId) ?? proposal;
       recipes = sanitizeRecipes(raw.recipes) ?? recipes;
       const tool =
         raw.tool &&

@@ -224,7 +224,7 @@ export const chatMessages = sqliteTable(
 );
 
 export type ProposedChange =
-  | { type: "add"; text: string; quantity: number; inStock?: boolean }
+  | { type: "add"; text: string; quantity: number; inStock?: boolean; stockName?: string | null; inList?: string | null }
   | { type: "delete"; itemId: string; text: string }
   | { type: "rename"; itemId: string; from: string; to: string }
   | { type: "quantity"; itemId: string; text: string; quantity: number }
