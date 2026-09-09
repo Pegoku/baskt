@@ -61,7 +61,7 @@ function viewOf(itemId: string) {
   return item ? loadViews([item])[0] : null;
 }
 
-function createItem(text: string, quantity: number, parentId: string | null = null, kind: BasketItemRow["kind"] = "item", basketId = DEFAULT_BASKET_ID) {
+export function createItem(text: string, quantity: number, parentId: string | null = null, kind: BasketItemRow["kind"] = "item", basketId = DEFAULT_BASKET_ID) {
   const database = db();
   const last = database.select({ sortOrder: basketItems.sortOrder }).from(basketItems).orderBy(desc(basketItems.sortOrder)).get();
   // Ideas you already have at home arrive checked, with the reason, instead of being bought twice.
@@ -89,6 +89,25 @@ function createItem(text: string, quantity: number, parentId: string | null = nu
   return item;
 }
 
+/** Assistant helpers: apply confirmed changes through the same paths the app uses. */
+export function deleteItemWithChildren(id: string) {
+  const children = childrenOf(id).map((child) => child.id);
+  const removed = db().delete(basketItems).where(eq(basketItems.id, id)).returning({ id: basketItems.id }).all();
+  if (!removed.length) throw new Error("item not found");
+  if (children.length) db().delete(basketItems).where(inArray(basketItems.id, children)).run();
+  tombstone([id, ...children]);
+}
+
+export function updateItemFields(id: string, patch: { text?: string; quantity?: number }) {
+  const item = getItem(id);
+  if (!item) throw new Error("item not found");
+  db().update(basketItems).set({ ...patch, updatedAt: now() }).where(eq(basketItems.id, id)).run();
+  if (patch.text && patch.text !== item.text) {
+    db().delete(basketMatches).where(eq(basketMatches.itemId, id)).run();
+    enqueue(id);
+  }
+}
+
 /** Used by the browser share page (no bearer): a plain item in the given basket. */
 export function createItemForShare(text: string, basketId: string) {
   return looksLikeRecipe(text) ? createGroup(text, undefined, basketId) : createItem(text, 1, null, "item", basketId);
@@ -107,7 +126,7 @@ function createChildren(groupId: string, items: RecipeItem[]) {
 }
 
 /** Folder from a known recipe page (meal browser, favourites, pasted URL). */
-function createGroupFromUrl(url: string, basketId = DEFAULT_BASKET_ID, servings: number | null = null) {
+export function createGroupFromUrl(url: string, basketId = DEFAULT_BASKET_ID, servings: number | null = null) {
   const group = createItem(url, 1, null, "group", basketId);
   db().update(basketItems).set({ status: "PARSING" }).where(eq(basketItems.id, group.id)).run();
   void (async () => {

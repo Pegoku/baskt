@@ -208,6 +208,34 @@ export const choices = sqliteTable(
   (table) => [index("choices_canonical_idx").on(table.canonical)],
 );
 
+/** Assistant chat, one thread per basket. Assistant messages may carry a proposal (pending changes) or recipe cards. */
+export const chatMessages = sqliteTable(
+  "chat_messages",
+  {
+    id: text("id").primaryKey(),
+    basketId: text("basket_id").notNull(),
+    role: text("role").notNull(), // user | assistant
+    content: text("content").notNull(),
+    proposalJson: text("proposal_json", { mode: "json" }).$type<Proposal | null>(),
+    recipesJson: text("recipes_json", { mode: "json" }).$type<RecipeCard[] | null>(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [index("chat_messages_basket_idx").on(table.basketId, table.createdAt)],
+);
+
+export type ProposedChange =
+  | { type: "add"; text: string; quantity: number }
+  | { type: "delete"; itemId: string; text: string }
+  | { type: "rename"; itemId: string; from: string; to: string }
+  | { type: "quantity"; itemId: string; text: string; quantity: number }
+  | { type: "replace"; itemId: string; text: string; store: string; productId: string; from: string | null; to: string }
+  | { type: "skip"; itemId: string; text: string; store: string }
+  | { type: "add_recipe_folder"; url: string; title: string };
+
+export type Proposal = { summary: string; changes: ProposedChange[]; applied: number[] | null };
+export type RecipeCard = { title: string; url: string; source: string | null; imageUrl: string | null };
+export type ChatMessageRow = typeof chatMessages.$inferSelect;
+
 export const aiCache = sqliteTable(
   "ai_cache",
   {

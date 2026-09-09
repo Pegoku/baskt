@@ -1,0 +1,256 @@
+import { asc, eq } from "drizzle-orm";
+import { chatJson, type ChatMessage } from "@/ai/client";
+import { db, newId, now } from "@/db";
+import { basketItems, basketMatches, chatMessages, products, type ChatMessageRow, type Proposal, type ProposedChange, type RecipeCard } from "@/db/schema";
+import { appLanguageName, enabledStoreCodes } from "@/db/settings";
+import { aiConfigured } from "@/env";
+import { dishQueries } from "@/matching/cook";
+import { localizeRecipe } from "@/matching/localize";
+import { chooseMatch, getItem, getMatch } from "@/matching/pipeline";
+import { searchAllSources } from "@/matching/sources";
+import { createGroupFromUrl, createItem, deleteItemWithChildren, updateItemFields } from "@/routes/basket";
+import { fetchRecipe } from "@/routes/recipes";
+import { collectProductIds, itemView } from "@/serialize";
+import { allStores } from "@/stores/registry";
+import { productsByIds, searchStore } from "@/stores/search";
+
+const HISTORY = 16;
+const MAX_STEPS = 8;
+
+export function history(basketId: string): ChatMessageRow[] {
+  return db().select().from(chatMessages).where(eq(chatMessages.basketId, basketId)).orderBy(asc(chatMessages.createdAt)).all();
+}
+
+export function clearHistory(basketId: string) {
+  db().delete(chatMessages).where(eq(chatMessages.basketId, basketId)).run();
+}
+
+function save(row: Omit<ChatMessageRow, "id" | "createdAt">): ChatMessageRow {
+  const full: ChatMessageRow = { id: newId(), createdAt: now(), ...row };
+  db().insert(chatMessages).values(full).run();
+  return full;
+}
+
+/** Compact view of the basket for the model: ids, texts, quantities, per-store picks with sizes and prices. */
+function basketSnapshot(basketId: string) {
+  const items = db().select().from(basketItems).where(eq(basketItems.basketId, basketId)).orderBy(asc(basketItems.sortOrder)).all().filter((item) => item.kind === "item");
+  const ids = items.map((item) => item.id);
+  const matches = ids.length ? db().select().from(basketMatches).all().filter((match) => ids.includes(match.itemId)) : [];
+  const prods = new Map(productsByIds(collectProductIds(matches)).map((product) => [product.id, product]));
+  return items.map((item) => {
+    const view = itemView(item, matches.filter((match) => match.itemId === item.id), prods);
+    return {
+      itemId: item.id,
+      text: item.text,
+      quantity: item.quantity,
+      checked: item.checked,
+      stores: Object.fromEntries(
+        view.matches.map((match) => {
+          const product = match.chosen ?? match.provisional;
+          return [match.store, product ? { productId: product.id, title: product.title, size: product.quantityText, priceCents: product.priceCents, status: match.status } : { status: match.status }];
+        }),
+      ),
+    };
+  });
+}
+
+type ToolCall = { name: string; args: Record<string, unknown> };
+
+async function runTool(call: ToolCall, basketId: string): Promise<unknown> {
+  const args = call.args ?? {};
+  switch (call.name) {
+    case "list_basket":
+      return basketSnapshot(basketId);
+    case "list_stock": {
+      const { listStock } = await import("@/stock");
+      return listStock().map((row) => ({ text: row.text, quantity: row.quantityText }));
+    }
+    case "search_products": {
+      const store = String(args.store ?? "");
+      const query = String(args.query ?? "").trim();
+      if (!enabledStoreCodes().includes(store) || !query) return { error: `store must be one of ${enabledStoreCodes().join(", ")} and query non-empty` };
+      const result = await searchStore(store, query, { limit: 12 });
+      return result.products.map((product) => ({ productId: product.id, title: product.title, size: product.quantityText, priceCents: product.priceCents, unitPrice: product.unitPriceCents ? `${product.unitPriceCents}c/${product.unitPriceUnit}` : null, deal: product.dealText }));
+    }
+    case "search_recipes": {
+      const query = String(args.query ?? "").trim();
+      if (!query) return { error: "query required" };
+      const understood = await dishQueries(query);
+      const { hits } = await searchAllSources(understood.queries);
+      return hits.slice(0, 8).map((hit) => ({ title: hit.title, url: hit.url, source: hit.source, imageUrl: hit.imageUrl }));
+    }
+    case "read_recipe": {
+      const url = String(args.url ?? "");
+      const recipe = await fetchRecipe(url).catch(() => null);
+      if (!recipe) return { error: "could not read that recipe" };
+      const localized = await localizeRecipe(recipe);
+      return { title: localized.title, servings: localized.servings, totalTime: localized.totalTime, ingredients: localized.ingredientLines, steps: (localized.steps ?? []).slice(0, 12).map((step) => step.text) };
+    }
+    default:
+      return { error: `unknown tool ${call.name}` };
+  }
+}
+
+const SYSTEM = (language: string) => `You are baskt's shopping assistant for a household in the Netherlands. You help with the shopping list (called the basket), suggest recipes, and make changes — but you NEVER change anything yourself: you propose changes and the user confirms them in the app.
+Answer in ${language}. Be brief and concrete.
+
+You work in steps. Each turn return ONLY a JSON object:
+{
+  "reply": text for the user (may be empty while you are still using tools),
+  "tool": {"name": "...", "args": {...}} or null,
+  "proposal": {"summary": string, "changes": [...]} or null,
+  "recipes": [{"title","url","source","imageUrl"}] or null
+}
+Tools (use them to look before you propose):
+- list_basket: items with itemId, quantity, and per store the current pick (productId, title, size, price).
+- list_stock: what the user already has at home.
+- search_products {store, query}: products at one store (codes: STORES) with productId, size, price.
+- search_recipes {query}: recipe cards from several sites.
+- read_recipe {url}: full ingredients and steps, to check a recipe really fits what the user wants.
+Change types for proposals (use real itemIds/productIds from tool results only):
+- {"type":"add","text":..,"quantity":n}
+- {"type":"delete","itemId":..,"text":..}
+- {"type":"rename","itemId":..,"from":..,"to":..}
+- {"type":"quantity","itemId":..,"text":..,"quantity":n}
+- {"type":"replace","itemId":..,"text":..,"store":..,"productId":..,"from":current title or null,"to":new title}
+- {"type":"skip","itemId":..,"text":..,"store":..}
+- {"type":"add_recipe_folder","url":..,"title":..}
+Rules: when asked to change products (e.g. "swap 1 kg bags for 500 g"), first list_basket, then search_products per store for each item that matches; propose "replace" ONLY for items where you actually found a fitting product, and say which ones you could not find. Recipes you suggest go in "recipes" (max 5) so the app can show cards; use read_recipe when the user is specific about what they want. Stop using tools once you have what you need and give the final reply.`;
+
+function sanitizeProposal(raw: unknown): Proposal | null {
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as { summary?: unknown; changes?: unknown };
+  const changes: ProposedChange[] = [];
+  for (const entry of Array.isArray(record.changes) ? record.changes : []) {
+    if (!entry || typeof entry !== "object") continue;
+    const change = entry as Record<string, unknown>;
+    const itemId = typeof change.itemId === "string" ? change.itemId : null;
+    const item = itemId ? getItem(itemId) : null;
+    switch (change.type) {
+      case "add":
+        if (typeof change.text === "string" && change.text.trim()) changes.push({ type: "add", text: change.text.trim(), quantity: typeof change.quantity === "number" && change.quantity > 0 ? Math.floor(change.quantity) : 1 });
+        break;
+      case "delete":
+        if (item) changes.push({ type: "delete", itemId: item.id, text: item.text });
+        break;
+      case "rename":
+        if (item && typeof change.to === "string" && change.to.trim()) changes.push({ type: "rename", itemId: item.id, from: item.text, to: change.to.trim() });
+        break;
+      case "quantity":
+        if (item && typeof change.quantity === "number" && change.quantity > 0) changes.push({ type: "quantity", itemId: item.id, text: item.text, quantity: Math.floor(change.quantity) });
+        break;
+      case "replace": {
+        const store = typeof change.store === "string" ? change.store : "";
+        const productId = typeof change.productId === "string" ? change.productId : "";
+        const product = productId ? productsByIds([productId])[0] : undefined;
+        // Only real products at a real store: the model cannot invent a replacement.
+        if (item && product && product.store === store && enabledStoreCodes().includes(store)) {
+          const current = getMatch(item.id, store);
+          const currentProduct = current?.chosenProductId ? productsByIds([current.chosenProductId])[0] : current?.candidateIds[0] ? productsByIds([current.candidateIds[0]])[0] : undefined;
+          changes.push({ type: "replace", itemId: item.id, text: item.text, store, productId, from: currentProduct?.title ?? null, to: product.title });
+        }
+        break;
+      }
+      case "skip":
+        if (item && typeof change.store === "string" && enabledStoreCodes().includes(change.store)) changes.push({ type: "skip", itemId: item.id, text: item.text, store: change.store });
+        break;
+      case "add_recipe_folder":
+        if (typeof change.url === "string" && /^(https?:\/\/|baskt:\/\/recipe\/)/.test(change.url)) changes.push({ type: "add_recipe_folder", url: change.url, title: typeof change.title === "string" ? change.title : change.url });
+        break;
+    }
+  }
+  if (!changes.length) return null;
+  return { summary: typeof record.summary === "string" ? record.summary : "Proposed changes", changes, applied: null };
+}
+
+function sanitizeRecipes(raw: unknown): RecipeCard[] | null {
+  if (!Array.isArray(raw)) return null;
+  const cards = raw
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    .filter((entry) => typeof entry.title === "string" && typeof entry.url === "string" && /^https?:\/\//.test(entry.url as string))
+    .slice(0, 5)
+    .map((entry) => ({ title: entry.title as string, url: entry.url as string, source: typeof entry.source === "string" ? entry.source : null, imageUrl: typeof entry.imageUrl === "string" ? entry.imageUrl : null }));
+  return cards.length ? cards : null;
+}
+
+/** One user turn: stores the message, runs the tool loop, stores and returns the assistant's message. */
+export async function chat(basketId: string, text: string): Promise<ChatMessageRow[]> {
+  const userRow = save({ basketId, role: "user", content: text, proposalJson: null, recipesJson: null });
+  if (!aiConfigured()) {
+    return [userRow, save({ basketId, role: "assistant", content: "The assistant needs an AI provider configured on the server (AI_API_KEY / AI_MODEL).", proposalJson: null, recipesJson: null })];
+  }
+  const stores = allStores().filter((store) => enabledStoreCodes().includes(store.code)).map((store) => `${store.code}=${store.name}`).join(", ");
+  const messages: ChatMessage[] = [{ role: "system", content: SYSTEM(appLanguageName()).replace("STORES", stores) }];
+  for (const row of history(basketId).slice(-HISTORY)) {
+    // Prior proposals are summarised so the model knows what was already suggested/applied.
+    const extra = row.proposalJson ? `\n[proposal: ${row.proposalJson.summary}; applied: ${row.proposalJson.applied ? row.proposalJson.applied.length : "not yet"}]` : "";
+    messages.push({ role: row.role === "assistant" ? "system" : "user", content: `${row.role === "assistant" ? "ASSISTANT (previous turn): " : ""}${row.content}${extra}` });
+  }
+
+  let reply = "";
+  let proposal: Proposal | null = null;
+  let recipes: RecipeCard[] | null = null;
+  for (let step = 0; step < MAX_STEPS; step += 1) {
+    const raw = await chatJson<{ reply?: unknown; tool?: unknown; proposal?: unknown; recipes?: unknown }>(messages, { maxTokens: 1800 });
+    if (!raw) {
+      reply = reply || "I could not reach the AI right now. Please try again.";
+      break;
+    }
+    if (typeof raw.reply === "string" && raw.reply.trim()) reply = raw.reply.trim();
+    proposal = sanitizeProposal(raw.proposal) ?? proposal;
+    recipes = sanitizeRecipes(raw.recipes) ?? recipes;
+    const tool = raw.tool && typeof raw.tool === "object" && typeof (raw.tool as ToolCall).name === "string" ? (raw.tool as ToolCall) : null;
+    if (!tool) break;
+    const result = await runTool(tool, basketId);
+    messages.push({ role: "system", content: `ASSISTANT called ${tool.name}(${JSON.stringify(tool.args ?? {})})` });
+    messages.push({ role: "user", content: `TOOL RESULT ${tool.name}: ${JSON.stringify(result).slice(0, 6000)}` });
+  }
+  if (!reply) reply = proposal ? proposal.summary : recipes ? "Here are some recipes." : "Done.";
+  return [userRow, save({ basketId, role: "assistant", content: reply, proposalJson: proposal, recipesJson: recipes })];
+}
+
+/** Applies the confirmed subset of a proposal; each change goes through the normal basket functions. */
+export async function applyProposal(messageId: string, indices: number[]): Promise<{ message: ChatMessageRow; results: Array<{ index: number; ok: boolean; error?: string }> } | null> {
+  const row = db().select().from(chatMessages).where(eq(chatMessages.id, messageId)).get();
+  if (!row?.proposalJson) return null;
+  const results: Array<{ index: number; ok: boolean; error?: string }> = [];
+  const applied = new Set(row.proposalJson.applied ?? []);
+  for (const index of indices) {
+    const change = row.proposalJson.changes[index];
+    if (!change || applied.has(index)) continue;
+    try {
+      switch (change.type) {
+        case "add":
+          createItem(change.text, change.quantity, null, "item", row.basketId);
+          break;
+        case "delete":
+          deleteItemWithChildren(change.itemId);
+          break;
+        case "rename":
+          updateItemFields(change.itemId, { text: change.to });
+          break;
+        case "quantity":
+          updateItemFields(change.itemId, { quantity: change.quantity });
+          break;
+        case "replace":
+          if (!chooseMatch(change.itemId, change.store, change.productId)) throw new Error("product no longer available");
+          break;
+        case "skip":
+          chooseMatch(change.itemId, change.store, null);
+          break;
+        case "add_recipe_folder":
+          createGroupFromUrl(change.url, row.basketId);
+          break;
+      }
+      applied.add(index);
+      results.push({ index, ok: true });
+    } catch (error) {
+      results.push({ index, ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  const updated: Proposal = { ...row.proposalJson, applied: Array.from(applied).sort((a, b) => a - b) };
+  db().update(chatMessages).set({ proposalJson: updated }).where(eq(chatMessages.id, messageId)).run();
+  return { message: { ...row, proposalJson: updated }, results };
+}
+
+export { products };

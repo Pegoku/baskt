@@ -405,6 +405,39 @@ describe("api", () => {
     expect(after.deletedIds).toContain(a.id);
   });
 
+  test("assistant: history, offline reply, and applying a validated proposal", async () => {
+    const reply = (await (await api("/chat", { method: "POST", body: JSON.stringify({ text: "swap the milk" }) })).json()) as any;
+    expect(reply.messages).toHaveLength(2);
+    expect(reply.messages[1].role).toBe("assistant");
+    expect(reply.messages[1].content).toContain("AI provider");
+    const hist = (await (await api("/chat")).json()) as any;
+    expect(hist.messages.length).toBe(2);
+
+    // Build a proposal directly through the module to exercise validation and apply.
+    const item = (await (await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "melk" }) })).json()) as any;
+    await waitForMatched(item.id);
+    await api("/products/search?q=melk&store=JUMBO");
+    const { applyProposal } = await import("@/assistant");
+    const { db } = await import("@/db");
+    const { chatMessages } = await import("@/db/schema");
+    const proposal = { summary: "Test", applied: null, changes: [
+      { type: "replace", itemId: item.id, text: "melk", store: "JUMBO", productId: "JUMBO:b", from: null, to: "Campina" },
+      { type: "quantity", itemId: item.id, text: "melk", quantity: 3 },
+      { type: "add", text: "eieren", quantity: 1 },
+    ] };
+    db().insert(chatMessages).values({ id: "msg-test", basketId: "default", role: "assistant", content: "x", proposalJson: proposal as any, recipesJson: null, createdAt: Date.now() }).run();
+    const applied = (await (await api("/chat/proposals/msg-test/apply", { method: "POST", body: JSON.stringify({ indices: [0, 1, 2] }) })).json()) as any;
+    expect(applied.results.every((r: any) => r.ok)).toBe(true);
+    expect(applied.message.proposalJson.applied).toEqual([0, 1, 2]);
+    const basketBody = (await (await api("/basket")).json()) as any;
+    const updated = basketBody.items.find((i: any) => i.id === item.id);
+    expect(updated.quantity).toBe(3);
+    expect(updated.matches.find((m: any) => m.store === "JUMBO").chosen.id).toBe("JUMBO:b");
+    expect(basketBody.items.some((i: any) => i.text === "eieren")).toBe(true);
+    for (const i of basketBody.items.filter((i: any) => i.id === item.id || i.text === "eieren")) await api(`/basket/items/${i.id}`, { method: "DELETE" });
+    expect((await api("/chat", { method: "DELETE" })).status).toBe(204);
+  });
+
   test("whatsapp routes report disabled without a bridge", async () => {
     const status = (await (await api("/whatsapp/status")).json()) as any;
     expect(status.enabled).toBe(false);
