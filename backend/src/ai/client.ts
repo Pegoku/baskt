@@ -38,10 +38,11 @@ export async function chatJson<T>(messages: ChatMessage[], options: { maxTokens?
         console.warn(`[ai] HTTP ${response.status}: ${(await response.text()).slice(0, 200)}`);
         continue;
       }
-      const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string }; finish_reason?: string }> };
       const content = payload.choices?.[0]?.message?.content;
       if (!content) {
         failures += 1;
+        console.warn(`[ai] empty content (finish_reason=${payload.choices?.[0]?.finish_reason ?? "?"}), attempt ${attempt}/${retries}`);
         continue;
       }
       return JSON.parse(stripFences(content)) as T;

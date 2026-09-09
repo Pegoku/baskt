@@ -115,7 +115,8 @@ Change types for proposals (use real itemIds/productIds from tool results only):
 - {"type":"replace","itemId":..,"text":..,"store":..,"productId":..,"from":current title or null,"to":new title}
 - {"type":"skip","itemId":..,"text":..,"store":..}
 - {"type":"add_recipe_folder","url":..,"title":..}
-Rules: when asked to change products (e.g. "swap 1 kg bags for 500 g"), first list_basket, then search_products per store for each item that matches; propose "replace" ONLY for items where you actually found a fitting product, and say which ones you could not find. Recipes you suggest go in "recipes" (max 5) so the app can show cards; use read_recipe when the user is specific about what they want. Stop using tools once you have what you need and give the final reply.`;
+Rules: when asked to change products (e.g. "swap 1 kg bags for 500 g"), first list_basket, then search_products per store for each item that matches; propose "replace" ONLY for items where you actually found a fitting product, and say which ones you could not find.
+The app itself asks the user to confirm every change: NEVER ask for permission in text ("would you like…?"). Whenever you have found concrete changes, put ALL of them in "proposal" in the same turn and describe them briefly in "reply"; the user ticks what they want. Recipes you suggest go in "recipes" (max 5) so the app can show cards; use read_recipe when the user is specific about what they want. Stop using tools once you have what you need and give the final reply.`;
 
 function sanitizeProposal(raw: unknown): Proposal | null {
   if (!raw || typeof raw !== "object") return null;
@@ -191,7 +192,7 @@ export async function chat(basketId: string, text: string): Promise<ChatMessageR
   let proposal: Proposal | null = null;
   let recipes: RecipeCard[] | null = null;
   for (let step = 0; step < MAX_STEPS; step += 1) {
-    const raw = await chatJson<{ reply?: unknown; tool?: unknown; proposal?: unknown; recipes?: unknown }>(messages, { maxTokens: 1800 });
+    const raw = await chatJson<{ reply?: unknown; tool?: unknown; proposal?: unknown; recipes?: unknown }>(messages, { maxTokens: 4000 });
     if (!raw) {
       reply = reply || "I could not reach the AI right now. Please try again.";
       break;
