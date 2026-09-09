@@ -13,6 +13,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -116,8 +122,21 @@ fun RecipeEditorScreen(viewModel: AppViewModel, recipeId: String?, onBack: () ->
                 OutlinedTextField(value = servings, onValueChange = { servings = it }, label = { Text("Servings") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = ingredients, onValueChange = { ingredients = it }, label = { Text("Ingredients, one per line, with amounts") }, minLines = 5, modifier = Modifier.fillMaxWidth())
                 Text("Steps", style = MaterialTheme.typography.titleSmall)
+                Text("Drag the handle to reorder.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Reordering: the dragged step follows the finger and swaps with neighbours as it passes them.
+                var dragging by remember { mutableStateOf<Int?>(null) }
+                var dragOffset by remember { mutableStateOf(0f) }
+                val heights = remember { mutableMapOf<Int, Int>() }
                 for ((index, step) in steps.withIndex()) {
-                    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val isDragged = dragging == index
+                    Row(
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .onSizeChanged { heights[index] = it.height }
+                            .graphicsLayer { translationY = if (isDragged) dragOffset else 0f; shadowElevation = if (isDragged) 12f else 0f }
+                            .zIndex(if (isDragged) 1f else 0f),
+                    ) {
                         Text("${index + 1}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 16.dp))
                         OutlinedTextField(
                             value = step,
@@ -126,8 +145,37 @@ fun RecipeEditorScreen(viewModel: AppViewModel, recipeId: String?, onBack: () ->
                             minLines = 2,
                             modifier = Modifier.weight(1f),
                         )
-                        IconButton(onClick = { steps = if (steps.size == 1) listOf("") else steps.filterIndexed { i, _ -> i != index } }, modifier = Modifier.padding(top = 8.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "Remove step")
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 4.dp)) {
+                            IconButton(onClick = { steps = if (steps.size == 1) listOf("") else steps.filterIndexed { i, _ -> i != index } }) {
+                                Icon(Icons.Default.Close, contentDescription = "Remove step")
+                            }
+                            Icon(
+                                Icons.Default.DragHandle,
+                                contentDescription = "Drag to reorder",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.pointerInput(steps.size) {
+                                    detectDragGestures(
+                                        onDragStart = { dragging = index; dragOffset = 0f },
+                                        onDragEnd = { dragging = null; dragOffset = 0f },
+                                        onDragCancel = { dragging = null; dragOffset = 0f },
+                                    ) { change, amount ->
+                                        change.consume()
+                                        val current = dragging ?: return@detectDragGestures
+                                        dragOffset += amount.y
+                                        val below = heights[current + 1]
+                                        val above = heights[current - 1]
+                                        if (below != null && dragOffset > below / 2f) {
+                                            steps = steps.toMutableList().also { java.util.Collections.swap(it, current, current + 1) }
+                                            dragging = current + 1
+                                            dragOffset -= below
+                                        } else if (above != null && dragOffset < -above / 2f) {
+                                            steps = steps.toMutableList().also { java.util.Collections.swap(it, current, current - 1) }
+                                            dragging = current - 1
+                                            dragOffset += above
+                                        }
+                                    }
+                                },
+                            )
                         }
                     }
                 }
