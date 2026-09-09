@@ -47,7 +47,6 @@ fun SwipeStage(
     val offset = remember { Animatable(0f) }
     var travelled by remember { mutableFloatStateOf(0f) }
     var lastDelta by remember { mutableFloatStateOf(0f) }
-    var settling by remember { mutableIntStateOf(0) }
 
     val background = MaterialTheme.colorScheme.background
     Box(
@@ -83,8 +82,10 @@ fun SwipeStage(
                         val commitBack = value < 0 && (-value > width * 0.35f || (flick && lastDelta > 0))
                         scope.launch {
                             when {
-                                commitForward -> { offset.animateTo(width.toFloat(), spring(stiffness = 700f)); onGoRight(); settling += 1; offset.snapTo(0f) }
-                                commitBack -> { offset.animateTo(-width.toFloat(), spring(stiffness = 700f)); onGoLeft(); settling += 1; offset.snapTo(0f) }
+                                // Stay at the end position: the navigation swaps the screen underneath, and this stage is
+                                // disposed with it. Resetting here would flash the old screen for a frame.
+                                commitForward -> { offset.animateTo(width.toFloat(), spring(stiffness = 700f)); onGoRight() }
+                                commitBack -> { offset.animateTo(-width.toFloat(), spring(stiffness = 700f)); onGoLeft() }
                                 else -> offset.animateTo(0f, spring(stiffness = 600f))
                             }
                         }

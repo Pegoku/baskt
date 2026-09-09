@@ -336,7 +336,8 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                                 }
                             }
                         }
-                        if (selectionMode) content() else DismissibleItem(item, onDelete = { viewModel.delete(item) }) { content() }
+                        // No swipe-to-dismiss on rows: horizontal swipes belong to screen navigation (delete via menu or selection).
+                        content()
                     }
                 }
             }
@@ -345,27 +346,6 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
     }
 }
 
-@Composable
-private fun DismissibleItem(item: BasketItem, onDelete: () -> Unit, content: @Composable () -> Unit) {
-    val state = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
-        if (value == SwipeToDismissBoxValue.StartToEnd) {
-            onDelete()
-            true
-        } else false
-    })
-    SwipeToDismissBox(
-        state = state,
-        enableDismissFromEndToStart = false,
-        backgroundContent = {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error) }
-        },
-    ) { content() }
-    // Keep the key stable even if the same item id re-enters the list.
-    LaunchedEffect(item.id) {}
-}
 
 @Composable
 fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, onToggle: () -> Unit) {
