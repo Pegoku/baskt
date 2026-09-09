@@ -25,6 +25,7 @@ import {
 } from "@/routes/basket";
 import { fetchRecipe } from "@/routes/recipes";
 import { collectProductIds, itemView } from "@/serialize";
+import { inStock, listStock } from "@/stock";
 import { allStores } from "@/stores/registry";
 import { productsByIds, searchStore } from "@/stores/search";
 
@@ -257,7 +258,7 @@ Answer in ${language}. Be brief and concrete.
 
 You work in steps. Each turn return ONLY a JSON object:
 {
-  "reply": text for the user (may be empty while you are still using tools),
+  "answer": plain text ONLY for answering a question or an important note; "" otherwise (see rules),
   "tool": {"name": "...", "args": {...}} or null,
   "proposal": {"summary": string, "changes": [...]} or null,
   "recipes": [{"title","url","source","imageUrl"}] or null
@@ -277,12 +278,33 @@ Change types for proposals (use real itemIds/productIds from tool results only):
 - {"type":"skip","itemId":..,"text":..,"store":..}
 - {"type":"add_recipe_folder","url":..,"title":..}
 Rules: when asked to change products (e.g. "swap 1 kg bags for 500 g"), first list_basket, then search_products per store for each item that matches; propose "replace" ONLY for items where you actually found a fitting product, and say which ones you could not find.
-The app itself asks the user to confirm every change: NEVER ask for permission in text ("would you like…?"). Whenever you have found concrete changes, put ALL of them in "proposal" in the same turn and describe them briefly in "reply"; the user ticks what they want. When the user wants a recipe, ALWAYS call search_recipes first and put real results in "recipes" (max 5) so the app can show cards; never invent a recipe in the text. Whenever you tell the user they need or lack items, ALWAYS also put an "add" change for each of them in "proposal". Use read_recipe when the user is specific about what they want. "reply" is plain text without markdown. Stop using tools once you have what you need and give the final reply.`;
+The app itself asks the user to confirm every change: NEVER ask for permission in text ("would you like…?"). Whenever you have found concrete changes, put ALL of them in "proposal" in the same turn; the app shows them as a card titled with "summary" (e.g. "What you still need to buy for pancakes") and the user ticks what they want. "answer" is ONLY for answering a question the user asked (e.g. cooking time) or an important warning; it must be an empty string when the card says it all, and it must NEVER name the items that are in "changes" (that would duplicate the card). When the user wants a recipe, ALWAYS call search_recipes first and put real results in "recipes" (max 5) so the app can show cards; never invent a recipe in the text. Whenever the user needs or lacks items, put an "add" change for each of them instead of listing them. Before proposing adds for missing ingredients ALWAYS call list_stock and list_basket first, and skip what is already there. When the user explicitly asks to add items, ALWAYS include every one of them, with "inStock": true for those already at home. An add's "text" is a short generic idea like "penne 500 g" or "eggs 10", never a brand's product title. Previous turns show which proposed changes the user APPLIED: treat applied adds as already in the basket and "not applied" ones as still missing. Use read_recipe when the user is specific about what they want. "answer" is plain text without markdown. Stop using tools once you have what you need and give the final answer.`;
+
+/** Short text for a change, used to tell the model what it proposed earlier and what the user accepted. */
+function describeChange(change: ProposedChange): string {
+  switch (change.type) {
+    case "add":
+      return `add "${change.text}"${change.quantity > 1 ? ` x${change.quantity}` : ""}`;
+    case "delete":
+      return `delete "${change.text}"`;
+    case "rename":
+      return `rename "${change.from}" to "${change.to}"`;
+    case "quantity":
+      return `set "${change.text}" to x${change.quantity}`;
+    case "replace":
+      return `replace product for "${change.text}" at ${change.store} with "${change.to}"`;
+    case "skip":
+      return `skip "${change.text}" at ${change.store}`;
+    case "add_recipe_folder":
+      return `add recipe folder "${change.title}"`;
+  }
+}
 
 function sanitizeProposal(raw: unknown): Proposal | null {
   if (!raw || typeof raw !== "object") return null;
   const record = raw as { summary?: unknown; changes?: unknown };
   const changes: ProposedChange[] = [];
+  const stockRows = listStock();
   for (const entry of Array.isArray(record.changes) ? record.changes : []) {
     if (!entry || typeof entry !== "object") continue;
     const change = entry as Record<string, unknown>;
@@ -298,6 +320,10 @@ function sanitizeProposal(raw: unknown): Proposal | null {
               typeof change.quantity === "number" && change.quantity > 0
                 ? Math.floor(change.quantity)
                 : 1,
+            // Flagged so the app can show "already in stock" and leave it unticked.
+            inStock:
+              change.inStock === true ||
+              Boolean(inStock(change.text.trim(), stockRows)),
           });
         break;
       case "delete":
@@ -448,7 +474,12 @@ export async function chat(
   for (const row of history(basketId).slice(-HISTORY)) {
     // Prior proposals are summarised so the model knows what was already suggested/applied.
     const extra = row.proposalJson
-      ? `\n[proposal: ${row.proposalJson.summary}; applied: ${row.proposalJson.applied ? row.proposalJson.applied.length : "not yet"}]`
+      ? `\n[proposal "${row.proposalJson.summary}": ${row.proposalJson.changes
+          .map(
+            (change, index) =>
+              `${describeChange(change)} — ${row.proposalJson?.applied?.includes(index) ? "APPLIED by the user" : "not applied"}`,
+          )
+          .join("; ")}]`
       : "";
     messages.push({
       role: row.role === "assistant" ? "system" : "user",
@@ -465,6 +496,7 @@ export async function chat(
   try {
     for (let step = 0; step < MAX_STEPS; step += 1) {
       const raw = await chatJson<{
+        answer?: unknown;
         reply?: unknown;
         tool?: unknown;
         proposal?: unknown;
@@ -475,8 +507,8 @@ export async function chat(
           reply || "I could not reach the AI right now. Please try again.";
         break;
       }
-      if (typeof raw.reply === "string" && raw.reply.trim())
-        reply = raw.reply.trim();
+      const answer = typeof raw.answer === "string" ? raw.answer : raw.reply;
+      if (typeof answer === "string" && answer.trim()) reply = answer.trim();
       proposal = sanitizeProposal(raw.proposal) ?? proposal;
       recipes = sanitizeRecipes(raw.recipes) ?? recipes;
       const tool =
@@ -520,12 +552,8 @@ export async function chat(
   }
   if (!recipes && lastRecipeHits.length)
     recipes = sanitizeRecipes(lastRecipeHits);
-  if (!reply)
-    reply = proposal
-      ? proposal.summary
-      : recipes
-        ? "Here are some recipes."
-        : "Done.";
+  // A proposal card (with its summary as title) is a complete message on its own; only fill text when there is nothing else.
+  if (!reply && !proposal) reply = recipes ? "Here are some recipes." : "Done.";
   return [
     userRow,
     save({

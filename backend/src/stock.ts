@@ -46,6 +46,10 @@ export function inStock(text: string, rows: StockRow[] = listStock()): StockRow 
     if (!stockTokens.length) continue;
     const covered = stockTokens.every((token) => itemTokens.has(token) || expandTokens([token]).some((alternative) => itemTokens.has(alternative)));
     if (covered) return row;
+    // Also the other way round: a short idea ("penne") is in stock when a longer stock line ("Penne Durum Tarwe 500 g") covers it.
+    const stockSet = new Set(expandTokens(stockTokens));
+    const ideaTokens = [...itemTokens].filter((token) => token.length > 2);
+    if (ideaTokens.length && ideaTokens.every((token) => stockSet.has(token))) return row;
   }
   return null;
 }
