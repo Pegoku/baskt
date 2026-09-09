@@ -520,6 +520,6 @@ for (const model of models) {
 const markdown = report(all, meta);
 const dir = resolve(import.meta.dir, "../bench");
 mkdirSync(dir, { recursive: true });
-const file = resolve(dir, `results-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.md`);
+const file = resolve(dir, `results-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.md`);
 writeFileSync(file, markdown);
 console.log(`\n${markdown.split("\n## Per check")[0]}\nfull report: ${file}`);
