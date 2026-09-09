@@ -118,6 +118,8 @@ data class BasketItem(
     val updatedAt: Long = 0,
 ) {
     val isProcessing: Boolean get() = status == "NEW" || status == "PARSING" || status == "MATCHING"
+    /** Created while offline; waits for the connection to be sent. */
+    val isQueued: Boolean get() = status == "QUEUED" || id.startsWith("local-")
     val isGroup: Boolean get() = kind == "group"
     fun match(store: String) = matches.firstOrNull { it.store == store }
 }

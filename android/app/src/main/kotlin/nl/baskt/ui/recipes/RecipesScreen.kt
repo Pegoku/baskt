@@ -104,6 +104,7 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            nl.baskt.ui.common.OfflineBanner(viewModel, needsServer = "Searching recipes needs the server; favourites and your recipes are available.")
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },

@@ -78,6 +78,7 @@ fun CompareScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (Stri
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            nl.baskt.ui.common.OfflineBanner(viewModel, needsServer = "Showing the last comparison.")
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Per store") }
                 SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Per item") }

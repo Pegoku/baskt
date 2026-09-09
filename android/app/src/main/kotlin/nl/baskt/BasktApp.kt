@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import nl.baskt.data.AppSettings
 import nl.baskt.data.BasketRepository
 import nl.baskt.data.BasktApi
+import nl.baskt.data.OfflineStore
 import nl.baskt.data.SettingsStore
 
 /** Manual dependency container: small app, no DI framework needed. */
@@ -27,9 +28,24 @@ class AppContainer(app: Application) {
         private set
 
     val api = BasktApi { currentSettings }
-    val basket = BasketRepository(api, scope, onBasketSwitched = { id -> settingsStore.saveCurrentBasket(id); nl.baskt.widget.BasketWidget.refreshAll(app) })
+    val offline = OfflineStore(app)
+    val basket = BasketRepository(api, scope, offline, onBasketSwitched = { id -> settingsStore.saveCurrentBasket(id); nl.baskt.widget.BasketWidget.refreshAll(app) })
 
     init {
+        // Replay queued changes as soon as a network is available again.
+        val connectivity = app.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        connectivity.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                scope.launch { basket.tryReconnect() }
+            }
+        })
+        // While offline, probe the server every 20 s in case only the server (not the network) was unreachable.
+        scope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(20_000)
+                if (!basket.online.value) basket.tryReconnect()
+            }
+        }
         scope.launch {
             settingsStore.settings.collect { settings ->
                 currentSettings = settings

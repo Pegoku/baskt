@@ -128,6 +128,18 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
             HorizontalDivider()
             val serverSettings by viewModel.basket.serverSettings.collectAsState()
             LaunchedEffect(Unit) { viewModel.refreshStock() }
+            Text("Offline changes", style = MaterialTheme.typography.titleMedium)
+            val pendingOps by viewModel.pending.collectAsState()
+            val isOnline by viewModel.online.collectAsState()
+            if (pendingOps.isEmpty()) Text(if (isOnline) "Everything is synced." else "Offline: saved data is shown; changes you make are queued here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            for (op in pendingOps) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(op.label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    androidx.compose.material3.TextButton(onClick = { viewModel.dropPending(op) }) { Text("Discard") }
+                }
+            }
+            if (pendingOps.isNotEmpty()) OutlinedButton(onClick = { viewModel.retryConnection() }) { Text(if (isOnline) "Send now" else "Retry connection") }
+            HorizontalDivider()
             Text("WhatsApp bot", style = MaterialTheme.typography.titleMedium)
             val whatsapp by viewModel.whatsapp.collectAsState()
             val qr by viewModel.whatsappQr.collectAsState()

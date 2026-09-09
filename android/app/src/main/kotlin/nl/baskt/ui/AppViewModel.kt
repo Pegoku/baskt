@@ -131,7 +131,16 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         _recipesBusy.value = false
     }
 
-    fun loadRecipeFavourites() = viewModelScope.launch { _recipeFavourites.value = runCatching { container.api.recipeFavourites() }.getOrDefault(emptyList()) }
+    /** Loads from the server and caches the result; when offline returns the last cached copy. */
+    private inline fun <reified T> cachedLoad(name: String, fallback: T, fetch: () -> T): T =
+        runCatching(fetch).map { container.offline.save(name, it); it }.getOrElse { container.offline.load<T>(name) ?: fallback }
+
+    val online get() = basket.online
+    val pending get() = basket.pending
+    fun retryConnection() = viewModelScope.launch { basket.tryReconnect() }
+    fun dropPending(op: nl.baskt.data.PendingOp) { basket.pending.update { it - op }; container.offline.saveOps(basket.pending.value) }
+
+    fun loadRecipeFavourites() = viewModelScope.launch { _recipeFavourites.value = cachedLoad("recipe-favourites", emptyList()) { container.api.recipeFavourites() } }
 
     fun toggleRecipeFavourite(recipe: RecipeSummary) = viewModelScope.launch {
         val existing = _recipeFavourites.value.firstOrNull { it.url == recipe.url }
@@ -150,11 +159,11 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     private val _stockDishes = MutableStateFlow<List<StockDish>?>(null)
     val stockDishes: StateFlow<List<StockDish>?> = _stockDishes
-    fun loadStockDishes() = viewModelScope.launch { _recipesBusy.value = true; _stockDishes.value = runCatching { container.api.dishesFromStock() }.getOrDefault(emptyList()); _recipesBusy.value = false }
+    fun loadStockDishes() = viewModelScope.launch { _recipesBusy.value = true; _stockDishes.value = cachedLoad("stock-dishes", emptyList()) { container.api.dishesFromStock() }; _recipesBusy.value = false }
 
     private val _myRecipes = MutableStateFlow<List<UserRecipe>>(emptyList())
     val myRecipes: StateFlow<List<UserRecipe>> = _myRecipes
-    fun loadMyRecipes() = viewModelScope.launch { _myRecipes.value = runCatching { container.api.myRecipes() }.getOrDefault(emptyList()) }
+    fun loadMyRecipes() = viewModelScope.launch { _myRecipes.value = cachedLoad("my-recipes", emptyList()) { container.api.myRecipes() } }
     fun deleteMyRecipe(id: String) = viewModelScope.launch { runCatching { container.api.deleteMyRecipe(id) }; loadMyRecipes() }
     fun saveSiteRecipeAsMine(recipe: RecipeSummary) = viewModelScope.launch {
         runCatching { container.api.saveMyRecipe(RecipeDraft(title = recipe.displayTitle), origin = "site", fromUrl = recipe.url) }
@@ -247,8 +256,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun loadPurchases() = viewModelScope.launch {
-        _purchases.value = runCatching { container.api.purchases() }.getOrDefault(emptyList())
-        _spend.value = runCatching { container.api.spendSummary() }.getOrNull()
+        _purchases.value = cachedLoad("purchases", emptyList()) { container.api.purchases() }
+        _spend.value = cachedLoad<SpendSummary?>("spend", null) { container.api.spendSummary() }
     }
 
     fun openPurchase(id: String) = viewModelScope.launch { _purchaseDetail.value = runCatching { container.api.purchase(id) }.getOrNull() }
@@ -309,7 +318,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     private val _memory = MutableStateFlow<List<Choice>>(emptyList())
     val memory: StateFlow<List<Choice>> = _memory
-    fun loadMemory() = viewModelScope.launch { _memory.value = runCatching { container.api.memory() }.getOrDefault(emptyList()) }
+    fun loadMemory() = viewModelScope.launch { _memory.value = cachedLoad("memory", emptyList()) { container.api.memory() } }
     fun deleteMemory(id: String) = viewModelScope.launch { runCatching { container.api.deleteMemory(id) }; _memory.update { list -> list.filterNot { it.id == id } } }
 
     private val _allDeals = MutableStateFlow<AllDealsResponse?>(null)
