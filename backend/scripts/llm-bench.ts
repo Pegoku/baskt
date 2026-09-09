@@ -12,7 +12,7 @@
  */
 import { aiStats, resetAiStats } from "@/ai/client";
 import { db, resetDbForTests } from "@/db";
-import { basketItems, DEFAULT_BASKET_ID, type ParsedIdea, type ProductRow } from "@/db/schema";
+import { aiCache, basketItems, DEFAULT_BASKET_ID, type ParsedIdea, type ProductRow } from "@/db/schema";
 import { setSetting } from "@/db/settings";
 import { env } from "@/env";
 import { chat, clearHistory } from "@/assistant";
@@ -425,6 +425,8 @@ async function runModel(model: string, meta: ModelMeta | undefined): Promise<Mod
   const serial = selected.filter((c) => c.group === "assistant");
   const runCase = async (c: Case) => {
     for (let run = 0; run < runs; run += 1) {
+      // Repeated runs must hit the model again, not the answer cache.
+      if (run > 0) db().delete(aiCache).run();
       const before = aiStats().calls;
       const t0 = performance.now();
       let detail: string | null = null;
