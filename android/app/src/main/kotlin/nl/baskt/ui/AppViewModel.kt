@@ -388,7 +388,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun setSkipInStock(enabled: Boolean) = viewModelScope.launch { basket.setSkipInStock(enabled) }
     fun addSkipped(group: BasketItem) = viewModelScope.launch { basket.addSkipped(group) }
     fun setDefaultServings(servings: Int?) = viewModelScope.launch { basket.setDefaultServings(servings) }
-    fun setRankBy(rankBy: String) = viewModelScope.launch { basket.setRankBy(rankBy); compare() }
+    fun setRankBy(rankBy: String) = viewModelScope.launch { basket.setRankBy(rankBy); compare(force = true) }
     fun setGroupServings(group: BasketItem, servings: Int) = viewModelScope.launch { basket.setGroupServings(group, servings) }
     fun createBasket(name: String, emoji: String?, switchTo: Boolean = true) = viewModelScope.launch {
         val created = basket.createBasket(name, emoji)
@@ -440,13 +440,22 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun rematch(item: BasketItem) = viewModelScope.launch { basket.rematch(item) }
     fun setEnabledStores(codes: List<String>) = viewModelScope.launch { basket.setEnabledStores(codes); basket.refresh(false) }
 
-    fun assign(mode: String) = viewModelScope.launch { basket.assign(mode); _comparison.value = basket.compare() }
-    fun assignItem(item: BasketItem, store: String?) = viewModelScope.launch { basket.assignItem(item, store); _comparison.value = basket.compare() }
+    fun assign(mode: String) = viewModelScope.launch { basket.assign(mode); compare(force = true) }
+    fun assignItem(item: BasketItem, store: String?) = viewModelScope.launch { basket.assignItem(item, store); compare(force = true) }
 
-    fun compare(refreshPrices: Boolean = false) = viewModelScope.launch {
-        _comparing.value = true
+    /** Fingerprint of everything the comparison depends on; unchanged basket = no reload. */
+    private fun basketFingerprint(): Int = basket.items.value.filter { !it.isGroup }
+        .map { listOf(it.id, it.checked, it.quantity, it.assignedStore, it.matches.map { m -> "${m.store}:${m.status}:${m.effective?.id}:${m.effective?.priceCents}" }) }
+        .hashCode() * 31 + basket.currentBasketId.value.hashCode()
+    private var comparedFor: Int? = null
+
+    fun compare(refreshPrices: Boolean = false, force: Boolean = false) = viewModelScope.launch {
+        val key = basketFingerprint()
+        if (!refreshPrices && !force && comparedFor == key && _comparison.value != null) return@launch
+        // Only show the bar when there is nothing to look at yet; otherwise update quietly.
+        if (_comparison.value == null) _comparing.value = true
         if (refreshPrices) runCatching { container.api.refreshPrices() }
-        _comparison.value = basket.compare()
+        basket.compare()?.let { _comparison.value = it; comparedFor = key }
         _comparing.value = false
     }
 
