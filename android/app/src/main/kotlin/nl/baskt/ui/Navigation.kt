@@ -15,7 +15,7 @@ import nl.baskt.ui.compare.OrderScreen
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.background
-import nl.baskt.ui.common.SwipeStage
+import nl.baskt.ui.home.HomePager
 import nl.baskt.ui.basket.GroupScreen
 import nl.baskt.ui.item.ItemDetailScreen
 import nl.baskt.ui.settings.SettingsScreen
@@ -63,65 +63,37 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
         androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(260))
     val popExit = androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(380, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { it / 3 } +
         androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(220))
-    // After an interactive swipe the screens are already in place: skip NavDisplay's own animation once.
-    var suppressTransition by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    androidx.compose.runtime.LaunchedEffect(backStack.lastOrNull()) { kotlinx.coroutines.delay(80); suppressTransition = false }
-    val none = androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None
-    fun swipeTo(route: NavKey) { suppressTransition = true; backStack.add(route) }
-    fun swipeBack() { suppressTransition = true; backStack.removeLastOrNull() }
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(androidx.compose.material3.MaterialTheme.colorScheme.background)) {
     NavDisplay(
         backStack = backStack,
         onBack = { backStack.removeLastOrNull() },
-        transitionSpec = { if (suppressTransition) none else enter togetherWith exit },
-        popTransitionSpec = { if (suppressTransition) none else popEnter togetherWith popExit },
+        transitionSpec = { enter togetherWith exit },
+        popTransitionSpec = { popEnter togetherWith popExit },
         predictivePopTransitionSpec = { popEnter togetherWith popExit },
         entryProvider = entryProvider {
             entry<BasketRoute> {
-                val basketContent: @Composable () -> Unit = {
-                    BasketScreen(
-                        viewModel = viewModel,
-                        onOpenItem = { backStack.add(ItemRoute(it)) },
-                        onOpenGroup = { backStack.add(GroupRoute(it)) },
-                        onCompare = { backStack.add(CompareRoute) },
-                        onSettings = { backStack.add(SettingsRoute) },
-                        onStock = { backStack.add(StockRoute) },
-                        onSearch = { backStack.add(SearchRoute) },
-                        onDeals = { backStack.add(DealsRoute) },
-                        onRecipes = { backStack.add(RecipesRoute) },
-                        onShop = { backStack.add(ShopRoute(it)) },
-                        onPurchases = { backStack.add(PurchasesRoute) },
-                        onScan = { backStack.add(ScannerRoute) },
-                    )
-                }
-                SwipeStage(
-                    right = { CompareScreen(viewModel, onBack = {}, onOpenItem = {}, onOrder = {}) },
-                    onGoRight = { swipeTo(CompareRoute) },
-                ) { basketContent() }
+                HomePager(
+                    viewModel = viewModel,
+                    onOpenItem = { backStack.add(ItemRoute(it)) },
+                    onOpenGroup = { backStack.add(GroupRoute(it)) },
+                    onSettings = { backStack.add(SettingsRoute) },
+                    onStock = { backStack.add(StockRoute) },
+                    onSearch = { backStack.add(SearchRoute) },
+                    onDeals = { backStack.add(DealsRoute) },
+                    onRecipes = { backStack.add(RecipesRoute) },
+                    onShop = { backStack.add(ShopRoute(it)) },
+                    onPurchases = { backStack.add(PurchasesRoute) },
+                    onScan = { backStack.add(ScannerRoute) },
+                )
             }
             entry<GroupRoute> { route ->
                 GroupScreen(viewModel, route.groupId, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) })
             }
             entry<ItemRoute> { route -> ItemDetailScreen(viewModel, route.itemId, onBack = { backStack.removeLastOrNull() }) }
             entry<CompareRoute> {
-                SwipeStage(
-                    left = { BasketScreen(viewModel, onOpenItem = {}, onOpenGroup = {}, onCompare = {}, onSettings = {}, onStock = {}, onSearch = {}, onDeals = {}, onRecipes = {}, onShop = {}, onPurchases = {}) },
-                    right = { OrderScreen(viewModel, onBack = {}, onShop = {}) },
-                    onGoLeft = { swipeBack() },
-                    onGoRight = { swipeTo(OrderRoute) },
-                ) {
-                    CompareScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) }, onOrder = { backStack.add(OrderRoute) })
-                }
+                HomePager(viewModel, startPage = 1, onOpenItem = { backStack.add(ItemRoute(it)) }, onOpenGroup = { backStack.add(GroupRoute(it)) }, onSettings = { backStack.add(SettingsRoute) }, onStock = { backStack.add(StockRoute) }, onSearch = { backStack.add(SearchRoute) }, onDeals = { backStack.add(DealsRoute) }, onRecipes = { backStack.add(RecipesRoute) }, onShop = { backStack.add(ShopRoute(it)) }, onPurchases = { backStack.add(PurchasesRoute) }, onScan = { backStack.add(ScannerRoute) })
             }
             entry<ScannerRoute> { ScannerScreen(viewModel, onClose = { backStack.removeLastOrNull() }) }
-            entry<OrderRoute> {
-                SwipeStage(
-                    left = { CompareScreen(viewModel, onBack = {}, onOpenItem = {}, onOrder = {}) },
-                    onGoLeft = { swipeBack() },
-                ) {
-                    OrderScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onShop = { backStack.add(ShopRoute(it)) })
-                }
-            }
             entry<SettingsRoute> { SettingsScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onMemory = { backStack.add(MemoryRoute) }) }
             entry<MemoryRoute> { MemoryScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
         },
