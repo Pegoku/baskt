@@ -172,10 +172,9 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun openRecipe(recipeUrl: String) = viewModelScope.launch {
+        // The sheet shows its own loading state; don't reuse the list's "searching" indicator.
         _recipeDetail.value = null
-        _recipesBusy.value = true
         _recipeDetail.value = attempt("Loading the recipe") { container.api.fetchRecipe(recipeUrl) }
-        _recipesBusy.value = false
     }
 
     fun closeRecipe() { _recipeDetail.value = null }
