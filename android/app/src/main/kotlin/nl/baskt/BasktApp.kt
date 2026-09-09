@@ -39,10 +39,15 @@ class AppContainer(app: Application) {
                 scope.launch { basket.tryReconnect() }
             }
         })
-        // Automatic connectivity monitor: every 10 s while offline (reconnect + replay), every 60 s while online.
+        // Automatic connectivity monitor: ticks every 5 s and re-reads the state each time, so a drop is
+        // re-checked within 10 s (reconnect + replay) while a healthy server is only probed once a minute.
         scope.launch {
+            var lastProbe = 0L
             while (true) {
-                kotlinx.coroutines.delay(if (basket.online.value) 60_000 else 10_000)
+                kotlinx.coroutines.delay(5_000)
+                val interval = if (basket.online.value) 60_000 else 10_000
+                if (System.currentTimeMillis() - lastProbe < interval) continue
+                lastProbe = System.currentTimeMillis()
                 if (!basket.online.value) basket.tryReconnect() else if (!basket.probe()) basket.online.value = false
             }
         }
