@@ -307,6 +307,48 @@ function describeChange(change: ProposedChange): string {
   }
 }
 
+/**
+ * The model tends to drop items the user named when they are already in the list. Put them back as adds
+ * flagged "already in your list" so the user sees them and decides (only on turns that propose adds).
+ */
+function withNamedDuplicates(
+  proposal: Proposal,
+  userText: string,
+  basketId: string,
+): Proposal {
+  if (!proposal.changes.some((change) => change.type === "add"))
+    return proposal;
+  const listRows = db()
+    .select()
+    .from(basketItems)
+    .where(eq(basketItems.basketId, basketId))
+    .all()
+    .filter((item) => item.kind === "item");
+  const stockRows = listStock();
+  const changes = [...proposal.changes];
+  for (const row of listRows) {
+    if (!matchByText(userText, [row])) continue; // the user did not name this item
+    const covered = changes.some(
+      (change) =>
+        change.type === "add" &&
+        (change.inList === row.text || matchByText(change.text, [row])),
+    );
+    if (covered) continue;
+    const have = inStock(row.text, stockRows);
+    changes.push({
+      type: "add",
+      text: row.text,
+      quantity: 1,
+      inStock: Boolean(have),
+      stockName: have?.text ?? null,
+      inList: row.text,
+    });
+  }
+  return changes.length === proposal.changes.length
+    ? proposal
+    : { ...proposal, changes };
+}
+
 function sanitizeProposal(raw: unknown, basketId: string): Proposal | null {
   if (!raw || typeof raw !== "object") return null;
   const record = raw as { summary?: unknown; changes?: unknown };
@@ -552,7 +594,11 @@ export async function chat(
       });
       messages.push({
         role: "user",
-        content: `TOOL RESULT ${tool.name}: ${JSON.stringify(result).slice(0, 6000)}`,
+        content: `TOOL RESULT ${tool.name}: ${JSON.stringify(result).slice(0, 6000)}${
+          tool.name === "list_basket" || tool.name === "list_stock"
+            ? "\n(Reminder: items the user explicitly named to add must still appear as add changes even if they are listed here; the app marks duplicates.)"
+            : ""
+        }`,
       });
     }
   } catch (error) {
@@ -565,6 +611,7 @@ export async function chat(
   } finally {
     progress.delete(basketId);
   }
+  if (proposal) proposal = withNamedDuplicates(proposal, text, basketId);
   if (!recipes && lastRecipeHits.length)
     recipes = sanitizeRecipes(lastRecipeHits);
   // A proposal card (with its summary as title) is a complete message on its own; only fill text when there is nothing else.
