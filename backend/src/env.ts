@@ -11,8 +11,10 @@ export const env = {
     baseUrl: (process.env.AI_BASE_URL ?? process.env.HACKCLUB_AI_BASE_URL ?? "https://ai.hackclub.com/proxy/v1").replace(/\/$/, ""),
     apiKey: process.env.AI_API_KEY ?? process.env.HACKCLUB_AI_API_KEY ?? "",
     model: process.env.AI_MODEL ?? process.env.HACKCLUB_AI_MODEL ?? "",
-    /** Image-capable model for receipt photos. */
+    /** Image-capable model for receipt photos; may live at another provider (Groq has no vision models). */
     visionModel: process.env.AI_VISION_MODEL ?? "google/gemini-2.5-flash-lite",
+    visionBaseUrl: (process.env.AI_VISION_BASE_URL ?? process.env.AI_BASE_URL ?? process.env.HACKCLUB_AI_BASE_URL ?? "https://ai.hackclub.com/proxy/v1").replace(/\/$/, ""),
+    visionApiKey: process.env.AI_VISION_API_KEY ?? process.env.AI_API_KEY ?? process.env.HACKCLUB_AI_API_KEY ?? "",
     /**
      * How to steer thinking models (OpenRouter-style `reasoning` field):
      * "off" sends {enabled:false} (Qwen3), "low"/"medium"/"high" sends {effort} (gpt-oss), "none" sends nothing.
@@ -36,4 +38,11 @@ export const env = {
 
 export function aiConfigured() {
   return Boolean(env.ai.apiKey && env.ai.model);
+}
+
+/** Which dialect of the OpenAI-compatible API the main provider speaks (they differ in reasoning/provider fields). */
+export function aiVendor(): "groq" | "openrouter" | "other" {
+  if (/groq\.com/.test(env.ai.baseUrl)) return "groq";
+  if (/openrouter\.ai|hackclub\.com/.test(env.ai.baseUrl)) return "openrouter";
+  return "other";
 }

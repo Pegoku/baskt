@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db, now } from "@/db";
 import { aiCache } from "@/db/schema";
-import { aiConfigured, env } from "@/env";
+import { aiConfigured, aiVendor, env } from "@/env";
 
 export type ChatMessage = { role: "system" | "user"; content: string };
 
@@ -65,9 +65,15 @@ export async function chatJson<T>(
       });
       if (!response.ok) {
         failures += 1;
-        console.warn(
-          `[ai] HTTP ${response.status}: ${(await response.text()).slice(0, 200)}`,
-        );
+        const text = (await response.text()).slice(0, 200);
+        console.warn(`[ai] HTTP ${response.status}: ${text}`);
+        if (response.status === 429) {
+          // Free tiers meter tokens per minute; honour Retry-After (bounded) instead of failing the turn.
+          const retryAfter = Number(response.headers.get("retry-after"));
+          const waitMs = Math.min(20_000, (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 3) * 1000);
+          await new Promise((resolve) => setTimeout(resolve, waitMs));
+          if (attempt === retries) attempt -= 1; // one extra try after waiting
+        }
         continue;
       }
       const payload = (await response.json()) as {
@@ -149,12 +155,18 @@ export async function chatJson<T>(
 }
 
 function reasoningField() {
-  if (env.ai.reasoning === "off") return { reasoning: { enabled: false } };
   if (env.ai.reasoning === "none") return {};
+  if (aiVendor() === "groq") {
+    // Groq uses the plain OpenAI parameter and cannot switch gpt-oss reasoning off.
+    return env.ai.reasoning === "off" ? {} : { reasoning_effort: env.ai.reasoning };
+  }
+  if (env.ai.reasoning === "off") return { reasoning: { enabled: false } };
   return { reasoning: { effort: env.ai.reasoning } };
 }
 
 function providerField() {
+  // Provider routing is an OpenRouter extension; other vendors reject unknown fields.
+  if (aiVendor() !== "openrouter") return {};
   if (!env.ai.providerOrder.length && !env.ai.providerQuantizations.length)
     return {};
   return {

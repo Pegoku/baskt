@@ -17,9 +17,9 @@ Include every product line, also from continued pages; skip totals, deposits (st
 /** Sends receipt images (data URLs) to a vision model and parses the lines. */
 export async function scanReceipt(images: string[]): Promise<ReceiptScan> {
   if (!aiConfigured()) throw new Error("AI is not configured");
-  const response = await fetch(`${env.ai.baseUrl}/chat/completions`, {
+  const response = await fetch(`${env.ai.visionBaseUrl}/chat/completions`, {
     method: "POST",
-    headers: { authorization: `Bearer ${env.ai.apiKey}`, "content-type": "application/json" },
+    headers: { authorization: `Bearer ${env.ai.visionApiKey}`, "content-type": "application/json" },
     body: JSON.stringify({
       model: env.ai.visionModel,
       temperature: 0,
