@@ -42,6 +42,7 @@ export async function chatJson<T>(
   if (!aiConfigured()) return null;
   const retries = options.retries ?? 2;
   let maxTokens = options.maxTokens ?? 1500;
+  let rateLimitWaits = 0;
   const target = aiTarget(options.profile);
   const vendor = aiVendor(target.baseUrl);
   for (let attempt = 1; attempt <= retries; attempt += 1) {
@@ -97,7 +98,8 @@ export async function chatJson<T>(
               1000,
           );
           await new Promise((resolve) => setTimeout(resolve, waitMs));
-          if (attempt === retries) attempt -= 1; // one extra try after waiting
+          rateLimitWaits += 1;
+          if (attempt === retries && rateLimitWaits <= 3) attempt -= 1; // extra tries after waiting, bounded
         }
         continue;
       }
