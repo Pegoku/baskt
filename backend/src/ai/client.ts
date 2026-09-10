@@ -69,10 +69,12 @@ export async function chatJson<T>(
               ],
           temperature: 0,
           max_tokens: maxTokens,
-          response_format: { type: "json_object" },
-          // Groq cannot combine JSON mode with tools and validates tool calls strictly, which trips over
-          // gpt-oss mixing both channels; there the JSON protocol's "tool" field alone is used.
-          ...(options.tools?.length && vendor !== "groq"
+          // Groq cannot combine JSON mode with tools: with tools declared, the final answer is still JSON
+          // (the prompt demands it and the parser tolerates prose around it).
+          ...(options.tools?.length && vendor === "groq"
+            ? {}
+            : { response_format: { type: "json_object" } }),
+          ...(options.tools?.length
             ? { tools: options.tools, tool_choice: "auto" }
             : {}),
           ...reasoningField(target, vendor),
