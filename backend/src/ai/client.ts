@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db, now } from "@/db";
 import { aiCache } from "@/db/schema";
-import { aiConfigured, aiVendor, env } from "@/env";
+import { aiConfigured, aiTarget, aiVendor, env, type AiTarget } from "@/env";
 
 export type ChatMessage = { role: "system" | "user"; content: string };
 
@@ -32,45 +32,70 @@ export function resetAiStats() {
 /** Calls an OpenAI-compatible chat-completions endpoint and parses the JSON object it returns. */
 export async function chatJson<T>(
   messages: ChatMessage[],
-  options: { maxTokens?: number; retries?: number; tools?: unknown[] } = {},
+  options: {
+    maxTokens?: number;
+    retries?: number;
+    tools?: unknown[];
+    profile?: "default" | "assistant";
+  } = {},
 ): Promise<T | null> {
   if (!aiConfigured()) return null;
   const retries = options.retries ?? 2;
   let maxTokens = options.maxTokens ?? 1500;
+  const target = aiTarget(options.profile);
+  const vendor = aiVendor(target.baseUrl);
   for (let attempt = 1; attempt <= retries; attempt += 1) {
     calls += 1;
+    const started = performance.now();
     try {
-      const response = await fetch(`${env.ai.baseUrl}/chat/completions`, {
+      const response = await fetch(`${target.baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
-          authorization: `Bearer ${env.ai.apiKey}`,
+          authorization: `Bearer ${target.apiKey}`,
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          model: env.ai.model,
+          model: target.model,
           // Some providers (Alibaba's Qwen) refuse JSON mode unless the prompt literally mentions JSON.
           messages: messages.some((message) => /json/i.test(message.content))
             ? messages
-            : [...messages, { role: "system", content: "Respond with a single JSON object." }],
+            : [
+                ...messages,
+                {
+                  role: "system",
+                  content: "Respond with a single JSON object.",
+                },
+              ],
           temperature: 0,
           max_tokens: maxTokens,
           response_format: { type: "json_object" },
-          ...(options.tools?.length
+          // Groq cannot combine JSON mode with tools and validates tool calls strictly, which trips over
+          // gpt-oss mixing both channels; there the JSON protocol's "tool" field alone is used.
+          ...(options.tools?.length && vendor !== "groq"
             ? { tools: options.tools, tool_choice: "auto" }
             : {}),
-          ...reasoningField(),
-          ...providerField(),
+          ...reasoningField(target, vendor),
+          ...providerField(target, vendor),
         }),
         signal: AbortSignal.timeout(60_000),
       });
       if (!response.ok) {
+        const text = await response.text();
+        // Groq validates tool calls server-side and rejects gpt-oss's spontaneous ones, but returns what the
+        // model tried to call; recover it as the protocol's "tool" field instead of failing the turn.
+        const recovered =
+          response.status === 400 ? recoverToolCall(text) : null;
+        if (recovered) return recovered as T;
         failures += 1;
-        const text = (await response.text()).slice(0, 200);
-        console.warn(`[ai] HTTP ${response.status}: ${text}`);
+        console.warn(`[ai] HTTP ${response.status}: ${text.slice(0, 200)}`);
         if (response.status === 429) {
           // Free tiers meter tokens per minute; honour Retry-After (bounded) instead of failing the turn.
           const retryAfter = Number(response.headers.get("retry-after"));
-          const waitMs = Math.min(20_000, (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 3) * 1000);
+          const waitMs = Math.min(
+            20_000,
+            (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 3) *
+              1000,
+          );
           await new Promise((resolve) => setTimeout(resolve, waitMs));
           if (attempt === retries) attempt -= 1; // one extra try after waiting
         }
@@ -90,9 +115,16 @@ export async function chatJson<T>(
         }>;
       };
       const choice = payload.choices?.[0];
-      const usage = (payload as { usage?: { prompt_tokens?: number; completion_tokens?: number } }).usage;
+      const usage = (
+        payload as {
+          usage?: { prompt_tokens?: number; completion_tokens?: number };
+        }
+      ).usage;
       promptTokens += usage?.prompt_tokens ?? 0;
       completionTokens += usage?.completion_tokens ?? 0;
+      console.log(
+        `[ai] ${target.model} ${usage?.prompt_tokens ?? "?"}+${usage?.completion_tokens ?? "?"} tokens, ${Math.round(performance.now() - started)} ms`,
+      );
       const content = choice?.message?.content;
       // Some models (gpt-oss) emit a native function call when the prompt describes tools, even though
       // none are declared. Translate it into the JSON "tool" field the assistant protocol expects.
@@ -142,7 +174,9 @@ export async function chatJson<T>(
         // Thinking models can burn the budget on hidden reasoning and get cut off mid-JSON: give the retry room.
         if (choice?.finish_reason === "length") maxTokens *= 3;
         // Show what came back so model quirks (prose, truncation) are diagnosable from the log.
-        throw new Error(`${error instanceof Error ? error.message : String(error)}; reply started with: ${content.slice(0, 160).replace(/\s+/g, " ")}`);
+        throw new Error(
+          `${error instanceof Error ? error.message : String(error)}; reply started with: ${content.slice(0, 160).replace(/\s+/g, " ")}`,
+        );
       }
     } catch (error) {
       failures += 1;
@@ -154,30 +188,65 @@ export async function chatJson<T>(
   return null;
 }
 
-function reasoningField() {
-  if (env.ai.reasoning === "none") return {};
-  if (aiVendor() === "groq") {
+function reasoningField(target: AiTarget, vendor: ReturnType<typeof aiVendor>) {
+  if (target.reasoning === "none") return {};
+  if (vendor === "groq") {
     // Groq uses the plain OpenAI parameter and cannot switch gpt-oss reasoning off.
-    return env.ai.reasoning === "off" ? {} : { reasoning_effort: env.ai.reasoning };
+    return target.reasoning === "off"
+      ? {}
+      : { reasoning_effort: target.reasoning };
   }
-  if (env.ai.reasoning === "off") return { reasoning: { enabled: false } };
-  return { reasoning: { effort: env.ai.reasoning } };
+  if (target.reasoning === "off") return { reasoning: { enabled: false } };
+  return { reasoning: { effort: target.reasoning } };
 }
 
-function providerField() {
+function providerField(target: AiTarget, vendor: ReturnType<typeof aiVendor>) {
   // Provider routing is an OpenRouter extension; other vendors reject unknown fields.
-  if (aiVendor() !== "openrouter") return {};
-  if (!env.ai.providerOrder.length && !env.ai.providerQuantizations.length)
+  if (vendor !== "openrouter") return {};
+  if (!target.providerOrder.length && !target.providerQuantizations.length)
     return {};
   return {
     provider: {
-      ...(env.ai.providerOrder.length ? { order: env.ai.providerOrder } : {}),
-      ...(env.ai.providerQuantizations.length
-        ? { quantizations: env.ai.providerQuantizations }
+      ...(target.providerOrder.length ? { order: target.providerOrder } : {}),
+      ...(target.providerQuantizations.length
+        ? { quantizations: target.providerQuantizations }
         : {}),
       allow_fallbacks: true,
     },
   };
+}
+
+function recoverToolCall(errorBody: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(errorBody) as {
+      error?: { code?: string; failed_generation?: string };
+    };
+    if (
+      parsed.error?.code !== "tool_use_failed" ||
+      !parsed.error.failed_generation
+    )
+      return null;
+    const call = JSON.parse(parsed.error.failed_generation) as {
+      name?: string;
+      arguments?: unknown;
+    };
+    if (typeof call.name !== "string") return null;
+    let args: unknown = call.arguments ?? {};
+    if (typeof args === "string") {
+      try {
+        args = JSON.parse(args);
+      } catch {
+        args = {};
+      }
+    }
+    const name = call.name.replace(/^(tool|functions?)\./, "");
+    // The model sometimes "calls" a tool named JSON with the whole protocol object as arguments.
+    if (/^json$/i.test(name) && args && typeof args === "object")
+      return args as Record<string, unknown>;
+    return { tool: { name, args } };
+  } catch {
+    return null;
+  }
 }
 
 /**

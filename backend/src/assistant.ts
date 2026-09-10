@@ -29,7 +29,7 @@ import { inStock, listStock, matchByText } from "@/stock";
 import { allStores } from "@/stores/registry";
 import { productsByIds, searchStore } from "@/stores/search";
 
-const HISTORY = 16;
+const HISTORY = 10; // rows of chat history sent each turn (free tiers meter tokens per minute)
 const MAX_STEPS = 8;
 
 export function history(basketId: string): ChatMessageRow[] {
@@ -558,7 +558,7 @@ export async function chat(
         tool?: unknown;
         proposal?: unknown;
         recipes?: unknown;
-      }>(messages, { maxTokens: 4000, tools: TOOL_SPECS });
+      }>(messages, { maxTokens: 4000, tools: TOOL_SPECS, profile: "assistant" });
       if (!raw) {
         reply =
           reply || "I could not reach the AI right now. Please try again.";
@@ -594,7 +594,7 @@ export async function chat(
       });
       messages.push({
         role: "user",
-        content: `TOOL RESULT ${tool.name}: ${JSON.stringify(result).slice(0, 6000)}${
+        content: `TOOL RESULT ${tool.name}: ${JSON.stringify(result).slice(0, 3500)}${
           tool.name === "list_basket" || tool.name === "list_stock"
             ? "\n(Reminder: items the user explicitly named to add must still appear as add changes even if they are listed here; the app marks duplicates.)"
             : ""

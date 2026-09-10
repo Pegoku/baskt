@@ -49,7 +49,8 @@ const DEFAULT_MODELS = [
 const models = (args.get("models") ?? DEFAULT_MODELS.join(",")).split(",").map((value) => value.trim()).filter(Boolean);
 const runs = Number(args.get("runs") ?? "1") || 1;
 const only = args.get("only") ?? null;
-const concurrency = Number(args.get("concurrency") ?? "3") || 3;
+// Groq's free tier meters tokens per minute, so run one check at a time there unless told otherwise.
+const concurrency = Number(args.get("concurrency") ?? (/groq\.com/.test(env.ai.baseUrl) ? "1" : "3")) || 3;
 const productionModel = process.env.AI_MODEL ?? "";
 const productionProvider = { order: [...env.ai.providerOrder], quantizations: [...env.ai.providerQuantizations] };
 
@@ -412,6 +413,7 @@ async function pool<T>(items: T[], limit: number, worker: (item: T) => Promise<v
 
 async function runModel(model: string, meta: ModelMeta | undefined): Promise<ModelResult> {
   env.ai.model = model;
+  env.ai.assistant = null; // benchmark the model under test for the assistant too
   // OpenAI models (gpt-oss, gpt-5) only accept an effort level; other thinking models are told not to think (hidden reasoning
   // eats the small token budgets these tasks use); models without the parameter get nothing.
   // Groq's /models has no supported_parameters, so also treat known thinking families as such.
