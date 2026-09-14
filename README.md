@@ -30,14 +30,15 @@ JAVA_HOME=/opt/android-studio/jbr ./gradlew :app:assembleDebug   # any JDK 17+ w
 
 ## Barcode scanning
 
-The continuous scanner uses Google's bundled ML Kit. Fit a single barcode inside the frame;
+The continuous scanner uses Google's bundled ML Kit. Aim near the frame: detection extends
+65% of the frame’s height above and below it;
 three matching, checksum-valid readings confirm a capture with haptic feedback. Tap the preview
 to focus, use the light in dim rooms, or switch to 2× zoom for smaller labels.
 
 Keep scanning distinct products, then tap **Review** to pause the camera and expand your batch.
 Add products individually or add all recognised, unhandled products to your list or stock.
 Stock actions count only eligible products: add missing items or remove items already in stock.
-Move a barcode out of the frame and back to rescan a completed or dismissed item.
+Move a barcode away from the camera and back to rescan a completed or dismissed item.
 Holding the same label in view does not repeatedly capture it. Unknown products stay available
 for **Retry lookup**. **Done** closes the session;
 only products you explicitly added are saved.

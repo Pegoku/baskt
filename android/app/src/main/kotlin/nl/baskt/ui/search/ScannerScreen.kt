@@ -33,6 +33,7 @@ import kotlinx.coroutines.delay
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.ProductRow
 import nl.baskt.ui.common.StoreBadge
+import nl.baskt.ui.theme.BasktTheme
 
 /** Continuous capture with an explicit review mode; nothing is added until the user chooses it. */
 @Composable
@@ -63,10 +64,10 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
             if ((context as? android.app.Activity)?.isChangingConfigurations != true) viewModel.clearScans()
         }
     }
-    Surface(color = Color.Black, modifier = Modifier.fillMaxSize()) {
-        Column {
-            Box(Modifier.fillMaxWidth().weight(if (reviewing) .3f else 1.4f)) {
-                if (granted) ScannerCamera(paused || reviewing) { code ->
+    val cameraFraction = if (reviewing) .3f / 1.3f else 1.4f / 2.4f
+    Surface(color = Color(0xFF383838), modifier = Modifier.fillMaxSize()) {
+      Box(Modifier.fillMaxSize()) {
+        if (granted) ScannerCamera(paused || reviewing, cameraFraction) { code ->
                     val now = android.os.SystemClock.elapsedRealtime()
                     val accepted = viewModel.onBarcodeSeen(code)
                     if (accepted) {
@@ -78,7 +79,11 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                         feedbackAt = now
                     }
                     accepted
-                } else Column(Modifier.align(Alignment.Center).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+
+                }
+        Column(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxWidth().weight(if (reviewing) .3f else 1.4f)) {
+                if (!granted) Column(Modifier.align(Alignment.Center).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Allow camera access to scan products", color = Color.White)
                     Button(onClick = { permission.launch(Manifest.permission.CAMERA) }) { Text("Allow camera") }
                     TextButton(onClick = { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }) { Text("Open settings") }
@@ -88,11 +93,13 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                     Text("Scan products", color = Color.White, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                     TextButton(onClick = { paused = !paused }, enabled = !reviewing) { Text(if (paused) "Resume" else "Pause", color = Color.White) }
                 }
-                Text(feedback ?: if (reviewing) "Review your batch below" else if (paused) "Resume when you’re ready" else "Fit one barcode in the frame · hold steady",
+                Text(feedback ?: if (reviewing) "Review your batch below" else if (paused) "Resume when you’re ready" else "Point at a barcode · above or below the frame works too",
                     color = Color.White, style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp))
             }
-            Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), modifier = Modifier.fillMaxWidth().weight(1f)) {
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+              BasktTheme(darkTheme = true) {
+               Surface(color = Color(0xFF484848).copy(alpha = .78f), contentColor = Color.White, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), modifier = Modifier.fillMaxSize()) {
                 Column(Modifier.navigationBarsPadding()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -114,7 +121,7 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                     }
                     if (scans.isEmpty()) Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Scan a few. Review together.", style = MaterialTheme.typography.titleLarge)
-                        Text("Keep scanning, then review your list and stock. To scan an item again, move its barcode out of the frame and back.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Keep scanning, then review your list and stock. To scan an item again, move its barcode away from the camera and back.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         val listState = rememberLazyListState()
                         LaunchedEffect(scans.firstOrNull()?.gtin) { if (!reviewing) listState.animateScrollToItem(0) }
@@ -161,6 +168,9 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                     }
                 }
             }
+              }
+            }
         }
+      }
     }
 }

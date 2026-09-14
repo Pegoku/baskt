@@ -57,11 +57,12 @@ private data class CaptureFeedback(val image: ImageBitmap?, val bounds: RectF)
 
 @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
 @Composable
-internal fun ScannerCamera(paused: Boolean, onScan: (String) -> Boolean) {
+internal fun ScannerCamera(paused: Boolean, cameraFraction: Float, onScan: (String) -> Boolean) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.COMPATIBLE } }
     val currentScan by rememberUpdatedState(onScan)
+    val currentCameraFraction by rememberUpdatedState(cameraFraction)
     var camera by remember { mutableStateOf<Camera?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var torch by remember { mutableStateOf(false) }
@@ -113,7 +114,10 @@ internal fun ScannerCamera(paused: Boolean, onScan: (String) -> Boolean) {
                                 .addOnSuccessListener { codes ->
                                     if (!disposed && error == null && capture == null) {
                                         val output = previewView.outputTransform
-                                        val target = RectF(previewView.width * .1f, previewView.height * .35f, previewView.width * .9f, previewView.height * .65f)
+                                        // Accept labels up to 65% of the guide's height above and below it.
+                                        // Use the exposed camera area, so labels hidden by the batch panel never scan.
+                                        val visibleHeight = previewView.height * currentCameraFraction
+                                        val target = RectF(previewView.width * .1f, visibleHeight * (.35f - .3f * .65f), previewView.width * .9f, visibleHeight * (.65f + .3f * .65f))
                                         val inside = if (output == null) emptyList() else codes.filter { code ->
                                             code.boundingBox?.let { bounds ->
                                                 val mapped = RectF(bounds)
@@ -181,9 +185,9 @@ internal fun ScannerCamera(paused: Boolean, onScan: (String) -> Boolean) {
             val bounds = feedback?.bounds
             fun interpolate(start: Float, end: Float?) = start + ((end ?: start) - start) * progress
             val left = size.width * interpolate(.1f, bounds?.left)
-            val top = size.height * interpolate(.35f, bounds?.top)
+            val top = size.height * interpolate(.35f * cameraFraction, bounds?.top)
             val right = size.width * interpolate(.9f, bounds?.right)
-            val bottom = size.height * interpolate(.65f, bounds?.bottom)
+            val bottom = size.height * interpolate(.65f * cameraFraction, bounds?.bottom)
             val width = right - left
             val height = bottom - top
             val radius = CornerRadius(12.dp.toPx())
@@ -197,12 +201,13 @@ internal fun ScannerCamera(paused: Boolean, onScan: (String) -> Boolean) {
             drawPath(mask, Color.Black.copy(alpha = .55f))
             drawRoundRect(Color.White, Offset(left, top), Size(width, height), cornerRadius = radius, style = Stroke(2.dp.toPx()))
         }
-        if (paused || error != null) Surface(color = Color.Black.copy(alpha = .85f), modifier = Modifier.fillMaxSize()) {
-            Column(Modifier.wrapContentSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+        if (paused || error != null) Surface(color = Color(0xFF383838).copy(alpha = .9f), modifier = Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxWidth().fillMaxHeight(cameraFraction).wrapContentSize(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(error ?: "Scanning paused", color = Color.White)
                 if (error != null) TextButton(onClick = { retry++ }) { Text("Try again") }
             }
         }
+        Box(Modifier.fillMaxWidth().fillMaxHeight(cameraFraction)) {
         if (!paused && error == null) Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (camera?.cameraInfo?.hasFlashUnit() == true) FilledTonalButton(enabled = capture == null, onClick = {
                 torch = !torch; camera?.cameraControl?.enableTorch(torch)
@@ -212,6 +217,7 @@ internal fun ScannerCamera(paused: Boolean, onScan: (String) -> Boolean) {
                 zoom = if (zoom == 1f) 2f else 1f
                 camera?.cameraControl?.setZoomRatio(zoom)
             }) { Text("${zoom.toInt()}× zoom") }
+        }
         }
     }
 }
