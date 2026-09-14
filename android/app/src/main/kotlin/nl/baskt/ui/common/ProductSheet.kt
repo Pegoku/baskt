@@ -70,7 +70,7 @@ fun ProductSheet(product: Product, onDismiss: () -> Unit) {
             Text(listOfNotNull(source.brand, shown[2], source.priceCents.euros(), source.unitPriceLabel()).joinToString(" · "))
             if (shown[3].isNotBlank()) Text(shown[3], color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (shown[4].isNotBlank()) Text(shown[4], color = MaterialTheme.colorScheme.tertiary)
-            if (shown[1].isNotBlank()) Text(shown[1], style = MaterialTheme.typography.bodyLarge)
+            if (shown[1].isNotBlank()) DescriptionText(shown[1])
             else if (loading) Row(verticalAlignment = Alignment.CenterVertically) { LoadingIndicator(Modifier.size(24.dp)); Text("Loading description…") }
             else {
                 Text("No additional description is available.", color = MaterialTheme.colorScheme.onSurfaceVariant)

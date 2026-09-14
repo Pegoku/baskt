@@ -67,7 +67,7 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, act
                 nl.baskt.ui.common.ZoomableImage(image, displayed?.title ?: title, modifier = Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(16.dp)))
             }
             Text(displayed?.title ?: title, style = MaterialTheme.typography.titleLarge)
-            displayed?.description?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
+            displayed?.description?.takeIf { it.isNotBlank() }?.let { nl.baskt.ui.common.DescriptionText(it) }
             val meta = listOfNotNull(displayed?.servings?.let { "$it servings" }, displayed?.totalTime)
             if (meta.isNotEmpty()) Text(meta.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (displayed == null) {

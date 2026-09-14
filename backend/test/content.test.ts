@@ -1,7 +1,7 @@
 import { mapAhDetails } from "@/stores/ah";
 import { describe, expect, test } from "bun:test";
 import { completeTranslation, translateContent } from "@/matching/translate";
-import { parseProductDetails } from "@/stores/details";
+import { parseProductDetails, plainText } from "@/stores/details";
 import { localizeRecipe } from "@/matching/localize";
 
 describe("source-preserving content", () => {
@@ -31,12 +31,23 @@ describe("source-preserving content", () => {
     expect(result.description).toContain("Bevat melk.");
     expect(result.imageUrls).toEqual(["https://example.com/large.jpg"]);
   });
+  test("description HTML keeps lists and paragraphs but drops layout whitespace", () => {
+    expect(plainText(`<p>Made\n   with\n <strong>fresh</strong>\n milk.</p><p>Keep chilled.</p>`))
+      .toBe("Made with fresh milk.\n\nKeep chilled.");
+    expect(plainText("<ul><li>Fresh milk</li><li>No added sugar</li></ul>"))
+      .toBe("• Fresh milk\n\n• No added sugar");
+    expect(plainText("<ul><li><p>No added sugar</p></li></ul>")).toBe("• No added sugar");
+    expect(plainText("<ol><li>Open</li><li>Refrigerate</li></ol>"))
+      .toBe("1. Open\n\n2. Refrigerate");
+    expect(plainText("<p>A</p><div></div><p>B &nbsp; &amp; C</p>"))
+      .toBe("A\n\nB & C");
+  });
   test("extracts real descriptions and images without unrelated site content", () => {
     const html = `<script type="application/ld+json">broken</script><script type="application/ld+json">${JSON.stringify({ "@graph": [
       { "@type": "WebSite", description: "Do not use this" },
       { "@type": "Product", description: "<p>Melk &amp; cacao.</p><p>Bevat melk.</p>", image: ["https://example.com/front.jpg", { url: "https://example.com/back.jpg" }] },
     ] })}</script>`;
-    expect(parseProductDetails(html)).toEqual({ description: "Melk & cacao.\nBevat melk.", imageUrls: ["https://example.com/front.jpg", "https://example.com/back.jpg"] });
+    expect(parseProductDetails(html)).toEqual({ description: "Melk & cacao.\n\nBevat melk.", imageUrls: ["https://example.com/front.jpg", "https://example.com/back.jpg"] });
     expect(parseProductDetails("<html>Blocked</html>").description).toBeNull();
   });
 });

@@ -2,11 +2,36 @@ import { getAdapter } from "@/stores/registry";
 import { cachedUpstream } from "@/lib/cache";
 import type { ProductRow } from "@/db/schema";
 
+/** Keep semantic breaks from HTML, not indentation/newlines from its source code. */
 export function plainText(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  return value.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "").replace(/<\/(?:p|div|li)>|<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, n) => { const code = Number(n); return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : ""; }).trim() || null;
+  const lists: Array<{ ordered: boolean; next: number }> = [];
+  let text = value.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, "");
+  if (/<[a-z][^>]*>/i.test(text)) {
+    text = text.replace(/\s+/g, " ").replace(/<\/?([a-z][a-z0-9]*)\b[^>]*>/gi, (tag, rawName) => {
+      const name = rawName.toLowerCase();
+      const closing = tag.startsWith("</");
+      if (name === "ul" || name === "ol") {
+        if (closing) lists.pop(); else lists.push({ ordered: name === "ol", next: 1 });
+        return "\n\n";
+      }
+      if (name === "li") {
+        if (closing) return "\n";
+        const list = lists[lists.length - 1];
+        return list?.ordered ? `\n${list.next++}. ` : "\n• ";
+      }
+      if (name === "br") return "\n";
+      if (/^h[1-6]$/.test(name)) return closing ? ":\n\n" : "\n\n";
+      if (name === "p" || name === "div") return lists.length ? " " : "\n\n";
+      return "";
+    });
+  }
+  const entities: Record<string, string> = { nbsp: " ", amp: "&", quot: '"', apos: "'", lt: "<", gt: ">", bull: "•", ndash: "–", mdash: "—" };
+  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, name: string) => {
+    if (!name.startsWith("#")) return entities[name.toLowerCase()] ?? entity;
+    const code = name[1].toLowerCase() === "x" ? parseInt(name.slice(2), 16) : Number(name.slice(1));
+    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : "";
+  }).replace(/[^\S\n]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim() || null;
 }
 
 export function parseProductDetails(html: string): { description: string | null; imageUrls: string[] } {
@@ -50,7 +75,7 @@ export async function productDetails(product: ProductRow) {
   if (url.protocol !== "https:" || url.port || url.username || url.password ||
       !["www.ah.nl", "www.jumbo.com"].includes(url.hostname) || !url.pathname.startsWith("/producten/")) return fallback;
   try {
-    return await cachedUpstream(`product-details:v2:${product.id}`, 86400000, async () => {
+    return await cachedUpstream(`product-details:v3:${product.id}`, 86400000, async () => {
       const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(12000), headers: { "user-agent": "Mozilla/5.0", accept: "text/html" } });
       if (!response.ok) throw new Error("Product page unavailable");
       const detail = parseProductDetails(await response.text());
