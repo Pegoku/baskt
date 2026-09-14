@@ -1,6 +1,9 @@
 package nl.baskt.ui.search
 
 import android.graphics.RectF
+import android.graphics.Bitmap
+import android.graphics.Matrix
+import android.graphics.Paint
 import android.os.SystemClock
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
@@ -13,8 +16,6 @@ import androidx.core.view.doOnLayout
 import androidx.camera.core.UseCaseGroup
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.camera.view.transform.CoordinateTransform
-import androidx.camera.view.transform.ImageProxyTransformFactory
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -106,34 +107,47 @@ internal fun ScannerCamera(paused: Boolean, cameraFraction: Float, onScan: (Stri
                         analysis.setAnalyzer(executor) { proxy ->
                             val media = proxy.image
                             if (media == null) { proxy.close(); return@setAnalyzer }
-                            val transform = ImageProxyTransformFactory().apply {
-                                isUsingRotationDegrees = true
-                                isUsingCropRect = true
-                            }.getOutputTransform(proxy)
+                            val bufferToSensor = Matrix()
+                            val hasSensorTransform = proxy.imageInfo.sensorToBufferTransformMatrix.invert(bufferToSensor)
                             scanner.process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
                                 .addOnSuccessListener { codes ->
                                     if (!disposed && error == null && capture == null) {
-                                        val output = previewView.outputTransform
+                                        val sensorToView = previewView.sensorToViewTransform
+                                        val bufferToView = if (hasSensorTransform && sensorToView != null) Matrix().apply {
+                                            setConcat(sensorToView, bufferToSensor)
+                                        } else null
+                                        fun previewBounds(barcode: Barcode): RectF? {
+                                            val box = barcode.boundingBox ?: return null
+                                            val matrix = bufferToView ?: return null
+                                            val points = floatArrayOf(box.left.toFloat(), box.top.toFloat(), box.right.toFloat(), box.bottom.toFloat())
+                                            for (i in points.indices step 2) {
+                                                val (x, y) = barcodePointInBuffer(points[i], points[i + 1], proxy.width, proxy.height, proxy.imageInfo.rotationDegrees)
+                                                points[i] = x
+                                                points[i + 1] = y
+                                            }
+                                            val bufferBounds = RectF(minOf(points[0], points[2]), minOf(points[1], points[3]), maxOf(points[0], points[2]), maxOf(points[1], points[3]))
+                                            matrix.mapRect(bufferBounds)
+                                            return bufferBounds
+                                        }
                                         // Accept labels up to 65% of the guide's height above and below it.
                                         // Use the exposed camera area, so labels hidden by the batch panel never scan.
                                         val visibleHeight = previewView.height * currentCameraFraction
                                         val target = RectF(previewView.width * .1f, visibleHeight * (.35f - .3f * .65f), previewView.width * .9f, visibleHeight * (.65f + .3f * .65f))
-                                        val inside = if (output == null) emptyList() else codes.filter { code ->
-                                            code.boundingBox?.let { bounds ->
-                                                val mapped = RectF(bounds)
-                                                CoordinateTransform(transform, output).mapRect(mapped)
-                                                target.contains(mapped)
-                                            } ?: false
+                                        val inside = codes.mapNotNull { code ->
+                                            previewBounds(code)?.takeIf { target.contains(it) }?.let { code to it }
                                         }
                                         // Ambiguous frames (two products in the target) must never choose arbitrarily.
-                                        val code = inside.singleOrNull()?.let {
+                                        val code = inside.singleOrNull()?.first?.let {
                                             if (it.format == Barcode.FORMAT_UPC_E) it.rawValue?.let(::expandUpce) else it.rawValue
                                         }?.let { if (it.length == 12) "0$it" else it }
                                         gate.observe(code, SystemClock.elapsedRealtime())?.let { confirmed ->
                                             if (currentScan(confirmed)) {
-                                                val bounds = RectF(inside.single().boundingBox!!)
-                                                CoordinateTransform(transform, output!!).mapRect(bounds)
-                                                // Snapshot and bounds use PreviewView coordinates, including its crop/rotation.
+                                                val bounds = RectF(inside.single().second)
+                                                // Freeze the exact analyzed buffer with the same transform as its bounds.
+                                                val snapshot = Bitmap.createBitmap(previewView.width, previewView.height, Bitmap.Config.ARGB_8888)
+                                                val buffer = proxy.toBitmap()
+                                                android.graphics.Canvas(snapshot).drawBitmap(buffer, bufferToView!!, Paint(Paint.FILTER_BITMAP_FLAG))
+                                                buffer.recycle()
                                                 val padding = 12 * context.resources.displayMetrics.density
                                                 bounds.inset(-padding, -padding)
                                                 val normalized = RectF(
@@ -142,7 +156,7 @@ internal fun ScannerCamera(paused: Boolean, cameraFraction: Float, onScan: (Stri
                                                     (bounds.right / previewView.width).coerceIn(0f, 1f),
                                                     (bounds.bottom / previewView.height).coerceIn(0f, 1f),
                                                 )
-                                                capture = CaptureFeedback(previewView.bitmap?.asImageBitmap(), normalized)
+                                                capture = CaptureFeedback(snapshot.asImageBitmap(), normalized)
                                             }
                                         }
                                     }
