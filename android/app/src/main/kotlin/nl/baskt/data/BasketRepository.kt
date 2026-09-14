@@ -26,6 +26,20 @@ class BasketRepository(
     /** False after a request failed to reach the server; flips back when one succeeds. */
     val online = MutableStateFlow(true)
 
+    /**
+     * Whether the server can transcribe speech itself (Whisper). Refreshed by every health check and
+     * remembered across restarts, so the first dictation after a cold start already knows where to go.
+     */
+    val serverStt = MutableStateFlow(offline?.load<Boolean>("server-stt") ?: false)
+
+    /** One health round trip: reports reachability and refreshes what the server can do. */
+    private suspend fun checkHealth(): Boolean = runCatching { api.health() }
+        .onSuccess { health ->
+            val stt = (health.ai?.get("stt") as? kotlinx.serialization.json.JsonObject)?.get("configured")?.toString() == "true"
+            if (stt != serverStt.value) { serverStt.value = stt; offline?.save("server-stt", stt) }
+        }
+        .isSuccess
+
     /** Changes waiting to be sent to the server. */
     val pending = MutableStateFlow<List<PendingOp>>(offline?.loadOps() ?: emptyList())
     private var replaying = false
@@ -52,7 +66,7 @@ class BasketRepository(
         probing = true
         scope.launch {
             try {
-                val ok = kotlinx.coroutines.withTimeoutOrNull(4000) { runCatching { api.health() }.isSuccess } == true
+                val ok = kotlinx.coroutines.withTimeoutOrNull(4000) { checkHealth() } == true
                 if (!ok) online.value = false
             } finally {
                 probing = false
@@ -61,7 +75,7 @@ class BasketRepository(
     }
 
     /** Quick check used by the periodic monitor: true when the server answers. */
-    suspend fun probe(): Boolean = kotlinx.coroutines.withTimeoutOrNull(4000) { runCatching { api.health() }.isSuccess } == true
+    suspend fun probe(): Boolean = kotlinx.coroutines.withTimeoutOrNull(4000) { checkHealth() } == true
 
     private fun enqueue(op: PendingOp) {
         localVersion++
@@ -635,6 +649,23 @@ class BasketRepository(
     suspend fun deals(live: Boolean): DealsResponse? = guard { api.deals(_currentBasketId.value, live) }
 
     suspend fun interpret(text: String): List<VoiceItem>? = guard { api.interpret(text) }
+
+    /**
+     * Transcribes a recording on the server. Null means the caller should dictate on the phone instead:
+     * either no provider answered or this server has none configured (then stop asking it).
+     */
+    suspend fun dictate(audio: ByteArray, language: String): DictateResponse? {
+        if (!online.value) return null
+        return try {
+            api.dictate(audio, language)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (isConnectivityError(e)) wentOffline()
+            if (e is ApiException && e.status == 503) { serverStt.value = false; offline?.save("server-stt", false) }
+            null
+        }
+    }
 
     suspend fun confirm(items: List<VoiceItem>) {
         for (item in items.filter { it.wanted }) { if (item.kind == "group") addGroup(item.text) else add(item.text, item.quantity) }

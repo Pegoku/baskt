@@ -56,6 +56,12 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     val focusInputRequest = MutableStateFlow(false)
     val dictateRequest = MutableStateFlow(false)
 
+    /** Set when server dictation is unusable and the phone's own recogniser should take over. */
+    val onDeviceDictateRequest = MutableStateFlow(false)
+
+    /** Whether the server transcribes speech itself; otherwise the microphone opens Android's recogniser. */
+    val serverStt: StateFlow<Boolean> = basket.serverStt
+
     private val _suggestions = MutableStateFlow<List<String>>(emptyList())
     val suggestions: StateFlow<List<String>> = _suggestions
 
@@ -245,10 +251,32 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     private val _interpreting = MutableStateFlow(false)
     val interpreting: StateFlow<Boolean> = _interpreting
 
+    /** What the server heard, shown above the proposal so a misheard word is obvious. */
+    private val _transcript = MutableStateFlow<String?>(null)
+    val transcript: StateFlow<String?> = _transcript
+
     fun interpret(transcript: String) = viewModelScope.launch {
         _interpreting.value = true
+        _transcript.value = transcript
         _voiceProposal.value = basket.interpret(transcript) ?: emptyList()
         _interpreting.value = false
+    }
+
+    /**
+     * Sends a recording to the server's Whisper pool. When nothing there answers, the phone dictates
+     * instead: the user only has to speak again, never to fix settings.
+     */
+    fun dictateAudio(audio: ByteArray) = viewModelScope.launch {
+        _interpreting.value = true
+        _transcript.value = null
+        val result = basket.dictate(audio, container.currentSettings.resolvedLanguage)
+        _interpreting.value = false
+        if (result == null) {
+            onDeviceDictateRequest.value = true
+            return@launch
+        }
+        _transcript.value = result.transcript.ifBlank { null }
+        _voiceProposal.value = result.items
     }
 
     fun confirmProposal(items: List<VoiceItem>) = viewModelScope.launch {
@@ -256,7 +284,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         if (items.isNotEmpty()) basket.confirm(items)
     }
 
-    fun dismissProposal() { _voiceProposal.value = null }
+    fun dismissProposal() { _voiceProposal.value = null; _transcript.value = null }
 
     private val _scan = MutableStateFlow<ReceiptScan?>(null)
     val scan: StateFlow<ReceiptScan?> = _scan

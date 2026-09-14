@@ -118,7 +118,8 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
         val spoken = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
         if (!spoken.isNullOrBlank()) viewModel.interpret(spoken)
     }
-    fun startDictation() {
+    /** Android's own recogniser: no connection needed, and the fallback whenever the server cannot listen. */
+    fun startOnDeviceDictation() {
         val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, settings?.resolvedLanguage ?: java.util.Locale.getDefault().language)
@@ -126,8 +127,34 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
         }
         runCatching { speech.launch(intent) }.onFailure { android.widget.Toast.makeText(context, "Speech recognition is not available", android.widget.Toast.LENGTH_SHORT).show() }
     }
+    val online by viewModel.online.collectAsState()
+    val serverStt by viewModel.serverStt.collectAsState()
+    var recording by remember { mutableStateOf(false) }
+    val micPermission = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) recording = true else startOnDeviceDictation() // the recogniser asks for its own permissions
+    }
+    fun startDictation() {
+        if (!useServerDictation(online, serverStt)) { startOnDeviceDictation(); return }
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) recording = true
+        else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+    }
+    if (recording) {
+        DictationSheet(
+            onCancel = { recording = false },
+            onRecorded = { clip -> recording = false; viewModel.dictateAudio(clip) },
+            onUnavailable = { recording = false; startOnDeviceDictation() },
+        )
+    }
     val dictateRequest by viewModel.dictateRequest.collectAsState()
     LaunchedEffect(dictateRequest) { if (dictateRequest) { viewModel.dictateRequest.value = false; startDictation() } }
+    val onDeviceRequest by viewModel.onDeviceDictateRequest.collectAsState()
+    LaunchedEffect(onDeviceRequest) {
+        if (onDeviceRequest) {
+            viewModel.onDeviceDictateRequest.value = false
+            android.widget.Toast.makeText(context, "Server dictation unavailable, using this phone", android.widget.Toast.LENGTH_SHORT).show()
+            startOnDeviceDictation()
+        }
+    }
     val selection by viewModel.selection.collectAsState()
     val selectionMode = selection.isNotEmpty()
     var renaming by remember { mutableStateOf<BasketItem?>(null) }
@@ -198,8 +225,9 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
     }
     val proposal by viewModel.voiceProposal.collectAsState()
     val interpreting by viewModel.interpreting.collectAsState()
+    val transcript by viewModel.transcript.collectAsState()
     if (proposal != null || interpreting) {
-        VoiceConfirmSheet(proposal ?: emptyList(), interpreting, onDismiss = { viewModel.dismissProposal() }, onConfirm = { viewModel.confirmProposal(it) })
+        VoiceConfirmSheet(proposal ?: emptyList(), interpreting, transcript, onDismiss = { viewModel.dismissProposal() }, onConfirm = { viewModel.confirmProposal(it) })
     }
 
 

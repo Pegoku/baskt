@@ -280,6 +280,24 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
     suspend fun interpret(text: String): List<VoiceItem> =
         client.post(url("/basket/interpret")) { auth(); contentType(ContentType.Application.Json); setBody(FromTextRequest(text)) }.expect<InterpretResponse>().items
 
+    /** Uploads a recording for server-side transcription; 503 means the server has no speech-to-text. */
+    suspend fun dictate(audio: ByteArray, language: String): DictateResponse =
+        client.post(url("/basket/dictate")) {
+            auth()
+            setBody(
+                io.ktor.client.request.forms.MultiPartFormDataContent(
+                    io.ktor.client.request.forms.formData {
+                        append("language", language)
+                        append("audio", audio, io.ktor.http.Headers.build {
+                            append(io.ktor.http.HttpHeaders.ContentType, "audio/m4a")
+                            append(io.ktor.http.HttpHeaders.ContentDisposition, "filename=\"dictation.m4a\"")
+                        })
+                    },
+                ),
+            )
+            timeout { requestTimeoutMillis = 120_000; socketTimeoutMillis = 120_000 }
+        }.expect()
+
     suspend fun confirm(items: List<VoiceItem>, basketId: String): List<BasketItem> =
         client.post(url("/basket/confirm")) {
             auth(); contentType(ContentType.Application.Json); setBody(ConfirmRequest(items, basketId))

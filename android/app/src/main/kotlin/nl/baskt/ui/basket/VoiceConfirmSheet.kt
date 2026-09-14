@@ -30,11 +30,13 @@ import nl.baskt.data.VoiceItem
  * list unchecked so nothing mentioned is silently lost.
  */
 @Composable
-fun VoiceConfirmSheet(items: List<VoiceItem>, loading: Boolean, onDismiss: () -> Unit, onConfirm: (List<VoiceItem>) -> Unit) {
+fun VoiceConfirmSheet(items: List<VoiceItem>, loading: Boolean, transcript: String?, onDismiss: () -> Unit, onConfirm: (List<VoiceItem>) -> Unit) {
     var selected by remember(items) { mutableStateOf(items.filter { it.wanted }.map { it.text }.toSet()) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("I understood", style = MaterialTheme.typography.titleLarge)
+            // What was heard, so a misheard word explains a surprising item instead of looking like a bug.
+            if (transcript != null) Text("\u201C$transcript\u201D", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (loading) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { LoadingIndicator(); Text("Listening to what you said…") }
             } else if (items.isEmpty()) {

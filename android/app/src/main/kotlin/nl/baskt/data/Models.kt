@@ -458,6 +458,10 @@ data class ApplyResult(val index: Int, val ok: Boolean, val error: String? = nul
 @Serializable
 data class ApplyResponse(val message: ChatMessage, val results: List<ApplyResult> = emptyList())
 
+/** What the server heard (whisper) plus the proposal it read out of it. */
+@Serializable
+data class DictateResponse(val transcript: String = "", val items: List<VoiceItem> = emptyList())
+
 @Serializable
 data class HealthResponse(
     val ok: Boolean,
