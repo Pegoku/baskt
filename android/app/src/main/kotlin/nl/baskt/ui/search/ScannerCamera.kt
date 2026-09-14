@@ -15,6 +15,9 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.camera.view.transform.CoordinateTransform
 import androidx.camera.view.transform.ImageProxyTransformFactory
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -25,6 +28,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -37,10 +44,15 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+private data class CaptureFeedback(val image: ImageBitmap?, val bounds: RectF)
 
 @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
 @Composable
-internal fun ScannerCamera(paused: Boolean, onScan: (String) -> Unit) {
+internal fun ScannerCamera(paused: Boolean, onScan: (String) -> Boolean) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.COMPATIBLE } }
@@ -50,6 +62,23 @@ internal fun ScannerCamera(paused: Boolean, onScan: (String) -> Unit) {
     var torch by remember { mutableStateOf(false) }
     var zoom by remember { mutableFloatStateOf(1f) }
     var retry by remember { mutableIntStateOf(0) }
+    var capture by remember { mutableStateOf<CaptureFeedback?>(null) }
+    val frameProgress = remember { Animatable(0f) }
+    val freezeOpacity = remember { Animatable(1f) }
+    LaunchedEffect(capture, paused, retry) {
+        if (paused) { capture = null; return@LaunchedEffect }
+        if (capture == null) return@LaunchedEffect
+        frameProgress.snapTo(0f)
+        freezeOpacity.snapTo(1f)
+        // Lock onto the label, briefly hold confirmation, then blend back into live scanning.
+        frameProgress.animateTo(1f, tween(220, easing = FastOutSlowInEasing))
+        delay(120)
+        coroutineScope {
+            launch { freezeOpacity.animateTo(0f, tween(180)) }
+            launch { frameProgress.animateTo(0f, tween(180, easing = FastOutSlowInEasing)) }
+        }
+        capture = null
+    }
     DisposableEffect(lifecycle, paused, retry) {
         var disposed = false
         val executor = Executors.newSingleThreadExecutor()
@@ -77,7 +106,7 @@ internal fun ScannerCamera(paused: Boolean, onScan: (String) -> Unit) {
                             }.getOutputTransform(proxy)
                             scanner.process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
                                 .addOnSuccessListener { codes ->
-                                    if (!disposed && error == null) {
+                                    if (!disposed && error == null && capture == null) {
                                         val output = previewView.outputTransform
                                         val target = RectF(previewView.width * .1f, previewView.height * .35f, previewView.width * .9f, previewView.height * .65f)
                                         val inside = if (output == null) emptyList() else codes.filter { code ->
@@ -91,7 +120,22 @@ internal fun ScannerCamera(paused: Boolean, onScan: (String) -> Unit) {
                                         val code = inside.singleOrNull()?.let {
                                             if (it.format == Barcode.FORMAT_UPC_E) it.rawValue?.let(::expandUpce) else it.rawValue
                                         }?.let { if (it.length == 12) "0$it" else it }
-                                        gate.observe(code, SystemClock.elapsedRealtime())?.let(currentScan)
+                                        gate.observe(code, SystemClock.elapsedRealtime())?.let { confirmed ->
+                                            if (currentScan(confirmed)) {
+                                                val bounds = RectF(inside.single().boundingBox!!)
+                                                CoordinateTransform(transform, output!!).mapRect(bounds)
+                                                // Snapshot and bounds use PreviewView coordinates, including its crop/rotation.
+                                                val padding = 12 * context.resources.displayMetrics.density
+                                                bounds.inset(-padding, -padding)
+                                                val normalized = RectF(
+                                                    (bounds.left / previewView.width).coerceIn(0f, 1f),
+                                                    (bounds.top / previewView.height).coerceIn(0f, 1f),
+                                                    (bounds.right / previewView.width).coerceIn(0f, 1f),
+                                                    (bounds.bottom / previewView.height).coerceIn(0f, 1f),
+                                                )
+                                                capture = CaptureFeedback(previewView.bitmap?.asImageBitmap(), normalized)
+                                            }
+                                        }
                                     }
                                 }
                                 .addOnFailureListener { if (!disposed) error = "Barcode scanning stopped. Try again." }
@@ -117,23 +161,32 @@ internal fun ScannerCamera(paused: Boolean, onScan: (String) -> Unit) {
     }
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
-        Canvas(Modifier.fillMaxSize().pointerInput(camera) {
+        Canvas(Modifier.fillMaxSize().pointerInput(camera, capture) {
             detectTapGestures { point ->
-                camera?.cameraControl?.startFocusAndMetering(FocusMeteringAction.Builder(
+                if (capture == null) camera?.cameraControl?.startFocusAndMetering(FocusMeteringAction.Builder(
                     previewView.meteringPointFactory.createPoint(point.x, point.y),
                 ).build())
             }
         }) {
-            val left = size.width * .1f
-            val top = size.height * .35f
-            val width = size.width * .8f
-            val height = size.height * .3f
+            val feedback = capture
+            feedback?.image?.let {
+                drawImage(it, dstSize = IntSize(size.width.toInt(), size.height.toInt()), alpha = freezeOpacity.value)
+            }
+            val progress = if (feedback == null) 0f else frameProgress.value
+            val bounds = feedback?.bounds
+            fun interpolate(start: Float, end: Float?) = start + ((end ?: start) - start) * progress
+            val left = size.width * interpolate(.1f, bounds?.left)
+            val top = size.height * interpolate(.35f, bounds?.top)
+            val right = size.width * interpolate(.9f, bounds?.right)
+            val bottom = size.height * interpolate(.65f, bounds?.bottom)
+            val width = right - left
+            val height = bottom - top
             val shade = Color.Black.copy(alpha = .55f)
             drawRect(shade, size = Size(size.width, top))
             drawRect(shade, Offset(0f, top + height), Size(size.width, size.height - top - height))
             drawRect(shade, Offset(0f, top), Size(left, height))
-            drawRect(shade, Offset(left + width, top), Size(left, height))
-            drawRoundRect(Color.White, Offset(left, top), Size(width, height), style = Stroke(2.dp.toPx()))
+            drawRect(shade, Offset(right, top), Size(size.width - right, height))
+            drawRoundRect(Color.White, Offset(left, top), Size(width, height), cornerRadius = CornerRadius(12.dp.toPx()), style = Stroke(2.dp.toPx()))
         }
         if (paused || error != null) Surface(color = Color.Black.copy(alpha = .85f), modifier = Modifier.fillMaxSize()) {
             Column(Modifier.wrapContentSize(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -142,11 +195,11 @@ internal fun ScannerCamera(paused: Boolean, onScan: (String) -> Unit) {
             }
         }
         if (!paused && error == null) Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (camera?.cameraInfo?.hasFlashUnit() == true) FilledTonalButton(onClick = {
+            if (camera?.cameraInfo?.hasFlashUnit() == true) FilledTonalButton(enabled = capture == null, onClick = {
                 torch = !torch; camera?.cameraControl?.enableTorch(torch)
             }) { Text(if (torch) "Light on" else "Light off") }
             val maxZoom = camera?.cameraInfo?.zoomState?.value?.maxZoomRatio ?: 1f
-            if (maxZoom >= 2f) FilledTonalButton(onClick = {
+            if (maxZoom >= 2f) FilledTonalButton(enabled = capture == null, onClick = {
                 zoom = if (zoom == 1f) 2f else 1f
                 camera?.cameraControl?.setZoomRatio(zoom)
             }) { Text("${zoom.toInt()}× zoom") }

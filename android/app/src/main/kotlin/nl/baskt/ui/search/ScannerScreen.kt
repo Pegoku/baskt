@@ -68,7 +68,8 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
             Box(Modifier.fillMaxWidth().weight(if (reviewing) .3f else 1.4f)) {
                 if (granted) ScannerCamera(paused || reviewing) { code ->
                     val now = android.os.SystemClock.elapsedRealtime()
-                    if (viewModel.onBarcodeSeen(code)) {
+                    val accepted = viewModel.onBarcodeSeen(code)
+                    if (accepted) {
                         haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                         feedback = "Captured · ready for the next item"
                         feedbackAt = now
@@ -76,6 +77,7 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                         feedback = "Already in your batch · scan another item"
                         feedbackAt = now
                     }
+                    accepted
                 } else Column(Modifier.align(Alignment.Center).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Allow camera access to scan products", color = Color.White)
                     Button(onClick = { permission.launch(Manifest.permission.CAMERA) }) { Text("Allow camera") }
