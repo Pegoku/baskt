@@ -85,6 +85,13 @@
       "when": 1788984094445,
       "tag": "0011_faithful_masque",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1789405024247,
+      "tag": "0012_bitter_korath",
+      "breakpoints": true
     }
   ]
 }

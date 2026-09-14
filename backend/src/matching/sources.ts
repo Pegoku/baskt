@@ -1,3 +1,4 @@
+import { cachedUpstream } from "@/lib/cache";
 import { fetchWithRetry } from "@/lib/http";
 import { extractRecipe, type Recipe } from "@/matching/recipes";
 
@@ -86,6 +87,10 @@ function filterRelevant(hits: RecipeHit[], query: string, limit: number) {
 }
 
 export async function searchSite(site: SiteSource, query: string, limit = 8): Promise<RecipeHit[]> {
+  return cachedUpstream(`recipe-search:v1:${site.id}:${query.trim().toLowerCase()}:${limit}`, 60 * 60 * 1000, () => searchSiteLive(site, query, limit));
+}
+
+async function searchSiteLive(site: SiteSource, query: string, limit: number): Promise<RecipeHit[]> {
   const html = await fetchHtml(site.searchUrl(query));
   const seen = new Set<string>();
   const hits: RecipeHit[] = [];
@@ -108,6 +113,10 @@ export async function searchSite(site: SiteSource, query: string, limit = 8): Pr
 export { relevance as recipeRelevance };
 
 export async function searchMealDb(query: string): Promise<RecipeHit[]> {
+  return cachedUpstream(`meal-search:v1:${query.trim().toLowerCase()}`, 60 * 60 * 1000, () => searchMealDbLive(query));
+}
+
+async function searchMealDbLive(query: string): Promise<RecipeHit[]> {
   const response = await fetchWithRetry(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(query)}`, {}, { retries: 1 });
   const body = (await response.json()) as { meals?: Array<{ idMeal: string; strMeal: string; strMealThumb?: string }> | null };
   return (body.meals ?? []).slice(0, 10).map((meal) => ({ title: meal.strMeal, url: `https://www.themealdb.com/meal/${meal.idMeal}`, imageUrl: meal.strMealThumb ?? null, source: "TheMealDB", language: "en" as const }));

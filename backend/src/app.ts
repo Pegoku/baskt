@@ -1,3 +1,4 @@
+import { idempotency } from "@/lib/idempotency";
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { env } from "@/env";
@@ -33,6 +34,8 @@ export function createApp(options: { token?: string; log?: boolean } = {}) {
     if (!constantTimeEqual(provided, token)) return c.json({ error: { code: "UNAUTHORIZED", message: "invalid bearer token" } }, 401);
     return next();
   });
+
+  app.use("/api/v1/*", idempotency());
 
   app.route("/api/v1", meta);
   app.route("/api/v1/basket", basket);

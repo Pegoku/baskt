@@ -1,3 +1,4 @@
+import { cachedUpstream } from "@/lib/cache";
 import { desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { db, newId, now } from "@/db";
@@ -10,25 +11,11 @@ import { fetchRecipeFromUrl, searchAllSources, SITE_SOURCES } from "@/matching/s
 
 export const recipes = new Hono();
 
-/** Fetched recipes are kept for a day so opening one that was prefetched is instant. */
-const recipeCache = new Map<string, { at: number; recipe: Recipe | null }>();
-const RECIPE_TTL = 24 * 60 * 60 * 1000;
-const inflight = new Map<string, Promise<Recipe | null>>();
-
+/** Recipe content lasts a day, with a week of stale fallback if the source is down. */
 export async function fetchRecipe(url: string): Promise<Recipe | null> {
-  const cached = recipeCache.get(url);
-  if (cached && Date.now() - cached.at < RECIPE_TTL) return cached.recipe;
-  let pending = inflight.get(url);
-  if (!pending) {
-    pending = fetchRecipeFromUrl(url)
-      .then((recipe) => {
-        recipeCache.set(url, { at: Date.now(), recipe });
-        return recipe;
-      })
-      .finally(() => inflight.delete(url));
-    inflight.set(url, pending);
-  }
-  return pending;
+  return cachedUpstream(`recipe:v1:${url}`, 24 * 60 * 60 * 1000, () => fetchRecipeFromUrl(url), {
+    staleMs: 7 * 24 * 60 * 60 * 1000, cacheable: (recipe) => recipe !== null,
+  });
 }
 
 /**
@@ -36,7 +23,7 @@ export async function fetchRecipe(url: string): Promise<Recipe | null> {
  * the translated version. Runs in the background, a few at a time, and never blocks the response.
  */
 export function prefetchRecipes(urls: string[], concurrency = 3) {
-  const queue = urls.filter((url) => !recipeCache.has(url));
+  const queue = [...new Set(urls)];
   if (!queue.length) return;
   const worker = async () => {
     while (queue.length) {

@@ -279,3 +279,20 @@ export type ProductRow = typeof products.$inferSelect;
 export type BasketItemRow = typeof basketItems.$inferSelect;
 export type BasketMatchRow = typeof basketMatches.$inferSelect;
 export type ChoiceRow = typeof choices.$inferSelect;
+
+/** Shared upstream cache; safe to prune by expiry. */
+export const upstreamCache = sqliteTable("upstream_cache", {
+  key: text("key").primaryKey(),
+  value: text("value", { mode: "json" }).$type<unknown>().notNull(),
+  expiresAt: integer("expires_at").notNull(),
+  staleUntil: integer("stale_until").notNull(),
+});
+
+/** Successful outbox responses survive reconnects and server restarts. */
+export const mutationReceipts = sqliteTable("mutation_receipts", {
+  key: text("key").primaryKey(),
+  fingerprint: text("fingerprint").notNull(),
+  status: integer("status").notNull(),
+  body: text("body").notNull(),
+  createdAt: integer("created_at").notNull(),
+});

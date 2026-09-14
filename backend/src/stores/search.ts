@@ -1,3 +1,4 @@
+import { cachedUpstream } from "@/lib/cache";
 import { and, eq, inArray } from "drizzle-orm";
 import { db, now } from "@/db";
 import { priceHistory, products, searchCache, type ProductRow } from "@/db/schema";
@@ -100,8 +101,10 @@ export async function lookupBarcode(stores: StoreCode[], gtin: string): Promise<
       try {
         const adapter = getAdapter(store);
         let found: StoreProduct | null = null;
-        if (adapter.byBarcode) found = await adapter.byBarcode(gtin);
-        else found = (await adapter.search(gtin, 3))[0] ?? null;
+        found = await cachedUpstream(`barcode:v1:${store}:${gtin}`, 6 * 60 * 60 * 1000, async () => {
+          if (adapter.byBarcode) return adapter.byBarcode(gtin);
+          return (await adapter.search(gtin, 3))[0] ?? null;
+        }, { staleMs: 24 * 60 * 60 * 1000 });
         const row = found ? upsertProducts([found])[0] : null;
         return { store, product: row, error: null };
       } catch (error) {
