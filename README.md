@@ -90,9 +90,14 @@ calls, failures, tokens and cooldowns.
 
 Tap the microphone and speak a whole list ("two milk, six eggs, and forget the rice, I already have
 it"): the recording goes to `whisper-large-v3` on the server, which is faster and far more accurate
-than the phone's recogniser, and the transcript is interpreted into a proposal you confirm. Groq serves
-Whisper on the chat key, so no extra configuration is needed. Without a connection — or when no server
-provider answers — the app falls back to Android's on-device recogniser and the same confirm screen.
+than the phone's recogniser, and the transcript is interpreted into a proposal you confirm. Without a
+connection — or when no server provider answers — the app falls back to Android's on-device recogniser
+and the same confirm screen.
+
+Groq serves Whisper on the chat key, so every Groq provider in the pool transcribes too and nothing has
+to be configured. `AI_STT_MODEL` switches model (`whisper-large-v3-turbo` is faster), `AI_STT_1` … give
+dictation its own endpoint and keys when the chat models live somewhere without Whisper, and `AI_STT=off`
+keeps every dictation on the phone.
 
 ## Adding a supermarket
 

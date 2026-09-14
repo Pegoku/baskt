@@ -103,12 +103,13 @@ function assign(slot: AiSlot, name: keyof AiSlot, value: string) {
 /**
  * Reads a pool: the first provider comes from the plain `PREFIX_BASE_URL`/`PREFIX_API_KEY`/`PREFIX_MODEL`
  * variables (or a `PREFIX_1` line), the rest from one line each in `PREFIX_2` … `PREFIX_9`. Providers
- * without a key or a model are dropped. Exported for the tests.
+ * without a key or a model are dropped. `activatedBy` narrows which of its own variables make a pool
+ * count as configured. Exported for the tests.
  */
 export function readPool(
   prefix: string,
   base: Omit<AiTarget, "providerOrder" | "providerQuantizations">,
-  options: { requireOwnVars?: boolean } = {},
+  options: { requireOwnVars?: boolean; activatedBy?: string[] } = {},
 ): AiProvider[] {
   const own = (name: string) => process.env[`${prefix}_${name}`]?.trim() || undefined;
   const classic: AiSlot = {
@@ -122,7 +123,7 @@ export function readPool(
   };
   const line = own("1");
   const first = (line && parseProvider(line, classic, `${prefix}_1`)) || classic;
-  const configured = Boolean(line) || ["BASE_URL", "API_KEY", "MODEL", "REASONING", "PRIORITY", "PROVIDER_ORDER", "PROVIDER_QUANTIZATIONS"].some(own);
+  const configured = (options.activatedBy ?? ["1", "BASE_URL", "API_KEY", "MODEL", "REASONING", "PRIORITY", "PROVIDER_ORDER", "PROVIDER_QUANTIZATIONS"]).some(own);
   const pool: AiProvider[] = [];
   if ((configured || !options.requireOwnVars) && first.apiKey && first.model) pool.push({ ...first, id: `${prefix}_1` });
   for (let slot = 2; slot <= MAX_SLOTS; slot += 1) {
@@ -189,11 +190,17 @@ export const env = {
     num(process.env.SEARCH_CACHE_TTL_HOURS, 24) * 60 * 60 * 1000,
 };
 
+/**
+ * The dictation pool. `AI_STT=off` keeps dictation on the phone; an endpoint, a key or an `AI_STT_1` line
+ * gives Whisper its own provider(s); otherwise the Groq chat providers are reused, because the same key
+ * serves whisper-large-v3. `AI_STT_MODEL` picks the model either way (whisper-large-v3-turbo is faster).
+ */
 function sttPool(): AiProvider[] {
+  if (/^(off|false|0|no)$/i.test(process.env.AI_STT?.trim() ?? "")) return [];
   const model = process.env.AI_STT_MODEL?.trim() || "whisper-large-v3";
-  const configured = readPool("AI_STT", { ...chatBase, model }, { requireOwnVars: true });
-  if (configured.length) return configured;
-  // No dedicated keys: Groq serves Whisper on the same key as the chat models, so reuse those providers.
+  // A model name alone must not invent a provider: it only says which model the pool below should use.
+  const dedicated = readPool("AI_STT", { ...chatBase, model }, { requireOwnVars: true, activatedBy: ["1", "BASE_URL", "API_KEY"] });
+  if (dedicated.length) return dedicated;
   return chat
     .filter((provider) => aiVendor(provider.baseUrl) === "groq")
     .map((provider) => ({ ...provider, id: `${provider.id}_STT`, model }));

@@ -190,3 +190,49 @@ describe("cooldowns", () => {
     expect(cooldownFor(400)).toBe(0);
   });
 });
+
+describe("the dictation pool", () => {
+  const groq = { AI_BASE_URL: "https://api.groq.com/openai/v1", AI_API_KEY: "gsk_one", AI_MODEL: "openai/gpt-oss-20b" };
+
+  /** env.ts reads process.env once, so each case re-imports it with its own environment. */
+  async function pools(vars: Record<string, string>) {
+    const previous = { ...process.env };
+    Object.assign(process.env, groq, vars);
+    const fresh = await import(`@/env?stt=${JSON.stringify(vars)}`);
+    for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key];
+    Object.assign(process.env, previous);
+    return fresh.env.ai as { chat: AiProvider[]; stt: AiProvider[] };
+  }
+
+  test("reuses the Groq chat keys, because the same key serves Whisper", async () => {
+    const ai = await pools({ AI_2: "gsk_two" });
+    expect(ai.stt.map((entry) => [entry.id, entry.apiKey, entry.model])).toEqual([
+      ["AI_1_STT", "gsk_one", "whisper-large-v3"],
+      ["AI_2_STT", "gsk_two", "whisper-large-v3"],
+    ]);
+  });
+
+  test("AI_STT_MODEL picks the model without inventing a provider", async () => {
+    const ai = await pools({ AI_STT_MODEL: "whisper-large-v3-turbo" });
+    expect(ai.stt.map((entry) => [entry.id, entry.model])).toEqual([["AI_1_STT", "whisper-large-v3-turbo"]]);
+  });
+
+  test("a dedicated key takes over from the chat providers", async () => {
+    const ai = await pools({ AI_STT_1: "https://api.groq.com/openai/v1, gsk_whisper", AI_STT_2: "gsk_whisper_two" });
+    expect(ai.stt.map((entry) => [entry.id, entry.apiKey, entry.model])).toEqual([
+      ["AI_STT_1", "gsk_whisper", "whisper-large-v3"],
+      ["AI_STT_2", "gsk_whisper_two", "whisper-large-v3"],
+    ]);
+  });
+
+  test("AI_STT=off leaves dictation on the phone", async () => {
+    const ai = await pools({ AI_STT: "off", AI_STT_1: "https://api.groq.com/openai/v1, gsk_whisper" });
+    expect(ai.stt).toEqual([]);
+    expect(ai.chat.length).toBe(1); // the chat pool is untouched
+  });
+
+  test("a non-Groq chat provider gets no dictation unless one is configured", async () => {
+    const ai = await pools({ AI_BASE_URL: "https://openrouter.ai/api/v1", AI_API_KEY: "sk-or", AI_STT_MODEL: "whisper-large-v3" });
+    expect(ai.stt).toEqual([]);
+  });
+});
