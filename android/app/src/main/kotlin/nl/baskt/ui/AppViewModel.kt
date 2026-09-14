@@ -645,6 +645,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     suspend fun testConnection(): Result<String> = runCatching {
         val health = container.api.health()
         val ai = health.ai?.get("configured")?.toString() == "true"
-        "Connected to baskt ${health.version}" + if (ai) " · AI ready" else " · AI not configured (text matching only)"
+        val stt = (health.ai?.get("stt") as? kotlinx.serialization.json.JsonObject)?.get("configured")?.toString() == "true"
+        "Connected to baskt ${health.version}" + (if (ai) " · AI ready" else " · AI not configured (text matching only)") +
+            if (stt) " · dictation on the server" else " · dictation on this phone"
     }
 }

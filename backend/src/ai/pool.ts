@@ -47,6 +47,22 @@ export function attemptOrder(profile: AiProfile = "default"): AiProvider[] {
   return [...ordered.filter((provider) => !cooldownLeft(provider.id)), ...ordered.filter((provider) => cooldownLeft(provider.id))];
 }
 
+/**
+ * How long to stop using a provider after an HTTP error: a metered key honours Retry-After, a key the
+ * provider rejects outright (bad token, no access to the model) sits out a minute rather than costing
+ * every call a round trip, and a server or transport error gets a short pause. A 400 is about the
+ * request, not the provider, so it does not count against it.
+ */
+export function cooldownFor(status: number, retryAfter: string | null = null): number {
+  if (status === 429) {
+    const seconds = Number(retryAfter);
+    return Math.min(60_000, (Number.isFinite(seconds) && seconds > 0 ? seconds : 5) * 1000);
+  }
+  if (status === 401 || status === 402 || status === 403 || status === 404) return 60_000;
+  if (status >= 500) return 15_000;
+  return 0;
+}
+
 export function noteCall(id: string) {
   entry(id).calls += 1;
 }

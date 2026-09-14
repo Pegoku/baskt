@@ -72,8 +72,9 @@ AI_2_API_KEY=gsk_...          # same endpoint, model and priority as AI_API_KEY
 `AI_n_PRIORITY` (default 1) decides the order: the lowest number is tried first and providers sharing a
 number are used round-robin, which spreads the load over both keys and doubles a per-minute quota. Give
 a paid fallback `AI_3_PRIORITY=2` and it is only used when the free ones are exhausted. A provider that
-returns an error or a rate limit is skipped until it cools down (`Retry-After`, or 15 s after a server
-or network error), and the next provider answers the same call instead of the user waiting. Receipt
+fails is skipped until it cools down — `Retry-After` when it is metered, a minute when it rejects the key
+or the model, 15 s after a server or network error — and the next provider answers the same call instead
+of the user waiting. Receipt
 vision (`AI_VISION_*`), the assistant (`AI_ASSISTANT_*`) and dictation (`AI_STT_*`) are separate pools
 that balance the same way. `GET /api/v1/health` reports per-provider calls, failures, tokens and
 cooldowns.

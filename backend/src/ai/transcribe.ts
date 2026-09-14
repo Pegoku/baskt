@@ -1,4 +1,4 @@
-import { attemptOrder, noteCall, noteFailure, noteUsage } from "@/ai/pool";
+import { attemptOrder, cooldownFor, noteCall, noteFailure, noteUsage } from "@/ai/pool";
 import { env } from "@/env";
 
 export type Audio = { bytes: Uint8Array; filename: string; mime: string };
@@ -34,14 +34,7 @@ export async function transcribeAudio(audio: Audio, language?: string): Promise<
       });
       if (!response.ok) {
         const text = await response.text();
-        const retryAfter = Number(response.headers.get("retry-after"));
-        const cooldown =
-          response.status === 429
-            ? Math.min(60_000, (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 5) * 1000)
-            : response.status >= 500
-              ? 15_000
-              : 0;
-        noteFailure(target.id, `HTTP ${response.status}: ${text.slice(0, 120)}`, cooldown);
+        noteFailure(target.id, `HTTP ${response.status}: ${text.slice(0, 120)}`, cooldownFor(response.status, response.headers.get("retry-after")));
         console.warn(`[stt] ${target.id} HTTP ${response.status}: ${text.slice(0, 200)}`);
         continue;
       }

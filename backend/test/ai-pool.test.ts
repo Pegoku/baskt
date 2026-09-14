@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { attemptOrder, noteFailure, noteUsage, resetPoolStats } from "@/ai/pool";
+import { attemptOrder, cooldownFor, noteFailure, noteUsage, resetPoolStats } from "@/ai/pool";
 import { transcribeAudio } from "@/ai/transcribe";
 import { env, readPool, type AiProvider } from "@/env";
 
@@ -130,5 +130,16 @@ describe("transcription", () => {
     expect(form!.get("model")).toBe("whisper-large-v3");
     expect(form!.get("language")).toBe("nl");
     expect((form!.get("file") as File).name).toBe("dictation.m4a");
+  });
+});
+
+describe("cooldowns", () => {
+  test("a metered key honours Retry-After, a rejected key sits out, a bad request does not count", () => {
+    expect(cooldownFor(429, "12")).toBe(12_000);
+    expect(cooldownFor(429, null)).toBe(5_000);
+    expect(cooldownFor(429, "600")).toBe(60_000); // bounded: the next call must not wait ten minutes
+    expect(cooldownFor(401)).toBe(60_000);
+    expect(cooldownFor(503)).toBe(15_000);
+    expect(cooldownFor(400)).toBe(0);
   });
 });

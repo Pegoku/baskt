@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db, now } from "@/db";
 import { aiCache } from "@/db/schema";
-import { attemptOrder, cooldownLeft, noteCall, noteFailure, noteUsage, poolStats, resetPoolStats } from "@/ai/pool";
+import { attemptOrder, cooldownFor, cooldownLeft, noteCall, noteFailure, noteUsage, poolStats, resetPoolStats } from "@/ai/pool";
 import { aiConfigured, aiPool, aiVendor, env, type AiProvider, type AiTarget } from "@/env";
 
 export type ChatMessage = { role: "system" | "user"; content: string };
@@ -101,24 +101,15 @@ export async function chatJson<T>(
         if (recovered) return recovered as T;
         failures += 1;
         console.warn(`[ai] ${target.id} HTTP ${response.status}: ${text.slice(0, 200)}`);
-        if (response.status === 429) {
-          // Free tiers meter tokens per minute; honour Retry-After (bounded) instead of failing the turn.
-          const retryAfter = Number(response.headers.get("retry-after"));
-          const waitMs = Math.min(
-            20_000,
-            (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 3) *
-              1000,
-          );
-          noteFailure(target.id, `HTTP 429: ${text.slice(0, 120)}`, waitMs);
-          // Another key with quota left is worth more than waiting; only sleep when the whole pool is metered.
-          if (order.every((provider) => cooldownLeft(provider.id))) {
-            await new Promise((resolve) => setTimeout(resolve, waitMs));
-            rateLimitWaits += 1;
-            if (attempt === attempts && rateLimitWaits <= 3) attempt -= 1; // extra tries after waiting, bounded
-          }
-        } else {
-          // A broken endpoint should not be picked again for the next call while a healthy one exists.
-          noteFailure(target.id, `HTTP ${response.status}: ${text.slice(0, 120)}`, response.status >= 500 ? 15_000 : 0);
+        // A provider that cannot serve this call is skipped for a while, so the next call starts elsewhere.
+        const cooldown = cooldownFor(response.status, response.headers.get("retry-after"));
+        noteFailure(target.id, `HTTP ${response.status}: ${text.slice(0, 120)}`, cooldown);
+        // Free tiers meter tokens per minute; another key with quota left is worth more than waiting, so
+        // only sleep it out (bounded) when the whole pool is metered.
+        if (response.status === 429 && order.every((provider) => cooldownLeft(provider.id))) {
+          await new Promise((resolve) => setTimeout(resolve, Math.min(20_000, cooldown)));
+          rateLimitWaits += 1;
+          if (attempt === attempts && rateLimitWaits <= 3) attempt -= 1; // extra tries after waiting, bounded
         }
         continue;
       }

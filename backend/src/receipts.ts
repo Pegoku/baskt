@@ -1,7 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { db, newId, now } from "@/db";
 import { purchaseLines, purchases, type ProductRow, type PurchaseLineRow, type PurchaseRow } from "@/db/schema";
-import { attemptOrder, noteCall, noteFailure, noteUsage } from "@/ai/pool";
+import { attemptOrder, cooldownFor, noteCall, noteFailure, noteUsage } from "@/ai/pool";
 import { normalizeText, tokenize, tokenSimilarity } from "@/lib/text";
 import { hasStore } from "@/stores/registry";
 import { searchStore } from "@/stores/search";
@@ -40,9 +40,8 @@ export async function scanReceipt(images: string[]): Promise<ReceiptScan> {
       });
       if (!response.ok) {
         const text = await response.text();
-        const retryAfter = Number(response.headers.get("retry-after"));
         lastError = `Receipt model HTTP ${response.status}: ${text.slice(0, 200)}`;
-        noteFailure(target.id, lastError, response.status === 429 ? Math.min(60_000, (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 5) * 1000) : response.status >= 500 ? 15_000 : 0);
+        noteFailure(target.id, lastError, cooldownFor(response.status, response.headers.get("retry-after")));
         continue;
       }
       const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
