@@ -37,15 +37,20 @@ class RecipeLibrary(private val api: BasktApi, private val offline: OfflineStore
     suspend fun detail(url: String): RecipeDetail? {
         if (url.startsWith("baskt://recipe/")) {
             mine.value.firstOrNull { it.url == url }?.let {
-                return RecipeDetail(it.title, it.url, it.servings, it.ingredientLines, it.imageUrl, it.steps)
+                return RecipeDetail(it.title, it.url, it.servings, it.ingredientLines, it.imageUrl, it.steps, description = it.description)
             }
         }
         val key = "recipe-detail-$url"
-        offline.load<RecipeDetail>(key)?.let { cacheImages(listOfNotNull(it.imageUrl) + it.steps.mapNotNull { step -> step.imageUrl }); return it }
-        if (!basket.online.value) return null
+        val cached = offline.load<RecipeDetail>(key)
+        if (cached != null && (cached.original != null || !basket.online.value)) {
+            cacheImages(listOfNotNull(cached.imageUrl) + cached.steps.mapNotNull { it.imageUrl })
+            return cached
+        }
+        if (!basket.online.value) return cached
         return try { api.fetchRecipe(url).also { offline.save(key, it); cacheImages(listOfNotNull(it.imageUrl) + it.steps.mapNotNull { step -> step.imageUrl }) } }
         catch (e: CancellationException) { throw e }
-        catch (_: Exception) { null }
+        catch (_: Exception) { cached }
+
     }
     suspend fun toggle(recipe: RecipeSummary) {
         val existing = favourites.value.firstOrNull { it.url == recipe.url }

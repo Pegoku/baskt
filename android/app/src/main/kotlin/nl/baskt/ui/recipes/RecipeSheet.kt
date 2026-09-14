@@ -35,34 +35,58 @@ import nl.baskt.data.RecipeDetail
 /** Recipe viewer: photo, ingredients and numbered steps (with step images when the site has them), translated by the server. */
 @Composable
 fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, actions: @Composable () -> Unit) {
+    val source = detail?.original ?: detail
+    val originalMissing = detail?.original == null && detail?.originalTitle != null && detail.originalTitle != detail.title
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
+    var original by androidx.compose.runtime.saveable.rememberSaveable(detail?.sourceUrl, title) { androidx.compose.runtime.mutableStateOf(false) }
+    val texts = source?.let { listOf(it.title) + it.ingredientLines + it.steps.map { step -> step.text } + listOf(it.servings.orEmpty(), it.totalTime.orEmpty(), it.description.orEmpty()) } ?: emptyList()
+    val translation = nl.baskt.ui.common.rememberTranslation(texts, source != null && !original)
+    val displayed = if (source != null && !original && translation?.translated == true) {
+        var index = 0
+        source.copy(title = translation.texts[index++], ingredientLines = source.ingredientLines.map { translation.texts[index++] },
+            steps = source.steps.map { it.copy(text = translation.texts[index++]) },
+            servings = translation.texts[index++].ifBlank { null }, totalTime = translation.texts[index++].ifBlank { null }, description = translation.texts[index].ifBlank { null })
+    } else source
     var tab by remember { mutableIntStateOf(0) }
     // Fixed sheet height: it opens half-way and can be dragged up; content changes animate instead of jumping.
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.fillMaxHeight(0.92f).padding(horizontal = 20.dp).padding(bottom = 32.dp).verticalScroll(rememberScrollState()).animateContentSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val image = detail?.imageUrl
-            if (image != null) {
-                AsyncImage(model = image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(16.dp)))
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text("Recipe", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                nl.baskt.ui.common.OriginalToggle(original) { original = !original }
             }
-            Text(detail?.title ?: title, style = MaterialTheme.typography.titleLarge)
-            val meta = listOfNotNull(detail?.servings?.let { "$it servings" }, detail?.totalTime, detail?.originalTitle?.takeIf { it != detail.title })
+            if (!original && source != null && translation?.translated != true) Text(if (translation == null) "Translating…" else "Translation unavailable · showing original", style = MaterialTheme.typography.labelSmall)
+            if (original && originalMissing) {
+                Text("The original was not saved with this older download.", style = MaterialTheme.typography.bodySmall)
+                detail?.sourceUrl?.takeIf { it.startsWith("https://") }?.let { url ->
+                    androidx.compose.material3.TextButton(onClick = { uri.openUri(url) }) { Text("View original recipe page") }
+                }
+            }
+            val image = displayed?.imageUrl
+            if (image != null) {
+                nl.baskt.ui.common.ZoomableImage(image, displayed?.title ?: title, modifier = Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(16.dp)))
+            }
+            Text(displayed?.title ?: title, style = MaterialTheme.typography.titleLarge)
+            displayed?.description?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
+            val meta = listOfNotNull(displayed?.servings?.let { "$it servings" }, displayed?.totalTime)
             if (meta.isNotEmpty()) Text(meta.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (detail == null) {
+            if (displayed == null) {
                 LoadingIndicator()
             } else {
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Ingredients (${detail.ingredientLines.size})") }
-                    SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 2), enabled = detail.steps.isNotEmpty()) { Text("Steps (${detail.steps.size})") }
+                    SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Ingredients (${displayed.ingredientLines.size})") }
+                    SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 2), enabled = displayed.steps.isNotEmpty()) { Text("Steps (${displayed.steps.size})") }
                 }
                 if (tab == 0) {
-                    for (line in detail.ingredientLines) Text("• $line", style = MaterialTheme.typography.bodyMedium)
+                    for (line in displayed.ingredientLines) Text("• $line", style = MaterialTheme.typography.bodyMedium)
                 } else {
-                    for ((index, step) in detail.steps.withIndex()) {
+                    for ((index, step) in displayed.steps.withIndex()) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 4.dp)) {
                             Text("${index + 1}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(step.text, style = MaterialTheme.typography.bodyMedium)
                                 if (step.imageUrl != null) {
-                                    AsyncImage(model = step.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(12.dp)))
+                                    nl.baskt.ui.common.ZoomableImage(step.imageUrl, displayed.title, modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(12.dp)))
                                 }
                             }
                         }

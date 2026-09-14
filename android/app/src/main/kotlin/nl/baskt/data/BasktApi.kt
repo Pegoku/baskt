@@ -59,6 +59,12 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
         throw ApiException(status.value, message)
     }
 
+    suspend fun translate(texts: List<String>, language: String): TranslationResponse = client.post(url("/translate")) {
+        auth(); contentType(ContentType.Application.Json); setBody(TranslationRequest(texts, language))
+    }.expect()
+
+    suspend fun productDetail(id: String): ProductDetail = client.get(url("/products/$id/details")) { auth() }.expect()
+
     suspend fun health(): HealthResponse = client.get(url("/health")) { auth() }.expect()
 
     suspend fun stores(): List<StoreInfo> = client.get(url("/stores")) { auth() }.expect<StoresResponse>().stores

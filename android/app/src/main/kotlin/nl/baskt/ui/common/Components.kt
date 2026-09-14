@@ -54,43 +54,34 @@ fun StoreBadge(code: String, stores: List<StoreInfo>, modifier: Modifier = Modif
 
 private fun Color.luminance() = 0.2126f * red + 0.7152f * green + 0.0722f * blue
 
-/** Product picture; tapping it opens a large view (title, size, price) that closes on tap. */
+/** Opening a product shows its facts first; images can then be enlarged inside the detail sheet. */
 @Composable
-fun ProductThumb(product: Product, size: Int = 56) {
-    var zoomed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    Surface(shape = RoundedCornerShape(12.dp), color = Color.White, modifier = Modifier.size(size.dp).clickable(enabled = product.imageUrl != null) { zoomed = true }) {
-        if (product.imageUrl != null) {
-            AsyncImage(model = product.imageUrl, contentDescription = product.title, modifier = Modifier.padding(4.dp))
-        } else {
-            Box(contentAlignment = Alignment.Center) { Text("🛒", textAlign = TextAlign.Center) }
-        }
+fun ProductThumb(product: Product, size: Int = 56, onOpen: (() -> Unit)? = null) {
+    var details by androidx.compose.runtime.remember(product.id) { androidx.compose.runtime.mutableStateOf(false) }
+    Surface(shape = RoundedCornerShape(12.dp), color = Color.White, modifier = Modifier.size(size.dp).clickable { if (onOpen != null) onOpen() else details = true }) {
+        if (product.imageUrl != null) AsyncImage(model = product.imageUrl, contentDescription = "View ${product.title}", modifier = Modifier.padding(4.dp))
+        else Box(contentAlignment = Alignment.Center) { Text("🛒", textAlign = TextAlign.Center) }
     }
-    if (zoomed && product.imageUrl != null) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { zoomed = false }) {
-            Surface(shape = RoundedCornerShape(24.dp), color = Color.White, modifier = Modifier.clickable { zoomed = false }) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
-                    AsyncImage(model = product.imageUrl, contentDescription = product.title, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
-                    Text(product.title, style = MaterialTheme.typography.titleMedium, color = Color.Black, textAlign = TextAlign.Center)
-                    Text(listOfNotNull(product.quantityText, product.priceCents.euros(), product.unitPriceLabel()).joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = Color.DarkGray)
-                }
-            }
-        }
-    }
+    if (details) ProductSheet(product) { details = false }
 }
 
 @Composable
 fun ProductRow(product: Product, modifier: Modifier = Modifier, trailing: @Composable (() -> Unit)? = null) {
-    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        ProductThumb(product)
+    var details by androidx.compose.runtime.remember(product.id) { androidx.compose.runtime.mutableStateOf(false) }
+    val translation = rememberTranslation(listOf(product.title, product.quantityText, product.dealText.orEmpty()))
+    val shown = translation?.takeIf { it.translated }?.texts
+    if (details) ProductSheet(product) { details = false }
+    Row(modifier = modifier.fillMaxWidth().clickable { details = true }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        ProductThumb(product, onOpen = { details = true })
         Column(modifier = Modifier.weight(1f)) {
-            Text(product.title, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(shown?.get(0) ?: product.title, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
-                listOfNotNull(product.quantityText, product.unitPriceLabel()).joinToString(" · "),
+                listOfNotNull(shown?.get(1) ?: product.quantityText, product.unitPriceLabel()).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (product.dealText != null) {
-                Text(product.dealText, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+                Text(shown?.get(2) ?: product.dealText, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
             }
         }
         Column(horizontalAlignment = Alignment.End) {

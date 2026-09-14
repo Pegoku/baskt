@@ -177,7 +177,7 @@ private fun RecipeList(list: List<RecipeSummary>, empty: String, busy: Boolean, 
                 Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(recipe.displayTitle, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        nl.baskt.ui.common.TranslatedLabel(recipe.displayTitle, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(listOfNotNull(recipe.source, recipe.title.takeIf { it != recipe.displayTitle }).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     IconButton(onClick = { onFavourite(recipe) }) { Icon(if (isFavourite(recipe)) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "Favourite", tint = MaterialTheme.colorScheme.primary) }
@@ -201,7 +201,7 @@ private fun MineList(mine: List<UserRecipe>, favourites: List<RecipeSummary>, vi
                 Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(recipe.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        nl.baskt.ui.common.TranslatedLabel(recipe.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(listOfNotNull("${recipe.ingredientLines.size} ingredients", recipe.servings?.let { "$it servings" }, when (recipe.origin) { "ai" -> "written by AI"; "site" -> "copied from a site"; else -> null }).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = { onEdit(recipe) }) { Icon(Icons.Default.Edit, contentDescription = "Edit") }
@@ -215,7 +215,7 @@ private fun MineList(mine: List<UserRecipe>, favourites: List<RecipeSummary>, vi
             Card(onClick = { onOpen(recipe) }) {
                 Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)))
-                    Text(recipe.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    nl.baskt.ui.common.TranslatedLabel(recipe.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                     IconButton(onClick = { viewModel.toggleRecipeFavourite(recipe) }) { Icon(Icons.Default.Favorite, contentDescription = "Remove favourite", tint = MaterialTheme.colorScheme.primary) }
                     IconButton(onClick = { onFolder(recipe.url) }) { Icon(Icons.Default.CreateNewFolder, contentDescription = "Add as folder") }
                 }
@@ -241,7 +241,7 @@ private fun StockDishList(dishes: List<nl.baskt.data.StockDish>, busy: Boolean, 
                 }
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(dish.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        nl.baskt.ui.common.TranslatedLabel(dish.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                         dish.minutes?.let { Text("$it min", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                     if (dish.source != null) Text("Photo: ${dish.source}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

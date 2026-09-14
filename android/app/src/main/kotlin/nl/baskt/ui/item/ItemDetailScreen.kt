@@ -283,7 +283,7 @@ private fun StoreCard(
                     TooltipIconButton(text = "Not what I meant", icon = Icons.Default.ThumbDown, tint = MaterialTheme.colorScheme.onSurfaceVariant, onClick = { onFeedback(chosen.id, false) })
                 }
                 PriceSparkline(chosen.id, loadHistory)
-                if (match.reason != null && match.chosenBy != "USER") Text(match.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (match.reason != null && match.chosenBy != "USER") nl.baskt.ui.common.TranslatedText(match.reason, style = MaterialTheme.typography.bodySmall)
             }
 
             if (showOptions || match.status == "PENDING") {
@@ -301,7 +301,7 @@ private fun StoreCard(
                             )
                         }
                         if (match.reason != null && match.status == "PENDING") {
-                            Text(match.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            nl.baskt.ui.common.TranslatedText(match.reason, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -316,7 +316,7 @@ private fun StoreCard(
             }
 
             if (match.status == "EXHAUSTED") {
-                if (match.reason != null && !busy) Text(match.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (match.reason != null && !busy) nl.baskt.ui.common.TranslatedText(match.reason, style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     // Asks the server to understand the product and search for substitutes.
                     FilledTonalButton(onClick = onReject, enabled = !busy, modifier = Modifier.weight(1f)) {

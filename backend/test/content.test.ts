@@ -1,3 +1,4 @@
+import { mapAhDetails } from "@/stores/ah";
 import { describe, expect, test } from "bun:test";
 import { completeTranslation, translateContent } from "@/matching/translate";
 import { parseProductDetails } from "@/stores/details";
@@ -18,6 +19,17 @@ describe("source-preserving content", () => {
     expect(result.steps).toEqual(source.steps);
     expect(result.translationAvailable).toBe(false);
     expect(result.language).toBeNull();
+  });
+  test("AH detail fields include source highlights and full description", () => {
+    const result = mapAhDetails({ productCard: {
+      descriptionHighlights: "<p>Halfvolle melk.</p>", descriptionFull: "Koel bewaren na openen.",
+      extraDescriptions: [{ description: "Bevat melk." }],
+      images: [{ width: 100, url: "https://example.com/small.jpg" }, { width: 800, url: "https://example.com/large.jpg" }],
+    } });
+    expect(result.description).toContain("Halfvolle melk.");
+    expect(result.description).toContain("Koel bewaren na openen.");
+    expect(result.description).toContain("Bevat melk.");
+    expect(result.imageUrls).toEqual(["https://example.com/large.jpg"]);
   });
   test("extracts real descriptions and images without unrelated site content", () => {
     const html = `<script type="application/ld+json">broken</script><script type="application/ld+json">${JSON.stringify({ "@graph": [

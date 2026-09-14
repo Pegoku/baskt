@@ -334,6 +334,9 @@ data class RecipeDetail(
     val imageUrl: String? = null,
     val steps: List<RecipeStep> = emptyList(),
     val totalTime: String? = null,
+    val description: String? = null,
+    val original: RecipeDetail? = null,
+    val translationAvailable: Boolean = false,
     val originalTitle: String? = null,
     val language: String? = null,
 )
@@ -483,3 +486,10 @@ data class TransferResult(val id: String, val children: List<BasketItem> = empty
 
 @Serializable
 data class ScaledIngredient(val id: String, val text: String, val quantity: Int)
+
+@Serializable
+data class TranslationRequest(val texts: List<String>, val language: String)
+@Serializable
+data class TranslationResponse(val texts: List<String>, val language: String, val translated: Boolean = false)
+@Serializable
+data class ProductDetail(val product: Product, val description: String? = null, val imageUrls: List<String> = emptyList())

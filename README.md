@@ -28,6 +28,22 @@ JAVA_HOME=/opt/android-studio/jbr ./gradlew :app:assembleDebug   # any JDK 17+ w
 
 `android/local.properties` must point `sdk.dir` at an Android SDK (compileSdk 37 is downloaded automatically when licences are accepted).
 
+## Product details and translations
+
+Tap a product row or thumbnail to open its images, price, size, category, and available store
+description. Tap an image in the detail sheet to enlarge it. Descriptions come from the store;
+products without published descriptions still show their existing facts and a source-page link.
+
+Product text, recipe titles, descriptions, ingredient lines, steps, and matching explanations
+are translated into the language selected in Settings (or the device language for System).
+The top-corner document icon shows the original; it changes to a translate icon to switch back.
+Hover or long-press for the action tooltip. The same image enlargement is available in recipes.
+Editable source text stays intact; translations are for display and are cached per language.
+
+Translations require the configured backend AI on first use. Saved translations remain available
+offline; failures explicitly show the original. Older downloaded recipes are refreshed when online
+to retain their complete original content. Install the updated backend with the Android app.
+
 ## Barcode scanning
 
 The continuous scanner uses Google's bundled ML Kit. Aim near the frame: detection extends
