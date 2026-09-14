@@ -26,60 +26,110 @@ export type AiProvider = AiTarget & { id: string; priority: number };
 /** Which purpose a pool serves; each has its own env prefix and its own round-robin cursor. */
 export type AiProfile = "default" | "assistant" | "vision" | "stt";
 
-const FIELDS = [
-  "BASE_URL",
-  "API_KEY",
-  "MODEL",
-  "REASONING",
-  "PRIORITY",
-  "PROVIDER_ORDER",
-  "PROVIDER_QUANTIZATIONS",
-] as const;
-
-/** Slot 1 is the unnumbered `PREFIX_FIELD`, slot 2+ are `PREFIX_2_FIELD`, `PREFIX_3_FIELD`, ... */
-function slotVar(prefix: string, slot: number, field: string) {
-  const value =
-    process.env[slot === 1 ? `${prefix}_${field}` : `${prefix}_${slot}_${field}`];
-  return value?.trim() || undefined;
-}
-
 const MAX_SLOTS = 9;
 
+/** The settings one provider line can carry; `id` is added once it lands in a pool. */
+type AiSlot = Omit<AiProvider, "id">;
+
+const NAMED_FIELDS: Record<string, keyof AiSlot> = {
+  url: "baseUrl",
+  base_url: "baseUrl",
+  key: "apiKey",
+  api_key: "apiKey",
+  model: "model",
+  priority: "priority",
+  reasoning: "reasoning",
+  order: "providerOrder",
+  quant: "providerQuantizations",
+};
+
 /**
- * Reads a numbered family of provider variables into a pool (exported for the tests). Every slot inherits what it does not set
- * from slot 1 (and slot 1 from `base`), so a second API key for the same provider is one line of .env:
- * `AI_2_API_KEY=...`. Providers without a key or model are dropped.
+ * Reads one provider line: `https://host/v1, sk-key, some/model, 2`. Fields are recognised by shape and
+ * may come in any order — the endpoint is the one with "://", a bare number is the priority, and the
+ * remaining bare values are the API key and then the model — so a second key for the provider above is
+ * just `AI_2=sk-other`. Anything left out is inherited from `inherit`. Fields can also be named
+ * (`key=…`, `model=…`, `priority=2`, `reasoning=low`, `order=coreweave|together`, `quant=fp4`), which is
+ * the only way to set the OpenRouter-only routing hints; those lists are separated by "|", not commas.
+ * Returns null for a line that said nothing this side understood, so a typo drops the provider (with a
+ * warning) instead of quietly adding a second copy of the one above it.
+ */
+export function parseProvider(entry: string, inherit: AiSlot, label = "AI"): AiSlot | null {
+  const slot: AiSlot = { ...inherit };
+  const bare: string[] = [];
+  const named = new Set<keyof AiSlot>();
+  let understood = 0;
+  for (const field of entry.split(",").map((part) => part.trim()).filter(Boolean)) {
+    const match = /^([a-zA-Z_]+)\s*=\s*(.*)$/.exec(field);
+    if (match) {
+      const name = NAMED_FIELDS[match[1].toLowerCase()];
+      if (!name) {
+        console.warn(`[ai] ${label}: ignoring unknown field "${match[1]}"`);
+        continue;
+      }
+      assign(slot, name, match[2].trim());
+      named.add(name);
+      understood += 1;
+    } else if (field.includes("://")) {
+      slot.baseUrl = field.replace(/\/$/, "");
+      understood += 1;
+    } else if (/^\d+$/.test(field)) {
+      slot.priority = Number(field);
+      understood += 1;
+    } else {
+      bare.push(field);
+      understood += 1;
+    }
+  }
+  if (!understood) {
+    console.warn(`[ai] ${label}: no usable fields, skipping this provider`);
+    return null;
+  }
+  // Whatever was not named, in the order people write it: the key first, the model second.
+  const positional = (["apiKey", "model"] as const).filter((name) => !named.has(name));
+  bare.forEach((value, index) => {
+    if (positional[index]) assign(slot, positional[index], value);
+  });
+  return slot;
+}
+
+function assign(slot: AiSlot, name: keyof AiSlot, value: string) {
+  if (name === "priority") slot.priority = num(value, 1);
+  else if (name === "providerOrder" || name === "providerQuantizations") slot[name] = value.split("|").map((entry) => entry.trim()).filter(Boolean);
+  else if (name === "reasoning") slot.reasoning = value as AiTarget["reasoning"];
+  else if (name === "baseUrl") slot.baseUrl = value.replace(/\/$/, "");
+  else slot[name] = value;
+}
+
+/**
+ * Reads a pool: the first provider comes from the plain `PREFIX_BASE_URL`/`PREFIX_API_KEY`/`PREFIX_MODEL`
+ * variables (or a `PREFIX_1` line), the rest from one line each in `PREFIX_2` … `PREFIX_9`. Providers
+ * without a key or a model are dropped. Exported for the tests.
  */
 export function readPool(
   prefix: string,
   base: Omit<AiTarget, "providerOrder" | "providerQuantizations">,
   options: { requireOwnVars?: boolean } = {},
 ): AiProvider[] {
-  const owns = (slot: number) => FIELDS.some((field) => slotVar(prefix, slot, field));
-  const read = (slot: number, inherit: AiTarget): AiTarget => ({
-    baseUrl: (slotVar(prefix, slot, "BASE_URL") ?? inherit.baseUrl).replace(/\/$/, ""),
-    apiKey: slotVar(prefix, slot, "API_KEY") ?? inherit.apiKey,
-    model: slotVar(prefix, slot, "MODEL") ?? inherit.model,
-    reasoning: (slotVar(prefix, slot, "REASONING") ?? inherit.reasoning) as AiTarget["reasoning"],
-    providerOrder: slotVar(prefix, slot, "PROVIDER_ORDER")
-      ? list(slotVar(prefix, slot, "PROVIDER_ORDER"))
-      : inherit.providerOrder,
-    providerQuantizations: slotVar(prefix, slot, "PROVIDER_QUANTIZATIONS")
-      ? list(slotVar(prefix, slot, "PROVIDER_QUANTIZATIONS"))
-      : inherit.providerQuantizations,
-  });
-  const first = read(1, { ...base, providerOrder: [], providerQuantizations: [] });
+  const own = (name: string) => process.env[`${prefix}_${name}`]?.trim() || undefined;
+  const classic: AiSlot = {
+    baseUrl: (own("BASE_URL") ?? base.baseUrl).replace(/\/$/, ""),
+    apiKey: own("API_KEY") ?? base.apiKey,
+    model: own("MODEL") ?? base.model,
+    reasoning: (own("REASONING") ?? base.reasoning) as AiTarget["reasoning"],
+    providerOrder: list(own("PROVIDER_ORDER")),
+    providerQuantizations: list(own("PROVIDER_QUANTIZATIONS")),
+    priority: num(own("PRIORITY"), 1),
+  };
+  const line = own("1");
+  const first = (line && parseProvider(line, classic, `${prefix}_1`)) || classic;
+  const configured = Boolean(line) || ["BASE_URL", "API_KEY", "MODEL", "REASONING", "PRIORITY", "PROVIDER_ORDER", "PROVIDER_QUANTIZATIONS"].some(own);
   const pool: AiProvider[] = [];
-  for (let slot = 1; slot <= MAX_SLOTS; slot += 1) {
-    if (slot > 1 && !owns(slot)) continue;
-    if (slot === 1 && options.requireOwnVars && !owns(1)) continue;
-    const target = slot === 1 ? first : read(slot, first);
-    if (!target.apiKey || !target.model) continue;
-    pool.push({
-      ...target,
-      id: slot === 1 ? prefix : `${prefix}_${slot}`,
-      priority: num(slotVar(prefix, slot, "PRIORITY"), 1),
-    });
+  if ((configured || !options.requireOwnVars) && first.apiKey && first.model) pool.push({ ...first, id: `${prefix}_1` });
+  for (let slot = 2; slot <= MAX_SLOTS; slot += 1) {
+    const entry = own(String(slot));
+    if (!entry) continue;
+    const target = parseProvider(entry, first, `${prefix}_${slot}`);
+    if (target?.apiKey && target.model) pool.push({ ...target, id: `${prefix}_${slot}` });
   }
   return pool;
 }

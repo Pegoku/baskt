@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { attemptOrder, cooldownFor, noteFailure, noteUsage, resetPoolStats } from "@/ai/pool";
 import { transcribeAudio } from "@/ai/transcribe";
-import { env, readPool, type AiProvider } from "@/env";
+import { env, parseProvider, readPool, type AiProvider } from "@/env";
 
 function provider(id: string, priority: number, extra: Partial<AiProvider> = {}): AiProvider {
   return {
@@ -28,33 +28,80 @@ afterEach(() => {
   resetPoolStats();
 });
 
-describe("provider env parsing", () => {
+describe("provider lines", () => {
   const base = { baseUrl: "https://api.groq.com/openai/v1", apiKey: "", model: "", reasoning: "off" as const };
+  const first = { ...base, apiKey: "one", model: "openai/gpt-oss-20b", priority: 1, providerOrder: [], providerQuantizations: [] };
 
-  test("numbered slots inherit everything they do not set", () => {
-    process.env.TESTAI_API_KEY = "one";
-    process.env.TESTAI_MODEL = "openai/gpt-oss-20b";
-    process.env.TESTAI_2_API_KEY = "two";
-    const pool = readPool("TESTAI", base);
-    expect(pool.map((entry) => [entry.id, entry.apiKey, entry.model, entry.priority])).toEqual([
-      ["TESTAI", "one", "openai/gpt-oss-20b", 1],
-      ["TESTAI_2", "two", "openai/gpt-oss-20b", 1],
-    ]);
-    delete process.env.TESTAI_API_KEY;
-    delete process.env.TESTAI_MODEL;
-    delete process.env.TESTAI_2_API_KEY;
+  test("recognises endpoint, key, model and priority by shape", () => {
+    expect(parseProvider("https://openrouter.ai/api/v1, sk-or-x, z-ai/glm-4.7-flash, 2", first)).toMatchObject({
+      baseUrl: "https://openrouter.ai/api/v1",
+      apiKey: "sk-or-x",
+      model: "z-ai/glm-4.7-flash",
+      priority: 2,
+    });
+    // The endpoint and the priority are found wherever they are; the key and the model are told apart
+    // by the order they are written in, so writing them the other way round needs a name.
+    expect(parseProvider("3, sk-key, some/model, https://host/v1", first)).toMatchObject({
+      baseUrl: "https://host/v1",
+      apiKey: "sk-key",
+      model: "some/model",
+      priority: 3,
+    });
+    expect(parseProvider("some/model, key=sk-key", first)).toMatchObject({ apiKey: "sk-key", model: "some/model" });
   });
 
-  test("a slot without a key or model is dropped, priorities are kept", () => {
+  test("a lone key is a second account for the provider above", () => {
+    expect(parseProvider("gsk_two", first)).toEqual({ ...first, apiKey: "gsk_two" });
+  });
+
+  test("named fields win and carry what shape cannot express", () => {
+    const slot = parseProvider("model=qwen/qwen3.8-27b, reasoning=high, order=coreweave|together, quant=fp4", first);
+    expect(slot).toMatchObject({
+      apiKey: "one", // inherited
+      model: "qwen/qwen3.8-27b",
+      reasoning: "high",
+      providerOrder: ["coreweave", "together"],
+      providerQuantizations: ["fp4"],
+    });
+    // A named key leaves the first bare value to the model, not the other way round.
+    expect(parseProvider("key=gsk_two, some/model", first)).toMatchObject({ apiKey: "gsk_two", model: "some/model" });
+  });
+
+  test("a typo is reported and ignored instead of silently changing the provider", () => {
+    const warnings: string[] = [];
+    const warn = console.warn;
+    console.warn = (message: string) => warnings.push(message);
+    expect(parseProvider("ky=gsk_two", first, "AI_2")).toBeNull(); // not a second copy of the first
+    console.warn = warn;
+    expect(warnings[0]).toContain('AI_2: ignoring unknown field "ky"');
+    expect(warnings[1]).toContain("AI_2: no usable fields");
+  });
+
+  test("the pool starts at the plain variables and extends one line at a time", () => {
     process.env.TESTAI_API_KEY = "one";
-    process.env.TESTAI_MODEL = "a";
-    process.env.TESTAI_2_BASE_URL = "https://openrouter.ai/api/v1"; // no key of its own → inherits, so it counts
-    process.env.TESTAI_2_PRIORITY = "2";
-    process.env.TESTAI_3_MODEL = ""; // empty value is not a slot
+    process.env.TESTAI_MODEL = "openai/gpt-oss-20b";
+    process.env.TESTAI_2 = "gsk_two";
+    process.env.TESTAI_3 = "https://openrouter.ai/api/v1, sk-or, openai/gpt-oss-20b, 2";
+    process.env.TESTAI_5 = "priority=4"; // no key of its own: inherits the first, gaps are allowed
     const pool = readPool("TESTAI", base);
-    expect(pool.map((entry) => `${entry.id}:${entry.priority}`)).toEqual(["TESTAI:1", "TESTAI_2:2"]);
-    expect(pool[1].baseUrl).toBe("https://openrouter.ai/api/v1");
-    for (const key of ["TESTAI_API_KEY", "TESTAI_MODEL", "TESTAI_2_BASE_URL", "TESTAI_2_PRIORITY", "TESTAI_3_MODEL"]) delete process.env[key];
+    expect(pool.map((entry) => [entry.id, entry.apiKey, entry.model, entry.priority])).toEqual([
+      ["TESTAI_1", "one", "openai/gpt-oss-20b", 1],
+      ["TESTAI_2", "gsk_two", "openai/gpt-oss-20b", 1],
+      ["TESTAI_3", "sk-or", "openai/gpt-oss-20b", 2],
+      ["TESTAI_5", "one", "openai/gpt-oss-20b", 4],
+    ]);
+    expect(pool[1].baseUrl).toBe("https://api.groq.com/openai/v1");
+    for (const key of ["TESTAI_API_KEY", "TESTAI_MODEL", "TESTAI_2", "TESTAI_3", "TESTAI_5"]) delete process.env[key];
+  });
+
+  test("the whole pool can be written as lines, and one without a key is dropped", () => {
+    process.env.TESTAI_1 = "https://api.groq.com/openai/v1, gsk_one, openai/gpt-oss-20b";
+    process.env.TESTAI_2 = "model=only/a-model"; // nothing to authenticate with
+    const pool = readPool("TESTAI", { ...base, apiKey: "", model: "" });
+    expect(pool.map((entry) => entry.id)).toEqual(["TESTAI_1", "TESTAI_2"]);
+    expect(pool[1].apiKey).toBe("gsk_one"); // inherited from the line above, so it stays usable
+    delete process.env.TESTAI_1;
+    delete process.env.TESTAI_2;
   });
 
   test("requireOwnVars keeps an unconfigured pool empty", () => {

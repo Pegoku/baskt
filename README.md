@@ -62,22 +62,29 @@ only products you explicitly added are saved.
 ## AI providers
 
 The backend takes a list of OpenAI-compatible providers instead of one. `AI_BASE_URL`/`AI_API_KEY`/
-`AI_MODEL` describe the first; `AI_2_*`, `AI_3_*` … describe the next ones and inherit every value they
-leave out, so a second key for the same free tier is one line:
+`AI_MODEL` describe the first, and every other one is a single line — `AI_2` … `AI_9` — holding
+`endpoint, key, model, priority`:
 
 ```bash
-AI_2_API_KEY=gsk_...          # same endpoint, model and priority as AI_API_KEY
+AI_2=gsk_...                                              # another key for the same endpoint and model
+AI_3=https://openrouter.ai/api/v1, sk-or-..., openai/gpt-oss-20b, 2
+AI_4=model=qwen/qwen3.8-27b, reasoning=high               # or name the fields you mean
 ```
 
-`AI_n_PRIORITY` (default 1) decides the order: the lowest number is tried first and providers sharing a
-number are used round-robin, which spreads the load over both keys and doubles a per-minute quota. Give
-a paid fallback `AI_3_PRIORITY=2` and it is only used when the free ones are exhausted. A provider that
-fails is skipped until it cools down — `Retry-After` when it is metered, a minute when it rejects the key
-or the model, 15 s after a server or network error — and the next provider answers the same call instead
-of the user waiting. Receipt
-vision (`AI_VISION_*`), the assistant (`AI_ASSISTANT_*`) and dictation (`AI_STT_*`) are separate pools
-that balance the same way. `GET /api/v1/health` reports per-provider calls, failures, tokens and
-cooldowns.
+Fields are recognised by shape: the endpoint is the one with `://`, a bare number is the priority, and
+the remaining values are the key and then the model. Leave out whatever stays the same as the provider
+above — a second account really is one word. `key=`, `model=`, `url=`, `priority=`, `reasoning=`,
+`order=` and `quant=` name a field explicitly (the last two carry OpenRouter's routing and use `|`
+between values, since commas separate fields).
+
+Priority (default 1) decides the order: the lowest number is tried first and providers sharing a number
+are used round-robin, which spreads the load over both keys and doubles a per-minute quota. A paid
+fallback at priority 2 is only used when the free ones are exhausted. A provider that fails is skipped
+until it cools down — `Retry-After` when it is metered, a minute when it rejects the key or the model,
+15 s after a server or network error — and the next provider answers the same call instead of the user
+waiting. Receipt vision (`AI_VISION_*`, `AI_VISION_2` …), the assistant (`AI_ASSISTANT_*`) and dictation
+(`AI_STT_*`) are separate pools that balance the same way. `GET /api/v1/health` reports per-provider
+calls, failures, tokens and cooldowns.
 
 ## Dictation
 
