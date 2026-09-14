@@ -59,6 +59,33 @@ Holding the same label in view does not repeatedly capture it. Unknown products 
 for **Retry lookup**. **Done** closes the session;
 only products you explicitly added are saved.
 
+## AI providers
+
+The backend takes a list of OpenAI-compatible providers instead of one. `AI_BASE_URL`/`AI_API_KEY`/
+`AI_MODEL` describe the first; `AI_2_*`, `AI_3_*` … describe the next ones and inherit every value they
+leave out, so a second key for the same free tier is one line:
+
+```bash
+AI_2_API_KEY=gsk_...          # same endpoint, model and priority as AI_API_KEY
+```
+
+`AI_n_PRIORITY` (default 1) decides the order: the lowest number is tried first and providers sharing a
+number are used round-robin, which spreads the load over both keys and doubles a per-minute quota. Give
+a paid fallback `AI_3_PRIORITY=2` and it is only used when the free ones are exhausted. A provider that
+returns an error or a rate limit is skipped until it cools down (`Retry-After`, or 15 s after a server
+or network error), and the next provider answers the same call instead of the user waiting. Receipt
+vision (`AI_VISION_*`), the assistant (`AI_ASSISTANT_*`) and dictation (`AI_STT_*`) are separate pools
+that balance the same way. `GET /api/v1/health` reports per-provider calls, failures, tokens and
+cooldowns.
+
+## Dictation
+
+Tap the microphone and speak a whole list ("two milk, six eggs, and forget the rice, I already have
+it"): the recording goes to `whisper-large-v3` on the server, which is faster and far more accurate
+than the phone's recogniser, and the transcript is interpreted into a proposal you confirm. Groq serves
+Whisper on the chat key, so no extra configuration is needed. Without a connection — or when no server
+provider answers — the app falls back to Android's on-device recogniser and the same confirm screen.
+
 ## Adding a supermarket
 
 Write one adapter in `backend/src/stores/` implementing `StoreAdapter` and register it in `backend/src/stores/registry.ts`. The app fetches the store list from the server, so it needs no change.

@@ -49,12 +49,14 @@ const DEFAULT_MODELS = [
 const models = (args.get("models") ?? DEFAULT_MODELS.join(",")).split(",").map((value) => value.trim()).filter(Boolean);
 const runs = Number(args.get("runs") ?? "1") || 1;
 const only = args.get("only") ?? null;
-// Groq's free tier meters tokens per minute, so run one check at a time there unless told otherwise.
-const concurrency = Number(args.get("concurrency") ?? (/groq\.com/.test(env.ai.baseUrl) ? "1" : "3")) || 3;
+// The benchmark runs one model through whichever keys serve it: the providers sharing slot 1's endpoint.
+const benchProviders = env.ai.chat.filter((provider) => provider.baseUrl === env.ai.chat[0]?.baseUrl);
+// Groq's free tier meters tokens per minute, so run one check per key at a time there unless told otherwise.
+const concurrency = Number(args.get("concurrency") ?? (/groq\.com/.test(env.ai.chat[0]?.baseUrl ?? "") ? String(benchProviders.length) : "3")) || 3;
 const productionModel = process.env.AI_MODEL ?? "";
-const productionProvider = { order: [...env.ai.providerOrder], quantizations: [...env.ai.providerQuantizations] };
+const productionProvider = { order: [...(env.ai.chat[0]?.providerOrder ?? [])], quantizations: [...(env.ai.chat[0]?.providerQuantizations ?? [])] };
 
-if (!env.ai.apiKey) {
+if (!benchProviders.length) {
   console.error("AI_API_KEY is not set (put it in backend/.env)");
   process.exit(1);
 }
@@ -64,7 +66,7 @@ type ModelMeta = { id: string; promptUsd: number; completionUsd: number; reasoni
 async function loadModelMeta(): Promise<Map<string, ModelMeta>> {
   const out = new Map<string, ModelMeta>();
   try {
-    const response = await fetch(`${env.ai.baseUrl}/models`, { headers: { authorization: `Bearer ${env.ai.apiKey}` } });
+    const response = await fetch(`${benchProviders[0].baseUrl}/models`, { headers: { authorization: `Bearer ${benchProviders[0].apiKey}` } });
     const payload = (await response.json()) as { data?: Array<{ id: string; pricing?: { prompt?: string; completion?: string }; supported_parameters?: string[] }> };
     for (const model of payload.data ?? []) {
       out.set(model.id, {
@@ -412,16 +414,19 @@ async function pool<T>(items: T[], limit: number, worker: (item: T) => Promise<v
 }
 
 async function runModel(model: string, meta: ModelMeta | undefined): Promise<ModelResult> {
-  env.ai.model = model;
-  env.ai.assistant = null; // benchmark the model under test for the assistant too
+  env.ai.assistant = []; // benchmark the model under test for the assistant too
   // OpenAI models (gpt-oss, gpt-5) only accept an effort level; other thinking models are told not to think (hidden reasoning
   // eats the small token budgets these tasks use); models without the parameter get nothing.
   // Groq's /models has no supported_parameters, so also treat known thinking families as such.
   const thinking = meta?.reasoning || /gpt-oss|gpt-5|qwen3/.test(model);
-  env.ai.reasoning = !thinking ? "none" : model.startsWith("openai/") ? "low" : "off";
   const pinned = model === productionModel;
-  env.ai.providerOrder = pinned ? productionProvider.order : [];
-  env.ai.providerQuantizations = pinned ? productionProvider.quantizations : [];
+  env.ai.chat = benchProviders.map((provider) => ({
+    ...provider,
+    model,
+    reasoning: !thinking ? "none" : model.startsWith("openai/") ? "low" : "off",
+    providerOrder: pinned ? productionProvider.order : [],
+    providerQuantizations: pinned ? productionProvider.quantizations : [],
+  }));
   seedBasket();
   resetAiStats();
   const results: CaseResult[] = [];

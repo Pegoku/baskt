@@ -1,7 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { db, now } from "@/db";
 import { aiCache } from "@/db/schema";
-import { aiConfigured, aiTarget, aiVendor, env, type AiTarget } from "@/env";
+import { attemptOrder, cooldownLeft, noteCall, noteFailure, noteUsage, poolStats, resetPoolStats } from "@/ai/pool";
+import { aiConfigured, aiPool, aiVendor, env, type AiProvider, type AiTarget } from "@/env";
 
 export type ChatMessage = { role: "system" | "user"; content: string };
 
@@ -13,11 +14,14 @@ let completionTokens = 0;
 export function aiStats() {
   return {
     configured: aiConfigured(),
-    model: env.ai.model || null,
+    model: env.ai.chat[0]?.model ?? null,
     calls,
     failures,
     promptTokens,
     completionTokens,
+    /** Speech-to-text on the server; when this is off the app dictates on-device. */
+    stt: { configured: env.ai.stt.length > 0, model: env.ai.stt[0]?.model ?? null },
+    providers: poolStats(),
   };
 }
 
@@ -27,6 +31,7 @@ export function resetAiStats() {
   failures = 0;
   promptTokens = 0;
   completionTokens = 0;
+  resetPoolStats();
 }
 
 /** Calls an OpenAI-compatible chat-completions endpoint and parses the JSON object it returns. */
@@ -39,14 +44,19 @@ export async function chatJson<T>(
     profile?: "default" | "assistant";
   } = {},
 ): Promise<T | null> {
-  if (!aiConfigured()) return null;
+  // The attempt order balances the pool: best priority first, round-robin between equal ones.
+  const order = attemptOrder(options.profile ?? "default");
+  if (!order.length) return null;
   const retries = options.retries ?? 2;
   let maxTokens = options.maxTokens ?? 1500;
   let rateLimitWaits = 0;
-  const target = aiTarget(options.profile);
-  const vendor = aiVendor(target.baseUrl);
-  for (let attempt = 1; attempt <= retries; attempt += 1) {
+  // Never give up before every provider has had a turn.
+  const attempts = Math.max(retries, order.length);
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const target = order[(attempt - 1) % order.length];
+    const vendor = aiVendor(target.baseUrl);
     calls += 1;
+    noteCall(target.id);
     const started = performance.now();
     try {
       const response = await fetch(`${target.baseUrl}/chat/completions`, {
@@ -90,7 +100,7 @@ export async function chatJson<T>(
           response.status === 400 ? recoverToolCall(text) : null;
         if (recovered) return recovered as T;
         failures += 1;
-        console.warn(`[ai] HTTP ${response.status}: ${text.slice(0, 200)}`);
+        console.warn(`[ai] ${target.id} HTTP ${response.status}: ${text.slice(0, 200)}`);
         if (response.status === 429) {
           // Free tiers meter tokens per minute; honour Retry-After (bounded) instead of failing the turn.
           const retryAfter = Number(response.headers.get("retry-after"));
@@ -99,9 +109,16 @@ export async function chatJson<T>(
             (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 3) *
               1000,
           );
-          await new Promise((resolve) => setTimeout(resolve, waitMs));
-          rateLimitWaits += 1;
-          if (attempt === retries && rateLimitWaits <= 3) attempt -= 1; // extra tries after waiting, bounded
+          noteFailure(target.id, `HTTP 429: ${text.slice(0, 120)}`, waitMs);
+          // Another key with quota left is worth more than waiting; only sleep when the whole pool is metered.
+          if (order.every((provider) => cooldownLeft(provider.id))) {
+            await new Promise((resolve) => setTimeout(resolve, waitMs));
+            rateLimitWaits += 1;
+            if (attempt === attempts && rateLimitWaits <= 3) attempt -= 1; // extra tries after waiting, bounded
+          }
+        } else {
+          // A broken endpoint should not be picked again for the next call while a healthy one exists.
+          noteFailure(target.id, `HTTP ${response.status}: ${text.slice(0, 120)}`, response.status >= 500 ? 15_000 : 0);
         }
         continue;
       }
@@ -126,8 +143,9 @@ export async function chatJson<T>(
       ).usage;
       promptTokens += usage?.prompt_tokens ?? 0;
       completionTokens += usage?.completion_tokens ?? 0;
+      noteUsage(target.id, usage?.prompt_tokens ?? 0, usage?.completion_tokens ?? 0);
       console.log(
-        `[ai] ${target.model} ${usage?.prompt_tokens ?? "?"}+${usage?.completion_tokens ?? "?"} tokens, ${Math.round(performance.now() - started)} ms`,
+        `[ai] ${target.id} ${target.model} ${usage?.prompt_tokens ?? "?"}+${usage?.completion_tokens ?? "?"} tokens, ${Math.round(performance.now() - started)} ms`,
       );
       const content = choice?.message?.content;
       // Some models (gpt-oss) emit a native function call when the prompt describes tools, even though
@@ -167,8 +185,9 @@ export async function chatJson<T>(
           choice?.message?.reasoning ??
           choice?.message?.reasoning_content ??
           "";
+        noteFailure(target.id, `empty content (finish_reason=${choice?.finish_reason ?? "?"})`);
         console.warn(
-          `[ai] empty content (finish_reason=${choice?.finish_reason ?? "?"}), attempt ${attempt}/${retries}${reasoning ? `; reasoning tail: ${reasoning.slice(-300).replace(/\s+/g, " ")}` : ""}`,
+          `[ai] ${target.id} empty content (finish_reason=${choice?.finish_reason ?? "?"}), attempt ${attempt}/${attempts}${reasoning ? `; reasoning tail: ${reasoning.slice(-300).replace(/\s+/g, " ")}` : ""}`,
         );
         continue;
       }
@@ -184,9 +203,10 @@ export async function chatJson<T>(
       }
     } catch (error) {
       failures += 1;
-      console.warn(
-        `[ai] attempt ${attempt}/${retries} failed: ${error instanceof Error ? error.message : error}`,
-      );
+      const message = error instanceof Error ? error.message : String(error);
+      // Timeouts and refused connections are the provider's problem; unparseable JSON is the model's.
+      noteFailure(target.id, message, /fetch|timeout|abort|network|ECONN/i.test(message) ? 15_000 : 0);
+      console.warn(`[ai] ${target.id} attempt ${attempt}/${attempts} failed: ${message}`);
     }
   }
   return null;

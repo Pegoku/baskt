@@ -1,7 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { db, newId, now } from "@/db";
 import { purchaseLines, purchases, type ProductRow, type PurchaseLineRow, type PurchaseRow } from "@/db/schema";
-import { aiConfigured, env } from "@/env";
+import { attemptOrder, noteCall, noteFailure, noteUsage } from "@/ai/pool";
 import { normalizeText, tokenize, tokenSimilarity } from "@/lib/text";
 import { hasStore } from "@/stores/registry";
 import { searchStore } from "@/stores/search";
@@ -14,28 +14,49 @@ const SYSTEM = `You read photos of Dutch supermarket receipts (Albert Heijn, Jum
  "lines": [{"name": product text exactly as printed, "quantity": number (default 1), "unitPriceCents": integer or null, "totalPriceCents": integer, "dealText": bonus/discount text or null}], "notes": null or a short remark}.
 Include every product line, also from continued pages; skip totals, deposits (statiegeld) and payment lines; negative discount lines become dealText on the product above.`;
 
-/** Sends receipt images (data URLs) to a vision model and parses the lines. */
+/** Sends receipt images (data URLs) to a vision model and parses the lines; tries the vision pool in order. */
 export async function scanReceipt(images: string[]): Promise<ReceiptScan> {
-  if (!aiConfigured()) throw new Error("AI is not configured");
-  const response = await fetch(`${env.ai.visionBaseUrl}/chat/completions`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${env.ai.visionApiKey}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      model: env.ai.visionModel,
-      temperature: 0,
-      max_tokens: 6000,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: [{ type: "text", text: `Read ${images.length > 1 ? "these receipt pages as one purchase" : "this receipt"}.` }, ...images.map((url) => ({ type: "image_url", image_url: { url } }))] },
-      ],
-    }),
-    signal: AbortSignal.timeout(120_000),
-  });
-  if (!response.ok) throw new Error(`Receipt model HTTP ${response.status}: ${(await response.text()).slice(0, 200)}`);
-  const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  const content = payload.choices?.[0]?.message?.content?.trim().replace(/^```(?:json)?\s*|```$/g, "");
-  if (!content) throw new Error("Receipt model returned nothing");
+  const order = attemptOrder("vision");
+  if (!order.length) throw new Error("AI is not configured");
+  let content = "";
+  let lastError = "no vision provider answered";
+  for (const target of order) {
+    noteCall(target.id);
+    try {
+      const response = await fetch(`${target.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${target.apiKey}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          model: target.model,
+          temperature: 0,
+          max_tokens: 6000,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: SYSTEM },
+            { role: "user", content: [{ type: "text", text: `Read ${images.length > 1 ? "these receipt pages as one purchase" : "this receipt"}.` }, ...images.map((url) => ({ type: "image_url", image_url: { url } }))] },
+          ],
+        }),
+        signal: AbortSignal.timeout(120_000),
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        const retryAfter = Number(response.headers.get("retry-after"));
+        lastError = `Receipt model HTTP ${response.status}: ${text.slice(0, 200)}`;
+        noteFailure(target.id, lastError, response.status === 429 ? Math.min(60_000, (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 5) * 1000) : response.status >= 500 ? 15_000 : 0);
+        continue;
+      }
+      const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
+      noteUsage(target.id, payload.usage?.prompt_tokens ?? 0, payload.usage?.completion_tokens ?? 0);
+      content = payload.choices?.[0]?.message?.content?.trim().replace(/^```(?:json)?\s*|```$/g, "") ?? "";
+      if (content) break;
+      lastError = "Receipt model returned nothing";
+      noteFailure(target.id, lastError);
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      noteFailure(target.id, lastError, 15_000);
+    }
+  }
+  if (!content) throw new Error(lastError);
   const raw = JSON.parse(content) as Partial<ReceiptScan> & { lines?: Array<Partial<ReceiptLine>> };
   const lines = (raw.lines ?? [])
     .filter((line) => typeof line.name === "string" && line.name.trim() && typeof line.totalPriceCents === "number")
