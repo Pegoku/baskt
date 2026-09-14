@@ -43,6 +43,9 @@ kotlin {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+    // Match the WorkManager version already used by Glance.
+    implementation("androidx.work:work-runtime-ktx:2.7.1")
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling.preview)

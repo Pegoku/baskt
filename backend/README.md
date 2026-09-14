@@ -68,3 +68,35 @@ All routes are under `/api/v1` and require `Authorization: Bearer $APP_API_TOKEN
 | GET | `/admin/stats` | counters and store cooldowns |
 | POST | `/admin/refresh` | re-price products referenced by the basket |
 | POST | `/admin/clear-cache?ai=true` | drop the search (and AI) cache |
+
+## Offline replay and upstream caching
+
+Authenticated mutations accept an optional `Idempotency-Key` (16–128 alphanumeric/hyphen characters).
+The Android outbox uses a fresh UUID per action and keeps it for retries. Successful JSON/204 responses
+are stored in SQLite and replayed for identical requests; reusing the key with another method, path
+or payload returns 409. Concurrent duplicates are serialized. Failed responses remain retryable.
+Receipts are retained indefinitely so a device returning after a long absence cannot replay an old
+successful creation. Back up these alongside the application database. This protects response-loss
+retries; a process crash between a mutation and writing its receipt is not an atomic exactly-once
+transaction.
+
+The migration adds `upstream_cache` and `mutation_receipts`. Upstream cache entries persist across
+restarts, merge simultaneous misses and serve bounded stale results if an upstream request fails:
+
+| Content | Fresh for | Additional stale-on-error window |
+| --- | --- | --- |
+| Recipe page contents | 24 hours | 7 days |
+| Per-source recipe searches | 1 hour | 1 hour |
+| Barcode → product ID (including misses) | 6 hours | 24 hours |
+
+Expired entries beyond their stale window are pruned on cache writes. Null recipe extraction results
+are not cached; successful empty searches/barcode misses are. Barcode caches reference the current
+product record, so cached lookups do not overwrite newer prices. Existing product-search, AI and
+promotion caches remain in use. Mutable baskets, recipes owned by the user, stock, chat turns and
+receipt recognition are not placed in this shared upstream cache.
+
+`POST /basket/groups` accepts explicit empty `items` for an empty folder and optional `recipe` metadata
+for downloaded cooking instructions. Transfer responses include `children` to map copied offline
+IDs. Serving changes can include explicit `children` (`id`, `text`, `quantity`) plus
+`recipe.ingredientLines`; the server preserves child IDs and rejects a changed ingredient set with
+409 instead of deleting newer server ingredients.

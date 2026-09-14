@@ -67,6 +67,11 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     /** Debounced autocomplete for the idea input; history answers instantly, AI interpretations follow. */
     fun onIdeaTextChanged(text: String) {
         suggestJob?.cancel()
+        if (!online.value) {
+            _suggestions.value = basket.items.value.map { it.text }.filter { it.contains(text, ignoreCase = true) && it != text }.distinct().take(5)
+            _recipeSuggestion.value = null
+            return
+        }
         val query = text.trim()
         if (query.length < 2) {
             _suggestions.value = emptyList()
@@ -119,7 +124,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     private val _recipeResults = MutableStateFlow<List<RecipeSummary>>(emptyList())
     val recipeResults: StateFlow<List<RecipeSummary>> = _recipeResults
-    private val _recipeFavourites = MutableStateFlow<List<RecipeFavourite>>(emptyList())
+    private val _recipeFavourites = container.recipes.favourites
     val recipeFavourites: StateFlow<List<RecipeFavourite>> = _recipeFavourites
     private val _recipeDetail = MutableStateFlow<RecipeDetail?>(null)
     val recipeDetail: StateFlow<RecipeDetail?> = _recipeDetail
@@ -132,8 +137,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     /** Runs a server call and turns any failure into a visible message instead of silence. */
     private suspend fun <T> attempt(what: String, block: suspend () -> T): T? = try {
+        if (!online.value) throw java.io.IOException("Server unavailable")
         block()
     } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
         val offline = e is java.io.IOException || e is io.ktor.client.plugins.HttpRequestTimeoutException || e is io.ktor.client.network.sockets.ConnectTimeoutException
         notify(if (offline) "You're offline — $what needs the server" else "$what failed: ${e.message ?: "unknown error"}")
         null
@@ -154,28 +161,29 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     /** Loads from the server and caches the result; when offline returns the last cached copy. */
-    private inline fun <reified T> cachedLoad(name: String, fallback: T, fetch: () -> T): T =
-        runCatching(fetch).map { container.offline.save(name, it); it }.getOrElse { error ->
-            container.offline.load<T>(name) ?: run { notify("Could not load ${name.replace('-', ' ')}: ${error.message ?: "server unreachable"}"); fallback }
+    private inline fun <reified T> cachedLoad(name: String, fallback: T, fetch: () -> T): T {
+        val cached = container.offline.load<T>(name)
+        if (!online.value || pending.value.isNotEmpty()) return cached ?: fallback
+        val version = basket.revision
+        return try {
+            val result = fetch()
+            if (version != basket.revision || pending.value.isNotEmpty()) container.offline.load<T>(name) ?: fallback
+            else result.also { container.offline.save(name, it) }
         }
+        catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (e: Exception) { cached ?: fallback }
+    }
 
     val online get() = basket.online
     val pending get() = basket.pending
     fun retryConnection() = viewModelScope.launch { basket.tryReconnect() }
-    fun dropPending(op: nl.baskt.data.PendingOp) { basket.pending.update { it - op }; container.offline.saveOps(basket.pending.value) }
+    fun dropPending(op: nl.baskt.data.PendingOp) { basket.discard(op); _purchases.value = container.offline.load("purchases") ?: emptyList() }
 
-    fun loadRecipeFavourites() = viewModelScope.launch { _recipeFavourites.value = cachedLoad("recipe-favourites", emptyList()) { container.api.recipeFavourites() } }
-
-    fun toggleRecipeFavourite(recipe: RecipeSummary) = viewModelScope.launch {
-        val existing = _recipeFavourites.value.firstOrNull { it.url == recipe.url }
-        attempt(if (existing != null) "Removing favourite" else "Saving favourite") { if (existing != null) container.api.removeRecipeFavourite(existing.id) else container.api.addRecipeFavourite(recipe) }
-        loadRecipeFavourites()
-    }
-
+    fun loadRecipeFavourites() = viewModelScope.launch { container.recipes.refresh() }
+    fun toggleRecipeFavourite(recipe: RecipeSummary) = viewModelScope.launch { container.recipes.toggle(recipe) }
     fun openRecipe(recipeUrl: String) = viewModelScope.launch {
-        // The sheet shows its own loading state; don't reuse the list's "searching" indicator.
-        _recipeDetail.value = null
-        _recipeDetail.value = attempt("Loading the recipe") { container.api.fetchRecipe(recipeUrl) }
+        _recipeDetail.value = container.recipes.detail(recipeUrl)
+        if (_recipeDetail.value == null) notify("This recipe has not been downloaded. Connect to open it.")
     }
 
     fun closeRecipe() { _recipeDetail.value = null }
@@ -184,13 +192,14 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     val stockDishes: StateFlow<List<StockDish>?> = _stockDishes
     fun loadStockDishes() = viewModelScope.launch { _recipesBusy.value = true; _stockDishes.value = cachedLoad("stock-dishes", emptyList()) { container.api.dishesFromStock() }; _recipesBusy.value = false }
 
-    private val _myRecipes = MutableStateFlow<List<UserRecipe>>(emptyList())
+    private val _myRecipes = container.recipes.mine
     val myRecipes: StateFlow<List<UserRecipe>> = _myRecipes
-    fun loadMyRecipes() = viewModelScope.launch { _myRecipes.value = cachedLoad("my-recipes", emptyList()) { container.api.myRecipes() } }
-    fun deleteMyRecipe(id: String) = viewModelScope.launch { runCatching { container.api.deleteMyRecipe(id) }; loadMyRecipes() }
+    fun loadMyRecipes() = viewModelScope.launch { container.recipes.refresh() }
+    fun deleteMyRecipe(id: String) = viewModelScope.launch { container.recipes.delete(id) }
     fun saveSiteRecipeAsMine(recipe: RecipeSummary) = viewModelScope.launch {
-        runCatching { container.api.saveMyRecipe(RecipeDraft(title = recipe.displayTitle), origin = "site", fromUrl = recipe.url) }
-        loadMyRecipes()
+        val detail = container.recipes.detail(recipe.url)
+        if (detail == null) { notify("Download this recipe before saving a copy"); return@launch }
+        container.recipes.save(RecipeDraft(detail.title, servings = detail.servings, ingredientLines = detail.ingredientLines, steps = detail.steps), "site")
     }
 
     /** Create-recipe flow state. */
@@ -210,13 +219,15 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
     fun clearGenerate() { _generate.value = null }
     suspend fun saveRecipe(draft: RecipeDraft, origin: String, existingId: String?): UserRecipe? =
-        runCatching { if (existingId != null) container.api.updateMyRecipe(existingId, draft) else container.api.saveMyRecipe(draft, origin) }.getOrNull().also { loadMyRecipes() }
+        attempt("Saving recipe") { container.recipes.save(draft, origin, existingId) }
 
     /** Localized recipe (ingredients + steps) of a folder, for the folder screen. */
     fun openGroupRecipe(groupId: String) = viewModelScope.launch {
         _recipeDetail.value = null
         _recipesBusy.value = true
-        _recipeDetail.value = runCatching { container.api.groupRecipe(groupId) }.getOrNull()
+        val local = basket.items.value.firstOrNull { it.id == groupId }?.recipe
+        _recipeDetail.value = if (local != null && local.steps.isNotEmpty()) RecipeDetail(local.title, local.sourceUrl, local.servings, local.ingredientLines, local.imageUrl, local.steps)
+        else cachedLoad<RecipeDetail?>("group-recipe-$groupId", null) { container.api.groupRecipe(groupId) }
         _recipesBusy.value = false
     }
 
@@ -224,9 +235,9 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     private val _priceChanges = MutableStateFlow<PriceChangesResponse?>(null)
     val priceChanges: StateFlow<PriceChangesResponse?> = _priceChanges
-    fun loadPriceChanges() = viewModelScope.launch { _priceChanges.value = attempt("Loading price changes") { container.api.priceChanges() } }
+    fun loadPriceChanges() = viewModelScope.launch { _priceChanges.value = cachedLoad<PriceChangesResponse?>("price-changes", null) { container.api.priceChanges() } }
 
-    suspend fun priceHistory(productId: String): List<PricePoint> = runCatching { container.api.priceHistory(productId) }.getOrDefault(emptyList())
+    suspend fun priceHistory(productId: String): List<PricePoint> = cachedLoad("price-history-$productId", emptyList()) { container.api.priceHistory(productId) }
 
     /** Proposal from dictation, shown on the confirm sheet until the user accepts or dismisses it. */
     private val _voiceProposal = MutableStateFlow<List<VoiceItem>?>(null)
@@ -261,6 +272,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     val purchaseDetail: StateFlow<PurchaseDetail?> = _purchaseDetail
 
     fun scanReceipt(images: List<Pair<String, ByteArray>>, store: String?) = viewModelScope.launch {
+        if (!online.value) { _scanError.value = "Receipt recognition needs a connection"; return@launch }
         _scanning.value = true
         _scanError.value = null
         runCatching { container.api.scanReceipt(images, store) }
@@ -273,19 +285,33 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun clearScan() { _scan.value = null; _scanError.value = null }
 
     fun savePurchase(scan: ReceiptScan, store: String) = viewModelScope.launch {
-        runCatching { container.api.savePurchase(store, scan.purchasedAt, scan.totalCents, scan.lines) }
-            .onSuccess { _scan.value = null; loadPurchases() }
-            .onFailure { _scanError.value = it.message }
+        val id = "local-${java.util.UUID.randomUUID()}"
+        val at = scan.purchasedAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } ?: System.currentTimeMillis()
+        val total = scan.totalCents ?: scan.lines.sumOf { it.totalPriceCents }
+        val purchase = Purchase(id, store, at, total, lineCount = scan.lines.size)
+        val detail = PurchaseDetail(purchase, scan.lines.mapIndexed { index, line -> nl.baskt.data.PurchaseLine(
+            "$id-$index", id, line.name, line.productId, line.quantity, line.unitPriceCents, line.totalPriceCents, line.dealText, index,
+        ) })
+        basket.queued(nl.baskt.data.PendingOp(type = "purchaseSave", itemId = id, store = store, receipt = scan), {
+            _purchases.update { listOf(purchase) + it }
+            container.offline.save("purchases", _purchases.value)
+            container.offline.save("purchase-$id", detail)
+            _scan.value = null
+        })
     }
 
     fun loadPurchases() = viewModelScope.launch {
+        _purchases.value = container.offline.load<List<Purchase>>("purchases") ?: _purchases.value
+        _spend.value = container.offline.load<SpendSummary>("spend") ?: _spend.value
         _purchases.value = cachedLoad("purchases", emptyList()) { container.api.purchases() }
         _spend.value = cachedLoad<SpendSummary?>("spend", null) { container.api.spendSummary() }
     }
 
-    fun openPurchase(id: String) = viewModelScope.launch { _purchaseDetail.value = runCatching { container.api.purchase(id) }.getOrNull() }
+    fun openPurchase(id: String) = viewModelScope.launch { _purchaseDetail.value = cachedLoad<PurchaseDetail?>("purchase-$id", null) { container.api.purchase(id) } }
     fun closePurchase() { _purchaseDetail.value = null }
-    fun deletePurchase(id: String) = viewModelScope.launch { runCatching { container.api.deletePurchase(id) }; _purchaseDetail.value = null; loadPurchases() }
+    fun deletePurchase(id: String) = viewModelScope.launch { basket.queued(nl.baskt.data.PendingOp(type = "purchaseDelete", itemId = id), {
+        _purchases.update { list -> list.filterNot { it.id == id } }; container.offline.save("purchases", _purchases.value); _purchaseDetail.value = null
+    }) }
 
     private val _deals = MutableStateFlow<DealsResponse?>(null)
     val deals: StateFlow<DealsResponse?> = _deals
@@ -294,7 +320,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     fun findDeals(live: Boolean) = viewModelScope.launch {
         _loadingDeals.value = true
-        _deals.value = attempt("Finding deals") { container.api.deals(basket.currentBasketId.value, live) }
+        _deals.value = cachedLoad<DealsResponse?>("basket-deals-${basket.currentBasketId.value}", null) { container.api.deals(basket.currentBasketId.value, live) }
         _loadingDeals.value = false
     }
 
@@ -326,7 +352,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         if (scans.value.any { it.gtin == gtin }) return
         scans.update { listOf(Scan(gtin)) + it } // newest first
         viewModelScope.launch {
-            val result = runCatching { container.api.barcode(gtin) }.getOrNull()
+            val result = basket.barcode(gtin)
             val products = result?.results?.mapNotNull { it.product } ?: emptyList()
             scans.update { list -> list.map { if (it.gtin == gtin) it.copy(products = products, loading = false) else it } }
             if (products.isEmpty()) {
@@ -344,13 +370,14 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     val chat: StateFlow<List<ChatMessage>> = _chat
     private val _chatBusy = MutableStateFlow(false)
     val chatBusy: StateFlow<Boolean> = _chatBusy
-    fun loadChat() = viewModelScope.launch { _chat.value = cachedLoad("chat-${basket.currentBasketId.value}", emptyList()) { container.api.chatHistory(basket.currentBasketId.value) } }
+    fun loadChat() = viewModelScope.launch { _chat.value = container.offline.load("chat-${basket.currentBasketId.value}") ?: emptyList(); _chat.value = cachedLoad("chat-${basket.currentBasketId.value}", emptyList()) { container.api.chatHistory(basket.currentBasketId.value) } }
     /** What the assistant is doing right now (polled from the server while a turn runs). */
     private val _chatSteps = MutableStateFlow<List<String>>(emptyList())
     val chatSteps: StateFlow<List<String>> = _chatSteps
     private var stepsJob: Job? = null
 
     fun sendChat(text: String) = viewModelScope.launch {
+        if (!online.value) { notify("The assistant needs a connection"); return@launch }
         _chatBusy.value = true
         _chatSteps.value = listOf("Sending…")
         stepsJob?.cancel()
@@ -371,7 +398,9 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         _chatSteps.value = emptyList()
         _chatBusy.value = false
     }
-    fun clearChat() = viewModelScope.launch { attempt("Clearing the chat") { container.api.chatClear(basket.currentBasketId.value) }; _chat.value = emptyList() }
+    fun clearChat() = viewModelScope.launch { basket.queued(nl.baskt.data.PendingOp(type = "chatClear", basketId = basket.currentBasketId.value), {
+        _chat.value = emptyList(); container.offline.save("chat-${basket.currentBasketId.value}", _chat.value)
+    }) }
     fun applyProposal(message: ChatMessage, indices: List<Int>) = viewModelScope.launch {
         val result = attempt("Applying changes") { container.api.applyProposal(message.id, indices) } ?: return@launch
         _chat.update { list -> list.map { if (it.id == message.id) result.message else it } }
@@ -382,8 +411,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     private val _memory = MutableStateFlow<List<Choice>>(emptyList())
     val memory: StateFlow<List<Choice>> = _memory
-    fun loadMemory() = viewModelScope.launch { _memory.value = cachedLoad("memory", emptyList()) { container.api.memory() } }
-    fun deleteMemory(id: String) = viewModelScope.launch { runCatching { container.api.deleteMemory(id) }; _memory.update { list -> list.filterNot { it.id == id } } }
+    fun loadMemory() = viewModelScope.launch { _memory.value = container.offline.load("memory") ?: emptyList(); _memory.value = cachedLoad("memory", emptyList()) { container.api.memory() } }
+    fun deleteMemory(id: String) = viewModelScope.launch { basket.queued(nl.baskt.data.PendingOp(type = "memoryDelete", itemId = id), {
+        _memory.update { list -> list.filterNot { it.id == id } }; container.offline.save("memory", _memory.value)
+    }) }
 
     private val _allDeals = MutableStateFlow<AllDealsResponse?>(null)
     val allDeals: StateFlow<AllDealsResponse?> = _allDeals
@@ -392,7 +423,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     fun loadAllDeals(query: String, store: String?) = viewModelScope.launch {
         _loadingAllDeals.value = true
-        _allDeals.value = attempt("Loading deals") { container.api.allDeals(query, store) }
+        _allDeals.value = cachedLoad<AllDealsResponse?>("deals-$query-$store", null) { container.api.allDeals(query, store) }
         _loadingAllDeals.value = false
     }
 
@@ -432,10 +463,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun reload() = viewModelScope.launch {
         val current = container.awaitSettings()
         // Tell the server which language to use for suggestions and interpretations.
-        runCatching { container.api.setLanguage(current.resolvedLanguage) }
+        basket.setLanguage(current.resolvedLanguage)
         basket.refreshStores()
         basket.refreshBaskets()
-        basket.refresh()
+        basket.tryReconnect()
     }
 
     fun switchBasket(id: String) = viewModelScope.launch { basket.switchBasket(id) }
@@ -460,7 +491,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun setGroupServings(group: BasketItem, servings: Int) = viewModelScope.launch { basket.setGroupServings(group, servings) }
     fun createBasket(name: String, emoji: String?, switchTo: Boolean = true) = viewModelScope.launch {
         val created = basket.createBasket(name, emoji)
-        if (switchTo && created != null) basket.switchBasket(created.id)
+        if (switchTo) basket.switchBasket(created.id)
     }
     fun renameBasket(id: String, name: String, emoji: String?) = viewModelScope.launch { basket.renameBasket(id, name, emoji) }
     fun deleteBasket(id: String) = viewModelScope.launch { basket.deleteBasket(id) }
@@ -481,7 +512,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun setLanguage(language: String) = viewModelScope.launch {
         container.settingsStore.saveLanguage(language)
         val current = container.awaitSettings()
-        runCatching { container.api.setLanguage(current.resolvedLanguage) }
+        basket.setLanguage(current.resolvedLanguage)
     }
 
     fun add(text: String, quantity: Int) = viewModelScope.launch {
@@ -522,14 +553,19 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         if (!refreshPrices && !force && comparedFor == key && _comparison.value != null) return@launch
         // Only show the bar when there is nothing to look at yet; otherwise update quietly.
         if (_comparison.value == null) _comparing.value = true
-        if (refreshPrices) runCatching { container.api.refreshPrices() }
-        basket.compare()?.let { _comparison.value = it; comparedFor = key }
+        if (refreshPrices) { attempt("Refreshing prices") { container.api.refreshPrices() }; basket.refresh(false) }
+        basket.compare().let { _comparison.value = it; comparedFor = key }
         _comparing.value = false
     }
 
     suspend fun saveSettings(baseUrl: String, token: String) {
-        container.settingsStore.save(baseUrl, token)
-        container.awaitSettings()
+        basket.withSyncPaused {
+            val changed = container.currentSettings.baseUrl != baseUrl || container.currentSettings.token != token
+            require(!changed || pending.value.isEmpty()) { "Sync or discard pending changes before changing servers" }
+            container.settingsStore.save(baseUrl, token)
+            container.awaitSettings()
+            if (changed) { _chat.value = emptyList(); _purchases.value = emptyList(); _memory.value = emptyList(); _recipeDetail.value = null; _comparison.value = null; _spend.value = null; _purchaseDetail.value = null }
+        }
     }
 
     suspend fun testConnection(): Result<String> = runCatching {

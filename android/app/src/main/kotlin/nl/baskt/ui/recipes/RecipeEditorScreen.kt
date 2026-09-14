@@ -57,6 +57,7 @@ fun RecipeEditorScreen(viewModel: AppViewModel, recipeId: String?, onBack: () ->
     val mine by viewModel.myRecipes.collectAsState()
     val generate by viewModel.generate.collectAsState()
     val generating by viewModel.generating.collectAsState()
+    val online by viewModel.online.collectAsState()
     val scope = rememberCoroutineScope()
     val existing = mine.firstOrNull { it.id == recipeId }
     var description by remember { mutableStateOf("") }
@@ -95,7 +96,7 @@ fun RecipeEditorScreen(viewModel: AppViewModel, recipeId: String?, onBack: () ->
                 Text("Describe the dish", style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(value = description, onValueChange = { description = it }, modifier = Modifier.fillMaxWidth(), minLines = 2, placeholder = { Text("e.g. arroz cubano: rice with a fried egg and tomato sauce") })
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { noneFit = false; viewModel.findRecipeMatches(description.trim()) }, enabled = description.isNotBlank() && !generating) { Text("Find it on recipe sites") }
+                    Button(onClick = { noneFit = false; viewModel.findRecipeMatches(description.trim()) }, enabled = online && description.isNotBlank() && !generating) { Text("Find it on recipe sites") }
                     TextButton(onClick = { showEditor = true; origin = "manual" }) { Text("Write it myself") }
                 }
                 if (generating) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { LoadingIndicator(); Text(if (generate?.matches?.isNotEmpty() == true || noneFit) "Writing the recipe…" else "Looking for matching recipes…") }
@@ -110,10 +111,10 @@ fun RecipeEditorScreen(viewModel: AppViewModel, recipeId: String?, onBack: () ->
                             }
                         }
                     }
-                    FilledTonalButton(onClick = { noneFit = true; viewModel.draftRecipe(description.trim()) }) { Text("None of these — write it for me") }
+                    FilledTonalButton(enabled = online, onClick = { noneFit = true; viewModel.draftRecipe(description.trim()) }) { Text("None of these — write it for me") }
                 } else if (generate != null && matches.isEmpty() && generate?.draft == null && !generating) {
                     Text("Nothing similar found on the sites.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    FilledTonalButton(onClick = { noneFit = true; viewModel.draftRecipe(description.trim()) }) { Text("Write it for me with AI") }
+                    FilledTonalButton(enabled = online, onClick = { noneFit = true; viewModel.draftRecipe(description.trim()) }) { Text("Write it for me with AI") }
                 }
             }
             if (showEditor) {

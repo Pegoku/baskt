@@ -95,9 +95,9 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = {
                     scope.launch {
-                        viewModel.saveSettings(baseUrl, token)
-                        status = viewModel.testConnection().fold({ it }, { "Saved, but: ${it.message}" })
-                        viewModel.reload()
+                        runCatching { viewModel.saveSettings(baseUrl, token) }
+                            .onSuccess { status = viewModel.testConnection().fold({ it }, { "Saved, but: ${it.message}" }); viewModel.reload() }
+                            .onFailure { status = it.message ?: "Could not save settings" }
                     }
                 }) { Text("Save & test") }
                 OutlinedButton(onClick = { scope.launch { status = viewModel.testConnection().fold({ it }, { "Failed: ${it.message}" }) } }) { Text("Test") }
@@ -134,7 +134,7 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
             if (pendingOps.isEmpty()) Text(if (isOnline) "Everything is synced." else "Offline: saved data is shown; changes you make are queued here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             for (op in pendingOps) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(op.label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    Text(op.label + (op.failure?.let { "\n$it" } ?: ""), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                     androidx.compose.material3.TextButton(onClick = { viewModel.dropPending(op) }) { Text("Discard") }
                 }
             }

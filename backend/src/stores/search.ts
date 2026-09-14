@@ -100,12 +100,11 @@ export async function lookupBarcode(stores: StoreCode[], gtin: string): Promise<
     stores.map(async (store) => {
       try {
         const adapter = getAdapter(store);
-        let found: StoreProduct | null = null;
-        found = await cachedUpstream(`barcode:v1:${store}:${gtin}`, 6 * 60 * 60 * 1000, async () => {
-          if (adapter.byBarcode) return adapter.byBarcode(gtin);
-          return (await adapter.search(gtin, 3))[0] ?? null;
+        const id = await cachedUpstream(`barcode:v2:${store}:${gtin}`, 6 * 60 * 60 * 1000, async () => {
+          const found = adapter.byBarcode ? await adapter.byBarcode(gtin) : (await adapter.search(gtin, 3))[0] ?? null;
+          return found ? upsertProducts([found])[0].id : null;
         }, { staleMs: 24 * 60 * 60 * 1000 });
-        const row = found ? upsertProducts([found])[0] : null;
+        const row = id ? productsByIds([id])[0] ?? null : null;
         return { store, product: row, error: null };
       } catch (error) {
         return { store, product: null, error: error instanceof Error ? error.message : String(error) };

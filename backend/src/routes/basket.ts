@@ -15,7 +15,7 @@ import { expandDealQuery, findDeals } from "@/matching/deals";
 import { termRelevance } from "@/stores/promotions";
 import { interpretVoice } from "@/matching/voice";
 import { fetchRecipe, getUserRecipe, userRecipeAsRecipe } from "@/routes/recipes";
-import { detectRecipeIntent, parseServings } from "@/matching/recipes";
+import { detectRecipeIntent, parseServings, scaleLine } from "@/matching/recipes";
 import { collectProductIds, itemView } from "@/serialize";
 import { getAdapter, hasStore } from "@/stores/registry";
 import { productsByIds } from "@/stores/search";
@@ -160,8 +160,9 @@ export function createGroupFromUrl(url: string, basketId = DEFAULT_BASKET_ID, se
 /** Creates a folder; with `items` the children are given, otherwise a recipe is looked up in the background. */
 function createGroup(text: string, itemTexts?: string[], basketId = DEFAULT_BASKET_ID) {
   const group = createItem(text, 1, null, "group", basketId);
-  if (itemTexts?.length) {
+  if (itemTexts !== undefined) {
     for (const child of itemTexts) createItem(child, 1, group.id);
+    db().update(basketItems).set({ status: "MATCHED" }).where(eq(basketItems.id, group.id)).run();
     return group;
   }
   db().update(basketItems).set({ status: "PARSING" }).where(eq(basketItems.id, group.id)).run();
@@ -300,7 +301,7 @@ basket.post("/items/from-product", async (c) => {
 });
 
 basket.post("/groups", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { text?: string; items?: string[]; basketId?: string; url?: string; servings?: number };
+  const body = (await c.req.json().catch(() => ({}))) as { text?: string; items?: string[]; basketId?: string; url?: string; servings?: number; recipe?: { title?: string; sourceUrl?: string; servings?: string; ingredientLines?: string[]; imageUrl?: string; steps?: Array<{ text: string; imageUrl?: string | null }>; baseServings?: number; currentServings?: number } };
   const basketId = body.basketId ?? DEFAULT_BASKET_ID;
   if (!basketExists(basketId)) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
   if (body.url?.trim() && /^(https?:\/\/|baskt:\/\/recipe\/)/.test(body.url.trim())) {
@@ -310,6 +311,17 @@ basket.post("/groups", async (c) => {
   if (!body.text?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "text or url is required" } }, 400);
   const items = Array.isArray(body.items) ? body.items.filter((value): value is string => typeof value === "string" && value.trim().length > 0) : undefined;
   const group = createGroup(body.text, items, basketId);
+  if (items !== undefined && body.recipe && typeof body.recipe.title === "string") {
+    const info = body.recipe;
+    db().update(basketItems).set({ recipeJson: {
+      title: info.title!, sourceUrl: typeof info.sourceUrl === "string" ? info.sourceUrl : null,
+      servings: typeof info.servings === "string" ? info.servings : null, ingredientLines: items, skipped: [],
+      imageUrl: typeof info.imageUrl === "string" ? info.imageUrl : null,
+      baseServings: typeof info.baseServings === "number" ? info.baseServings : null,
+      currentServings: typeof info.currentServings === "number" ? info.currentServings : null,
+      steps: Array.isArray(info.steps) ? info.steps.filter((step) => step && typeof step.text === "string").map((step) => ({ text: step.text, imageUrl: typeof step.imageUrl === "string" ? step.imageUrl : null })) : [],
+    } }).where(eq(basketItems.id, group.id)).run();
+  }
   return c.json({ group: viewOf(group.id), items: loadViews(childrenOf(group.id)) }, 201);
 });
 
@@ -354,10 +366,27 @@ basket.get("/groups/:id/recipe", async (c) => {
 basket.post("/groups/:id/servings", async (c) => {
   const group = getItem(c.req.param("id"));
   if (!group || group.kind !== "group" || !group.recipeJson) return c.json({ error: { code: "NOT_FOUND", message: "recipe folder not found" } }, 404);
-  const body = (await c.req.json().catch(() => ({}))) as { servings?: number };
+  const body = (await c.req.json().catch(() => ({}))) as { servings?: number; children?: Array<{ id: string; text: string; quantity: number }>; recipe?: { ingredientLines?: string[] } };
   if (typeof body.servings !== "number" || body.servings <= 0 || body.servings > 50) return c.json({ error: { code: "BAD_REQUEST", message: "servings must be 1-50" } }, 400);
   const info = group.recipeJson;
   const recipe = info.sourceUrl ? { title: info.title, sourceUrl: info.sourceUrl, servings: info.servings, ingredientLines: info.ingredientLines } : null;
+  if (Array.isArray(body.children)) {
+    const children = childrenOf(group.id);
+    if (body.children.length !== children.length || new Set(body.children.map((child) => child.id)).size !== children.length ||
+        body.children.some((child) => !children.some((existing) => existing.id === child.id) || typeof child.text !== "string" || !child.text.trim() || !Number.isInteger(child.quantity) || child.quantity < 1)) {
+      return c.json({ error: { code: "CONFLICT", message: "Recipe ingredients changed on the server; review the folder before retrying" } }, 409);
+    }
+    const lines = body.recipe?.ingredientLines;
+    if (!Array.isArray(lines) || lines.some((line) => typeof line !== "string")) return c.json({ error: { code: "BAD_REQUEST", message: "ingredientLines are required" } }, 400);
+    db().transaction((tx) => {
+      for (const child of body.children!) tx.update(basketItems).set({ text: child.text.trim(), quantity: child.quantity, status: "NEW", parsedJson: null, updatedAt: now() }).where(eq(basketItems.id, child.id)).run();
+      tx.update(basketItems).set({ recipeJson: { ...info, ingredientLines: lines,
+        skipped: info.skipped.map((entry) => ({ ...entry, text: scaleLine(entry.text, body.servings! / (info.currentServings ?? info.baseServings ?? 1)) })),
+        baseServings: body.servings!, currentServings: body.servings!, servings: String(body.servings) }, status: "MATCHED", updatedAt: now() }).where(eq(basketItems.id, group.id)).run();
+    });
+    for (const child of body.children) enqueue(child.id);
+    return c.json({ group: viewOf(group.id), items: loadViews(childrenOf(group.id)) });
+  }
   db().update(basketItems).set({ status: "PARSING", updatedAt: now() }).where(eq(basketItems.id, group.id)).run();
   const items = await itemsForServings(recipe, group.text, info.baseServings ?? null, body.servings);
   const database = db();
@@ -472,7 +501,7 @@ basket.post("/items/:id/transfer", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { basketId?: string; copy?: boolean };
   if (!body.basketId || !basketExists(body.basketId)) return c.json({ error: { code: "BAD_REQUEST", message: "basketId must be an existing basket" } }, 400);
   const result = transferItem(item, body.basketId, body.copy === true);
-  return c.json(viewOf(result.id));
+  return c.json({ ...viewOf(result.id), children: loadViews(childrenOf(result.id)) });
 });
 
 basket.delete("/", (c) => {

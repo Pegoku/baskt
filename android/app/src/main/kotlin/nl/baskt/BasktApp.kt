@@ -27,16 +27,20 @@ class AppContainer(app: Application) {
     var currentSettings = AppSettings(SettingsStore.DEFAULT_BASE_URL, "")
         private set
 
-    val api = BasktApi { currentSettings }
-    val offline = OfflineStore(app)
-    val basket = BasketRepository(api, scope, offline, onBasketSwitched = { id -> settingsStore.saveCurrentBasket(id); nl.baskt.widget.BasketWidget.refreshAll(app) })
+    val api = BasktApi(settingsProvider = { currentSettings })
+    val offline = OfflineStore(app) { currentSettings.baseUrl.trimEnd('/') + "|" + currentSettings.token }
+    val basket = BasketRepository(api, scope, offline, onBasketSwitched = { id -> settingsStore.saveCurrentBasket(id); nl.baskt.widget.BasketWidget.refreshAll(app) }, onQueued = { nl.baskt.data.SyncWorker.schedule(app) })
+
+    val recipes = nl.baskt.data.RecipeLibrary(api, offline, basket, cacheImages = { urls ->
+        if (basket.online.value) for (url in urls.distinct()) SingletonImageLoader.get(app).enqueue(coil3.request.ImageRequest.Builder(app).data(url).build())
+    }).also { basket.recipeLibrary = it }
 
     init {
         // Replay queued changes as soon as a network is available again.
         val connectivity = app.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
         connectivity.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: android.net.Network) {
-                scope.launch { basket.tryReconnect() }
+                scope.launch { awaitSettings(); basket.tryReconnect() }
             }
         })
         // Automatic connectivity monitor: ticks every 5 s and re-reads the state each time, so a drop is
@@ -48,18 +52,24 @@ class AppContainer(app: Application) {
                 val interval = if (basket.online.value) 60_000 else 10_000
                 if (System.currentTimeMillis() - lastProbe < interval) continue
                 lastProbe = System.currentTimeMillis()
-                if (!basket.online.value) basket.tryReconnect() else if (!basket.probe()) basket.online.value = false
+                if (!basket.online.value || basket.pending.value.isNotEmpty()) basket.tryReconnect() else if (!basket.probe()) basket.online.value = false
             }
         }
         scope.launch {
             settingsStore.settings.collect { settings ->
+                val changed = currentSettings.baseUrl != settings.baseUrl || currentSettings.token != settings.token
                 currentSettings = settings
+                if (changed) { offline.migrateLegacy(); basket.reloadLocal(); recipes.reloadLocal() }
                 basket.restoreBasket(settings.currentBasketId)
             }
         }
     }
 
-    suspend fun awaitSettings(): AppSettings = settingsStore.settings.first().also { currentSettings = it }
+    suspend fun awaitSettings(): AppSettings = settingsStore.settings.first().also {
+        if (currentSettings.baseUrl != it.baseUrl || currentSettings.token != it.token) {
+            currentSettings = it; offline.migrateLegacy(); basket.reloadLocal(); recipes.reloadLocal()
+        }
+    }
 }
 
 class BasktApp : Application(), SingletonImageLoader.Factory {

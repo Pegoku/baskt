@@ -74,6 +74,7 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
     val stockDishes by viewModel.stockDishes.collectAsState()
     val detail by viewModel.recipeDetail.collectAsState()
     val busy by viewModel.recipesBusy.collectAsState()
+    val online by viewModel.online.collectAsState()
     val searchMessage by viewModel.recipeMessage.collectAsState()
     var query by remember { mutableStateOf("") }
     var tab by remember { mutableIntStateOf(0) }
@@ -83,6 +84,7 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
 
     fun isFavourite(recipe: RecipeSummary) = favourites.any { it.url == recipe.url }
     fun submit() {
+        if (!online) { viewModel.notify("Recipe discovery needs a connection"); return }
         val value = query.trim()
         if (value.isEmpty()) return
         if (value.startsWith("http://") || value.startsWith("https://")) {

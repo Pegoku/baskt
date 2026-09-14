@@ -84,6 +84,7 @@ import nl.baskt.ui.recipes.RecipeSheet
 fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () -> Unit) {
     val messages by viewModel.chat.collectAsState()
     val busy by viewModel.chatBusy.collectAsState()
+    val online by viewModel.online.collectAsState()
     val steps by viewModel.chatSteps.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
     val recipeDetail by viewModel.recipeDetail.collectAsState()
@@ -121,7 +122,7 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = { send() }),
                     )
-                    FilledIconButton(onClick = { send() }, enabled = input.isNotBlank() && !busy) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send") }
+                    FilledIconButton(onClick = { send() }, enabled = online && input.isNotBlank() && !busy) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send") }
                 }
             }
         },

@@ -11,7 +11,8 @@ export function idempotency() {
     const key = c.req.header("Idempotency-Key");
     if (!key || !["POST", "PATCH", "DELETE"].includes(c.req.method)) return next();
     if (!/^[a-zA-Z0-9-]{16,128}$/.test(key)) return c.json({ error: { code: "BAD_REQUEST", message: "invalid operation key" } }, 400);
-    const fingerprint = await sha256(`${c.req.method}|${c.req.url}|${await c.req.raw.clone().text()}`);
+    const url = new URL(c.req.url);
+    const fingerprint = await sha256(`${c.req.method}|${url.pathname}${url.search}|${await c.req.raw.clone().text()}`);
     // Authentication middleware runs first. Receipts are scoped to the current credential.
     const scopedKey = await sha256(`${c.req.header("authorization") ?? ""}|${key}`);
     while (inFlight.has(scopedKey)) await inFlight.get(scopedKey);

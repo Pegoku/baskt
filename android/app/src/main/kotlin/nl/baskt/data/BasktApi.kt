@@ -24,14 +24,17 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.jsonObject
 
 class ApiException(val status: Int, message: String) : Exception(message)
 
 /** Thin client for the baskt backend. Base URL and token come from [SettingsStore] and can change at runtime. */
-class BasktApi(private val settingsProvider: () -> AppSettings) {
+class BasktApi(private val settingsProvider: () -> AppSettings, private val operationId: String? = null, sharedClient: HttpClient? = null) {
+    fun forOperation(id: String): BasktApi { val settings = settingsProvider(); return BasktApi({ settings }, id, client) }
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; explicitNulls = false }
 
-    private val client = HttpClient(OkHttp) {
+    private val client = sharedClient ?: HttpClient(OkHttp) {
         install(ContentNegotiation) { json(this@BasktApi.json) }
         install(HttpTimeout) {
             requestTimeoutMillis = 60_000
@@ -42,6 +45,7 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
     }
 
     private fun HttpRequestBuilder.auth() {
+        operationId?.let { header("Idempotency-Key", it) }
         val token = settingsProvider().token
         if (token.isNotBlank()) header("Authorization", "Bearer $token")
     }
@@ -87,9 +91,9 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
             setBody(JsonObject(mapOf("defaultServings" to (servings?.let { JsonPrimitive(it) } ?: JsonNull))))
         }.expect()
 
-    suspend fun setGroupServings(groupId: String, servings: Int): GroupResponse =
+    suspend fun setGroupServings(groupId: String, servings: Int, children: List<ScaledIngredient>? = null, recipe: RecipeInfo? = null): GroupResponse =
         client.post(url("/basket/groups/$groupId/servings")) {
-            auth(); contentType(ContentType.Application.Json); setBody(JsonObject(mapOf("servings" to JsonPrimitive(servings))))
+            auth(); contentType(ContentType.Application.Json); setBody(GroupServingsRequest(servings, children, recipe))
         }.expect()
 
     suspend fun addSkipped(groupId: String): List<BasketItem> =
@@ -108,7 +112,10 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
         client.post(url("/baskets")) { auth(); contentType(ContentType.Application.Json); setBody(BasketRequest(name, emoji)) }.expect()
 
     suspend fun renameBasket(id: String, name: String, emoji: String?): Basket =
-        client.patch(url("/baskets/$id")) { auth(); contentType(ContentType.Application.Json); setBody(BasketRequest(name, emoji)) }.expect()
+        client.patch(url("/baskets/$id")) {
+            auth(); contentType(ContentType.Application.Json)
+            setBody(JsonObject(mapOf("name" to JsonPrimitive(name), "emoji" to (emoji?.let { JsonPrimitive(it) } ?: JsonNull))))
+        }.expect()
 
     suspend fun deleteBasket(id: String) {
         client.delete(url("/baskets/$id")) { auth() }.expect<Unit>()
@@ -129,7 +136,7 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
             auth(); contentType(ContentType.Application.Json); setBody(ItemIdsRequest(itemIds))
         }.expect<DeletedResponse>().deleted
 
-    suspend fun transferItem(id: String, basketId: String, copy: Boolean): BasketItem =
+    suspend fun transferItem(id: String, basketId: String, copy: Boolean): TransferResult =
         client.post(url("/basket/items/$id/transfer")) {
             auth(); contentType(ContentType.Application.Json); setBody(TransferRequest(basketId, copy))
         }.expect()
@@ -140,9 +147,9 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
         }.expect()
 
     /** Creates a folder; with [items] the children are given, otherwise the server looks up a recipe. */
-    suspend fun addGroup(text: String, items: List<String>?, basketId: String): GroupResponse =
+    suspend fun addGroup(text: String, items: List<String>?, basketId: String, recipe: RecipeInfo? = null): GroupResponse =
         client.post(url("/basket/groups")) {
-            auth(); contentType(ContentType.Application.Json); setBody(AddGroupRequest(text, items, basketId))
+            auth(); contentType(ContentType.Application.Json); setBody(AddGroupRequest(text, items, basketId, recipe))
         }.expect()
 
     suspend fun addFromText(text: String, basketId: String): List<BasketItem> =
@@ -225,7 +232,11 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 
     suspend fun updateMyRecipe(id: String, draft: RecipeDraft): UserRecipe =
         client.patch(url("/recipes/mine/$id")) {
-            auth(); contentType(ContentType.Application.Json); setBody(SaveRecipeRequest(draft.title, draft.description, draft.servings, draft.ingredientLines, draft.steps.map { it.text }, null, null))
+            auth(); contentType(ContentType.Application.Json)
+            val request = SaveRecipeRequest(draft.title, draft.description, draft.servings, draft.ingredientLines, draft.steps.map { it.text }, null, null)
+            setBody(JsonObject(json.encodeToJsonElement(request).jsonObject + mapOf(
+                "description" to JsonPrimitive(draft.description ?: ""), "servings" to (draft.servings?.let { JsonPrimitive(it) } ?: JsonNull),
+            )))
         }.expect()
 
     suspend fun deleteMyRecipe(id: String) {
@@ -373,7 +384,7 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 }
 
 @Serializable private data class AddItemRequest(val text: String, val quantity: Int, val parentId: String? = null, val basketId: String = "default")
-@Serializable private data class AddGroupRequest(val text: String, val items: List<String>? = null, val basketId: String = "default")
+@Serializable private data class AddGroupRequest(val text: String, val items: List<String>? = null, val basketId: String = "default", val recipe: RecipeInfo? = null)
 @Serializable private data class FromTextRequest(val text: String, val basketId: String = "default")
 @Serializable private data class BasketRequest(val name: String, val emoji: String? = null)
 @Serializable private data class StockRequest(val text: String, val quantityText: String? = null, val productId: String? = null, val imageUrl: String? = null, val barcode: String? = null)
@@ -387,3 +398,5 @@ class BasktApi(private val settingsProvider: () -> AppSettings) {
 @Serializable private data class QueryRequest(val query: String)
 @Serializable private data class ItemsResponse(val items: List<BasketItem>)
 @Serializable private data class DeletedResponse(val deleted: Int)
+
+@Serializable private data class GroupServingsRequest(val servings: Int, val children: List<ScaledIngredient>? = null, val recipe: RecipeInfo? = null)

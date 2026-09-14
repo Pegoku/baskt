@@ -31,6 +31,7 @@ fun OfflineBanner(viewModel: AppViewModel, needsServer: String? = null) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     when {
+                        pending.any { it.failure != null } -> "Some changes could not sync. Review them in Settings."
                         !online && pending.isNotEmpty() -> "Offline — showing saved data. ${pending.size} change${if (pending.size == 1) "" else "s"} will be sent when the server is back."
                         !online -> "Offline — showing saved data." + (needsServer?.let { " $it" } ?: "")
                         else -> "Sending ${pending.size} queued change${if (pending.size == 1) "" else "s"}…"
@@ -38,7 +39,7 @@ fun OfflineBanner(viewModel: AppViewModel, needsServer: String? = null) {
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            if (!online) TextButton(onClick = { viewModel.retryConnection() }) { Text("Retry") }
+            if (!online || pending.any { it.failure != null }) TextButton(onClick = { viewModel.retryConnection() }) { Text("Retry") }
         }
     }
 }

@@ -477,3 +477,9 @@ fun Int.euros(): String {
 
 fun Product.unitPriceLabel(): String? =
     if (unitPriceCents != null && unitPriceUnit != null) "${unitPriceCents.euros()}/${if (unitPriceUnit == "piece") "st" else unitPriceUnit}" else null
+
+@Serializable
+data class TransferResult(val id: String, val children: List<BasketItem> = emptyList())
+
+@Serializable
+data class ScaledIngredient(val id: String, val text: String, val quantity: Int)
