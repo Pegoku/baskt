@@ -186,6 +186,22 @@ export class AhAdapter implements StoreAdapter {
     }
   }
 
+  async details(sourceId: string): Promise<{ description: string | null; imageUrls: string[] }> {
+    const body = await this.throttle.run(() => this.get<Record<string, unknown>>(`/mobile-services/product/detail/v4/fir/${encodeURIComponent(sourceId)}`));
+    const card = (body.productCard ?? body) as AhProduct & { description?: string };
+    const summaries = [body.description, body.summary, card.description];
+    const text: string[] = [];
+    for (const value of summaries) {
+      if (typeof value === "string") text.push(value);
+      else if (value && typeof value === "object") {
+        const data = value as Record<string, unknown>;
+        for (const field of [data.description, data.text, data.summary]) if (typeof field === "string") text.push(field);
+        if (Array.isArray(data.bullets)) text.push(...data.bullets.filter((line): line is string => typeof line === "string"));
+      }
+    }
+    return { description: [...new Set(text)].join("\n\n") || null, imageUrls: [...new Set((card.images ?? []).map((image) => image.url).filter((url): url is string => !!url))] };
+  }
+
   async refresh(sourceIds: string[]): Promise<StoreProduct[]> {
     const results: StoreProduct[] = [];
     for (const id of sourceIds) {

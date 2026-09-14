@@ -11,6 +11,7 @@ export type RecipeStep = { text: string; imageUrl: string | null };
 
 export type Recipe = {
   title: string;
+  description?: string | null;
   sourceUrl: string | null;
   servings: string | null;
   /** Raw ingredient lines as published, e.g. "160 g tarwebloem". */

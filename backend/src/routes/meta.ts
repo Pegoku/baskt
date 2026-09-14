@@ -1,3 +1,5 @@
+import { translateContent } from "@/matching/translate";
+import { productDetails } from "@/stores/details";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { aiStats } from "@/ai/client";
@@ -79,6 +81,20 @@ meta.get("/products/barcode/:gtin", async (c) => {
   if (gtin.length < 8 || gtin.length > 14) return c.json({ error: { code: "BAD_REQUEST", message: "gtin must be 8-14 digits" } }, 400);
   const results = await lookupBarcode(enabledStoreCodes(), gtin);
   return c.json({ gtin, results });
+});
+
+meta.post("/translate", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body.language !== "string" || !/^[a-z]{2,3}(-[a-zA-Z0-9]+)?$/.test(body.language) ||
+      !Array.isArray(body.texts) || body.texts.length > 200 || body.texts.some((text: unknown) => typeof text !== "string") ||
+      body.texts.join("").length > 24000) return c.json({ error: { code: "BAD_REQUEST", message: "Invalid translation request" } }, 400);
+  return c.json(await translateContent(body.texts, body.language));
+});
+
+meta.get("/products/:id/details", async (c) => {
+  const product = db().select().from(products).where(eq(products.id, c.req.param("id"))).get();
+  if (!product) return c.json({ error: { code: "NOT_FOUND", message: "product not found" } }, 404);
+  return c.json({ product, ...await productDetails(product) });
 });
 
 meta.get("/products/:id", (c) => {

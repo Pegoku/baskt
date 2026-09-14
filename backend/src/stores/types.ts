@@ -36,6 +36,7 @@ export interface StoreAdapter {
   search(query: string, limit: number): Promise<StoreProduct[]>;
   /** Optional: refresh specific products by their source ids (used by re-pricing). */
   refresh?(sourceIds: string[]): Promise<StoreProduct[]>;
+  details?(sourceId: string): Promise<{ description: string | null; imageUrls: string[] }>;
   /** Optional: look up a product by EAN/GTIN barcode. Stores without it are searched with the barcode as query. */
   byBarcode?(gtin: string): Promise<StoreProduct | null>;
   /** Optional: the store's current promotions (optionally narrowed by a keyword). */

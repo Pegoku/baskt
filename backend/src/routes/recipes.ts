@@ -44,7 +44,7 @@ export function getUserRecipe(id: string): UserRecipeRow | null {
 }
 
 export function userRecipeAsRecipe(row: UserRecipeRow): Recipe {
-  return { title: row.title, sourceUrl: row.sourceUrl ?? `baskt://recipe/${row.id}`, servings: row.servings, ingredientLines: row.ingredientLines, imageUrl: row.imageUrl, steps: row.steps };
+  return { title: row.title, description: row.description, sourceUrl: row.sourceUrl ?? `baskt://recipe/${row.id}`, servings: row.servings, ingredientLines: row.ingredientLines, imageUrl: row.imageUrl, steps: row.steps };
 }
 
 recipes.get("/sources", (c) => c.json({ sources: [...SITE_SOURCES.map((site) => ({ id: site.id, name: site.name, language: site.language })), { id: "themealdb", name: "TheMealDB", language: "en" }] }));
@@ -75,7 +75,7 @@ recipes.get("/fetch", async (c) => {
     const own = url.match(/^baskt:\/\/recipe\/(.+)$/);
     const recipe = own ? (getUserRecipe(own[1]) ? userRecipeAsRecipe(getUserRecipe(own[1])!) : null) : await fetchRecipe(url);
     if (!recipe) return c.json({ error: { code: "NOT_FOUND", message: "no recipe data found on that page" } }, 404);
-    return c.json(own ? { ...recipe, originalTitle: recipe.title, language: appLanguage() } : await localizeRecipe(recipe));
+    return c.json(await localizeRecipe(recipe));
   } catch (error) {
     return c.json({ error: { code: "UPSTREAM", message: error instanceof Error ? error.message : String(error) } }, 502);
   }
