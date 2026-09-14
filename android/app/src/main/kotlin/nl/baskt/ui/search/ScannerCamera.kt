@@ -25,6 +25,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -159,7 +164,7 @@ internal fun ScannerCamera(paused: Boolean, onScan: (String) -> Boolean) {
             executor.shutdown()
         }
     }
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().clipToBounds()) {
         AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
         Canvas(Modifier.fillMaxSize().pointerInput(camera, capture) {
             detectTapGestures { point ->
@@ -181,12 +186,16 @@ internal fun ScannerCamera(paused: Boolean, onScan: (String) -> Boolean) {
             val bottom = size.height * interpolate(.65f, bounds?.bottom)
             val width = right - left
             val height = bottom - top
-            val shade = Color.Black.copy(alpha = .55f)
-            drawRect(shade, size = Size(size.width, top))
-            drawRect(shade, Offset(0f, top + height), Size(size.width, size.height - top - height))
-            drawRect(shade, Offset(0f, top), Size(left, height))
-            drawRect(shade, Offset(right, top), Size(size.width - right, height))
-            drawRoundRect(Color.White, Offset(left, top), Size(width, height), cornerRadius = CornerRadius(12.dp.toPx()), style = Stroke(2.dp.toPx()))
+            val radius = CornerRadius(12.dp.toPx())
+            // One continuous mask avoids seams between separate dimming rectangles and
+            // covers the corners outside the rounded target during the capture animation.
+            val mask = Path().apply {
+                fillType = PathFillType.EvenOdd
+                addRect(Rect(Offset.Zero, size))
+                addRoundRect(RoundRect(Rect(left, top, right, bottom), radius))
+            }
+            drawPath(mask, Color.Black.copy(alpha = .55f))
+            drawRoundRect(Color.White, Offset(left, top), Size(width, height), cornerRadius = radius, style = Stroke(2.dp.toPx()))
         }
         if (paused || error != null) Surface(color = Color.Black.copy(alpha = .85f), modifier = Modifier.fillMaxSize()) {
             Column(Modifier.wrapContentSize(), horizontalAlignment = Alignment.CenterHorizontally) {
