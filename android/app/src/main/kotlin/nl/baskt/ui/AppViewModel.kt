@@ -339,12 +339,14 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     suspend fun sendToWhatsApp(store: String? = null): Result<Int> = runCatching { container.api.whatsappSend(basket.currentBasketId.value, store) }
 
     /** Continuous scanner: one entry per distinct barcode seen in this session. */
-    data class Scan(val gtin: String, val products: List<Product> = emptyList(), val loading: Boolean = true, val done: String? = null, val at: Long = System.currentTimeMillis())
+    data class Scan(val gtin: String, val products: List<Product> = emptyList(), val loading: Boolean = true, val done: String? = null, val saving: Boolean = false, val at: Long = System.currentTimeMillis())
     val scans = MutableStateFlow<List<Scan>>(emptyList())
     private val scanJobs = mutableMapOf<String, Job>()
+    private val dismissedScans = mutableSetOf<String>()
+    private var scanSession = 0L
     fun onBarcodeSeen(raw: String): Boolean {
         val gtin = raw.trim()
-        if (!nl.baskt.ui.search.validRetailBarcode(gtin) || scans.value.any { it.gtin == gtin }) return false
+        if (gtin in dismissedScans || !nl.baskt.ui.search.validRetailBarcode(gtin) || scans.value.any { it.gtin == gtin }) return false
         scans.update { listOf(Scan(gtin)) + it }
         lookupScan(gtin)
         return true
@@ -362,13 +364,37 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         lookupScan(gtin)
     }
     fun dismissScan(gtin: String) {
+        dismissedScans.add(gtin)
         scanJobs.remove(gtin)?.cancel()
         scans.update { list -> list.filterNot { it.gtin == gtin } }
     }
-    fun markScan(gtin: String, done: String) { scans.update { list -> list.map { if (it.gtin == gtin) it.copy(done = done) else it } } }
+    fun applyScans(gtins: List<String>, destination: String) {
+        val session = scanSession
+        val ready = scans.value.filter { it.gtin in gtins && !it.loading && !it.saving && it.done == null && it.products.isNotEmpty() }
+        val ids = ready.map { it.gtin }.toSet()
+        scans.update { list -> list.map { if (it.gtin in ids) it.copy(saving = true) else it } }
+        viewModelScope.launch {
+            for (scan in ready) {
+                try {
+                    val product = scan.products.first()
+                    when (destination) {
+                        "list" -> basket.addFromProduct(product)
+                        "stock" -> basket.addProductToStock(product, scan.gtin)
+                        "unstock" -> basket.stock.value.firstOrNull { it.productId == product.id || it.barcode == scan.gtin }?.let { basket.removeStock(it) }
+                        else -> error("Unknown scan destination")
+                    }
+                    if (session == scanSession) scans.update { list -> list.map { if (it.gtin == scan.gtin) it.copy(done = destination) else it } }
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (_: Exception) { notify("Couldn’t save ${scan.gtin}. Please try again.") }
+                finally { if (session == scanSession) scans.update { list -> list.map { if (it.gtin == scan.gtin) it.copy(saving = false) else it } } }
+            }
+        }
+    }
     fun clearScans() {
+        scanSession++
         scanJobs.values.forEach { it.cancel() }
         scanJobs.clear()
+        dismissedScans.clear()
         scans.value = emptyList()
     }
 

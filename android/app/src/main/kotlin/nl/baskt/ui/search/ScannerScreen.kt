@@ -1,157 +1,146 @@
 package nl.baskt.ui.search
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.google.mlkit.vision.barcode.BarcodeScannerOptions
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.common.InputImage
-import nl.baskt.data.Product
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.delay
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.ProductRow
 import nl.baskt.ui.common.StoreBadge
-import java.util.concurrent.Executors
 
-/**
- * Continuous barcode scanner: the camera keeps running, every new code is looked up and appears in the
- * list below with "Add to list" / "Add to stock". Closes only via the X.
- */
+/** Continuous capture with an explicit review mode; nothing is added until the user chooses it. */
 @Composable
 fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycle = LocalLifecycleOwner.current
+    val haptic = LocalHapticFeedback.current
     val stores by viewModel.basket.stores.collectAsState()
     val stock by viewModel.basket.stock.collectAsState()
     val scans by viewModel.scans.collectAsState()
+    var paused by rememberSaveable { mutableStateOf(false) }
+    var reviewing by rememberSaveable { mutableStateOf(false) }
+    var feedback by remember { mutableStateOf<String?>(null) }
+    var feedbackAt by remember { mutableLongStateOf(0L) }
     var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
     LaunchedEffect(Unit) { viewModel.refreshStock(); if (!granted) permission.launch(Manifest.permission.CAMERA) }
-    val executor = remember { Executors.newSingleThreadExecutor() }
-    DisposableEffect(Unit) { onDispose { executor.shutdown(); viewModel.clearScans() } }
-
+    LaunchedEffect(feedbackAt) { delay(1800); feedback = null }
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        }
+        lifecycle.lifecycle.addObserver(observer)
+        onDispose { lifecycle.lifecycle.removeObserver(observer) }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            if ((context as? android.app.Activity)?.isChangingConfigurations != true) viewModel.clearScans()
+        }
+    }
     Surface(color = Color.Black, modifier = Modifier.fillMaxSize()) {
         Column {
-            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                if (granted) {
-                    AndroidView(
-                        factory = { ctx ->
-                            val view = PreviewView(ctx)
-                            val scanner = BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8, Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E).build())
-                            ProcessCameraProvider.getInstance(ctx).also { future ->
-                                future.addListener({
-                                    val provider = future.get()
-                                    val preview = Preview.Builder().build().also { it.surfaceProvider = view.surfaceProvider }
-                                    val analysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
-                                    analysis.setAnalyzer(executor) { proxy ->
-                                        val media = proxy.image
-                                        if (media == null) { proxy.close(); return@setAnalyzer }
-                                        scanner.process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
-                                            .addOnSuccessListener { codes -> codes.firstOrNull()?.rawValue?.let { viewModel.onBarcodeSeen(it) } }
-                                            .addOnCompleteListener { proxy.close() }
-                                    }
-                                    provider.unbindAll()
-                                    provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
-                                }, ContextCompat.getMainExecutor(ctx))
-                            }
-                            view
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    // Aiming frame.
-                    Box(modifier = Modifier.align(Alignment.Center).fillMaxWidth(0.8f).height(180.dp).border(3.dp, Color.White.copy(alpha = 0.8f), MaterialTheme.shapes.large))
-                } else {
-                    Column(modifier = Modifier.align(Alignment.Center).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Camera permission is needed to scan", color = Color.White)
-                        Button(onClick = { permission.launch(Manifest.permission.CAMERA) }) { Text("Allow camera") }
+            Box(Modifier.fillMaxWidth().weight(if (reviewing) .3f else 1.4f)) {
+                if (granted) ScannerCamera(paused || reviewing) { code ->
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    if (viewModel.onBarcodeSeen(code)) {
+                        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                        feedback = "Captured · ready for the next item"
+                        feedbackAt = now
+                    } else if (now - feedbackAt > 2500) {
+                        feedback = "Already in your batch · scan another item"
+                        feedbackAt = now
                     }
+                } else Column(Modifier.align(Alignment.Center).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Allow camera access to scan products", color = Color.White)
+                    Button(onClick = { permission.launch(Manifest.permission.CAMERA) }) { Text("Allow camera") }
+                    TextButton(onClick = { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }) { Text("Open settings") }
                 }
-                // Below the status bar (the screen is edge-to-edge).
-                IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.statusBars).padding(8.dp)) { Icon(Icons.Default.Close, contentDescription = "Close scanner", tint = Color.White) }
-                Text(
-                    if (scans.isEmpty()) "Point at a barcode — keep scanning as many as you like" else "${scans.size} scanned · keep going or close",
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
-                )
+                Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Close scanner", tint = Color.White) }
+                    Text("Scan products", color = Color.White, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { paused = !paused }, enabled = !reviewing) { Text(if (paused) "Resume" else "Pause", color = Color.White) }
+                }
+                Text(feedback ?: if (reviewing) "Review your batch below" else if (paused) "Resume when you’re ready" else "Fit one barcode in the frame · hold steady",
+                    color = Color.White, style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp))
             }
-            Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth().weight(1f).navigationBarsPadding()) {
-                if (scans.isEmpty()) {
-                    Text("Scanned products appear here.", modifier = Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-                    // A new scan is inserted at the top; bring it into view.
-                    LaunchedEffect(scans.firstOrNull()?.gtin) { if (scans.isNotEmpty()) listState.animateScrollToItem(0) }
-                    LazyColumn(state = listState, contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(scans, key = { it.gtin }) { scan ->
-                            Card {
-                                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    val product: Product? = scan.products.firstOrNull()
-                                    when {
-                                        scan.loading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { LoadingIndicator(modifier = Modifier.height(22.dp)); Text("Looking up ${scan.gtin}…") }
-                                        product == null -> Text("No store knows ${scan.gtin}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        else -> {
-                                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { for (p in scan.products) StoreBadge(p.store, stores) }
-                                            ProductRow(product)
-                                            val inStock = stock.firstOrNull { it.productId == product.id || it.barcode == scan.gtin }
-                                            when (scan.done) {
-                                                "list" -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary); Text("Added to the list") }
-                                                "stock" -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary); Text("Added to stock") }
-                                                "unstock" -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary); Text("Removed from stock") }
-                                                else -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                                    Button(onClick = { viewModel.addFromProduct(product); viewModel.markScan(scan.gtin, "list") }, modifier = Modifier.weight(1f)) { Text("Add to list") }
-                                                    if (inStock != null) OutlinedButton(onClick = { viewModel.removeStock(inStock); viewModel.markScan(scan.gtin, "unstock") }, modifier = Modifier.weight(1f)) { Text("Remove from stock") }
-                                                    else FilledTonalButton(onClick = { viewModel.addProductToStock(product, scan.gtin); viewModel.markScan(scan.gtin, "stock") }, modifier = Modifier.weight(1f)) { Text("Add to stock") }
+            Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), modifier = Modifier.fillMaxWidth().weight(1f)) {
+                Column(Modifier.navigationBarsPadding()) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Your batch · ${scans.size}", style = MaterialTheme.typography.titleMedium)
+                            Text("${scans.count { it.done != null }} added or updated", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        TextButton(onClick = { reviewing = !reviewing }, enabled = scans.isNotEmpty() || reviewing) { Text(if (reviewing) "Scan more" else "Review") }
+                        TextButton(onClick = onClose) { Text("Done") }
+                    }
+                    val ready = scans.filter { !it.loading && !it.saving && it.done == null && it.products.isNotEmpty() }
+                    if (reviewing && ready.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { viewModel.applyScans(ready.map { it.gtin }, "list") }, modifier = Modifier.weight(1f)) { Text("Add ${ready.size} to list") }
+                        FilledTonalButton(onClick = { viewModel.applyScans(ready.map { it.gtin }, "stock") }, modifier = Modifier.weight(1f)) { Text("Add ${ready.size} to stock") }
+                    }
+                    if (scans.isEmpty()) Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Scan a few. Review together.", style = MaterialTheme.typography.titleLarge)
+                        Text("Each product appears here once. Keep scanning, then add products to your list or stock.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        val listState = rememberLazyListState()
+                        LaunchedEffect(scans.firstOrNull()?.gtin) { if (!reviewing) listState.animateScrollToItem(0) }
+                        LazyColumn(state = listState, contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(scans, key = { it.gtin }) { scan ->
+                                Card {
+                                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                            Text(scan.gtin, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                                            IconButton(onClick = { viewModel.dismissScan(scan.gtin) }, enabled = !scan.saving) { Icon(Icons.Default.Close, "Dismiss ${scan.gtin} from batch") }
+                                        }
+                                        val product = scan.products.firstOrNull()
+                                        when {
+                                            scan.loading -> Row(verticalAlignment = Alignment.CenterVertically) { LoadingIndicator(Modifier.size(28.dp)); Text("Finding product…") }
+                                            product == null -> {
+                                                Text("Product not found", style = MaterialTheme.typography.titleMedium)
+                                                Text("Check the barcode or retry when connected. You can keep scanning.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                TextButton(onClick = { viewModel.retryScan(scan.gtin) }) { Text("Retry lookup") }
+                                            }
+                                            else -> {
+                                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { scan.products.distinctBy { it.store }.forEach { StoreBadge(it.store, stores) } }
+                                                ProductRow(product)
+                                                if (scan.done != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
+                                                    Text(when (scan.done) { "list" -> "Added to list"; "stock" -> "Added to stock"; else -> "Removed from stock" })
+                                                } else if (scan.saving) {
+                                                    Text("Saving…")
+                                                } else {
+                                                    val inStock = stock.firstOrNull { it.productId == product.id || it.barcode == scan.gtin }
+                                                    Button(onClick = { viewModel.applyScans(listOf(scan.gtin), "list") }, modifier = Modifier.fillMaxWidth()) { Text("Add to list") }
+                                                    FilledTonalButton(onClick = {
+                                                        viewModel.applyScans(listOf(scan.gtin), if (inStock != null) "unstock" else "stock")
+                                                    }, modifier = Modifier.fillMaxWidth()) { Text(if (inStock != null) "Remove from stock" else "Add to stock") }
                                                 }
                                             }
                                         }

@@ -28,6 +28,18 @@ JAVA_HOME=/opt/android-studio/jbr ./gradlew :app:assembleDebug   # any JDK 17+ w
 
 `android/local.properties` must point `sdk.dir` at an Android SDK (compileSdk 37 is downloaded automatically when licences are accepted).
 
+## Barcode scanning
+
+The continuous scanner uses Google's bundled ML Kit. Fit a single barcode inside the frame;
+three matching, checksum-valid readings confirm a capture with haptic feedback. Tap the preview
+to focus, use the light in dim rooms, or switch to 2× zoom for smaller labels.
+
+Keep scanning distinct products, then tap **Review** to pause the camera and expand your batch.
+Add products individually or add all recognised, unhandled products to your list or stock.
+Each barcode is captured once per session. Unknown products stay available for **Retry lookup**;
+dismissed codes stay out of the batch until you reopen the scanner. **Done** closes the session;
+only products you explicitly added are saved.
+
 ## Adding a supermarket
 
 Write one adapter in `backend/src/stores/` implementing `StoreAdapter` and register it in `backend/src/stores/registry.ts`. The app fetches the store list from the server, so it needs no change.
