@@ -40,7 +40,7 @@ export async function transcribeAudio(audio: Audio, language?: string): Promise<
       }
       const payload = (await response.json()) as { text?: string };
       const text = payload.text?.trim() ?? "";
-      noteUsage(target.id, 0, 0);
+      noteUsage(target.id, 0, 0); // audio is not billed in tokens; this clears any cooldown from before
       console.log(`[stt] ${target.id} ${target.model} ${audio.bytes.length} bytes, ${Math.round(performance.now() - started)} ms`);
       return text;
     } catch (error) {

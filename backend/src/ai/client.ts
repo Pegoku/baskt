@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db, now } from "@/db";
 import { aiCache } from "@/db/schema";
 import { attemptOrder, cooldownFor, cooldownLeft, noteCall, noteFailure, noteUsage, poolStats, resetPoolStats } from "@/ai/pool";
-import { aiConfigured, aiPool, aiVendor, env, type AiProvider, type AiTarget } from "@/env";
+import { aiConfigured, aiVendor, env, type AiTarget } from "@/env";
 
 export type ChatMessage = { role: "system" | "user"; content: string };
 
