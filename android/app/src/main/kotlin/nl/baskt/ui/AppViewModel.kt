@@ -338,17 +338,24 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun setWhatsAppChat(chat: WhatsAppChat) = viewModelScope.launch { runCatching { container.api.whatsappSetChat(chat) }; loadWhatsApp() }
     suspend fun sendToWhatsApp(store: String? = null): Result<Int> = runCatching { container.api.whatsappSend(basket.currentBasketId.value, store) }
 
-    /** Continuous scanner: one entry per distinct barcode seen in this session. */
-    data class Scan(val gtin: String, val products: List<Product> = emptyList(), val loading: Boolean = true, val done: String? = null, val saving: Boolean = false, val at: Long = System.currentTimeMillis())
+    /** One row per barcode; a deliberate rescan reopens completed rows. */
+    data class Scan(val gtin: String, val products: List<Product> = emptyList(), val loading: Boolean = true, val done: String? = null, val saving: Boolean = false, val at: Long = System.currentTimeMillis()) {
+        fun stockItem(stock: List<StockItem>): StockItem? = stock.firstOrNull { item ->
+            products.any { it.id == item.productId } ||
+                item.barcode?.let { it.padStart(13, '0') == gtin.padStart(13, '0') } == true
+        }
+    }
     val scans = MutableStateFlow<List<Scan>>(emptyList())
     private val scanJobs = mutableMapOf<String, Job>()
-    private val dismissedScans = mutableSetOf<String>()
     private var scanSession = 0L
     fun onBarcodeSeen(raw: String): Boolean {
         val gtin = raw.trim()
-        if (gtin in dismissedScans || !nl.baskt.ui.search.validRetailBarcode(gtin) || scans.value.any { it.gtin == gtin }) return false
-        scans.update { listOf(Scan(gtin)) + it }
-        lookupScan(gtin)
+        if (!nl.baskt.ui.search.validRetailBarcode(gtin)) return false
+        val previous = scans.value.firstOrNull { it.gtin == gtin }
+        if (previous != null && (previous.done == null || previous.saving)) return false
+        val reopened = previous?.copy(done = null, at = System.currentTimeMillis()) ?: Scan(gtin)
+        scans.update { listOf(reopened) + it.filterNot { scan -> scan.gtin == gtin } }
+        if (previous == null) lookupScan(gtin)
         return true
     }
     private fun lookupScan(gtin: String) {
@@ -364,13 +371,20 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         lookupScan(gtin)
     }
     fun dismissScan(gtin: String) {
-        dismissedScans.add(gtin)
         scanJobs.remove(gtin)?.cancel()
         scans.update { list -> list.filterNot { it.gtin == gtin } }
     }
     fun applyScans(gtins: List<String>, destination: String) {
         val session = scanSession
-        val ready = scans.value.filter { it.gtin in gtins && !it.loading && !it.saving && it.done == null && it.products.isNotEmpty() }
+        val ready = scans.value.filter {
+            it.gtin in gtins && !it.loading && !it.saving && it.done == null && it.products.isNotEmpty() &&
+                when (destination) {
+                    "stock" -> it.stockItem(basket.stock.value) == null
+                    "unstock" -> it.stockItem(basket.stock.value) != null
+                    "list" -> true
+                    else -> false
+                }
+        }
         val ids = ready.map { it.gtin }.toSet()
         scans.update { list -> list.map { if (it.gtin in ids) it.copy(saving = true) else it } }
         viewModelScope.launch {
@@ -379,8 +393,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
                     val product = scan.products.first()
                     when (destination) {
                         "list" -> basket.addFromProduct(product)
-                        "stock" -> basket.addProductToStock(product, scan.gtin)
-                        "unstock" -> basket.stock.value.firstOrNull { it.productId == product.id || it.barcode == scan.gtin }?.let { basket.removeStock(it) }
+                        "stock" -> if (scan.stockItem(basket.stock.value) == null) basket.addProductToStock(product, scan.gtin)
+                        "unstock" -> scan.stockItem(basket.stock.value)?.let { basket.removeStock(it) }
                         else -> error("Unknown scan destination")
                     }
                     if (session == scanSession) scans.update { list -> list.map { if (it.gtin == scan.gtin) it.copy(done = destination) else it } }
@@ -394,7 +408,6 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         scanSession++
         scanJobs.values.forEach { it.cancel() }
         scanJobs.clear()
-        dismissedScans.clear()
         scans.value = emptyList()
     }
 

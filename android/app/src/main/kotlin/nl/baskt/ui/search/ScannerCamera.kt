@@ -62,6 +62,7 @@ internal fun ScannerCamera(paused: Boolean, onScan: (String) -> Boolean) {
     var torch by remember { mutableStateOf(false) }
     var zoom by remember { mutableFloatStateOf(1f) }
     var retry by remember { mutableIntStateOf(0) }
+    val gate = remember { BarcodeConfirmation() }
     var capture by remember { mutableStateOf<CaptureFeedback?>(null) }
     val frameProgress = remember { Animatable(0f) }
     val freezeOpacity = remember { Animatable(1f) }
@@ -85,7 +86,6 @@ internal fun ScannerCamera(paused: Boolean, onScan: (String) -> Boolean) {
         val scanner = BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(
             Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8, Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E,
         ).build())
-        val gate = BarcodeConfirmation()
         val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
         val analysis = ImageAnalysis.Builder().setResolutionSelector(ResolutionSelector.Builder()
             .setResolutionStrategy(ResolutionStrategy(android.util.Size(1280, 720), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER)).build()).setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()

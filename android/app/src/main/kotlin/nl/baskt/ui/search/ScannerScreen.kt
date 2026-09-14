@@ -103,13 +103,18 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                         TextButton(onClick = onClose) { Text("Done") }
                     }
                     val ready = scans.filter { !it.loading && !it.saving && it.done == null && it.products.isNotEmpty() }
-                    if (reviewing && ready.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { viewModel.applyScans(ready.map { it.gtin }, "list") }, modifier = Modifier.weight(1f)) { Text("Add ${ready.size} to list") }
-                        FilledTonalButton(onClick = { viewModel.applyScans(ready.map { it.gtin }, "stock") }, modifier = Modifier.weight(1f)) { Text("Add ${ready.size} to stock") }
+                    val toStock = ready.filter { it.stockItem(stock) == null }
+                    val fromStock = ready.filter { it.stockItem(stock) != null }
+                    if (reviewing && ready.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Button(onClick = { viewModel.applyScans(ready.map { it.gtin }, "list") }, modifier = Modifier.fillMaxWidth()) { Text("Add ${ready.size} to list") }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (toStock.isNotEmpty()) FilledTonalButton(onClick = { viewModel.applyScans(toStock.map { it.gtin }, "stock") }, modifier = Modifier.weight(1f)) { Text("Add ${toStock.size} to stock") }
+                            if (fromStock.isNotEmpty()) OutlinedButton(onClick = { viewModel.applyScans(fromStock.map { it.gtin }, "unstock") }, modifier = Modifier.weight(1f)) { Text("Remove ${fromStock.size} from stock") }
+                        }
                     }
                     if (scans.isEmpty()) Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Scan a few. Review together.", style = MaterialTheme.typography.titleLarge)
-                        Text("Each product appears here once. Keep scanning, then add products to your list or stock.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Keep scanning, then review your list and stock. To scan an item again, move its barcode out of the frame and back.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         val listState = rememberLazyListState()
                         LaunchedEffect(scans.firstOrNull()?.gtin) { if (!reviewing) listState.animateScrollToItem(0) }
@@ -119,7 +124,7 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                             Text(scan.gtin, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                                            IconButton(onClick = { viewModel.dismissScan(scan.gtin) }, enabled = !scan.saving) { Icon(Icons.Default.Close, "Dismiss ${scan.gtin} from batch") }
+                                            IconButton(onClick = { viewModel.dismissScan(scan.gtin); feedback = null }, enabled = !scan.saving) { Icon(Icons.Default.Close, "Dismiss ${scan.gtin} from batch") }
                                         }
                                         val product = scan.products.firstOrNull()
                                         when {
@@ -134,11 +139,14 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                                                 ProductRow(product)
                                                 if (scan.done != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                                     Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
-                                                    Text(when (scan.done) { "list" -> "Added to list"; "stock" -> "Added to stock"; else -> "Removed from stock" })
+                                                    Column {
+                                                        Text(when (scan.done) { "list" -> "Added to list"; "stock" -> "Added to stock"; else -> "Removed from stock" })
+                                                        Text("Scan again to use this item again", style = MaterialTheme.typography.bodySmall)
+                                                    }
                                                 } else if (scan.saving) {
                                                     Text("Saving…")
                                                 } else {
-                                                    val inStock = stock.firstOrNull { it.productId == product.id || it.barcode == scan.gtin }
+                                                    val inStock = scan.stockItem(stock)
                                                     Button(onClick = { viewModel.applyScans(listOf(scan.gtin), "list") }, modifier = Modifier.fillMaxWidth()) { Text("Add to list") }
                                                     FilledTonalButton(onClick = {
                                                         viewModel.applyScans(listOf(scan.gtin), if (inStock != null) "unstock" else "stock")

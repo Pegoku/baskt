@@ -36,8 +36,10 @@ to focus, use the light in dim rooms, or switch to 2× zoom for smaller labels.
 
 Keep scanning distinct products, then tap **Review** to pause the camera and expand your batch.
 Add products individually or add all recognised, unhandled products to your list or stock.
-Each barcode is captured once per session. Unknown products stay available for **Retry lookup**;
-dismissed codes stay out of the batch until you reopen the scanner. **Done** closes the session;
+Stock actions count only eligible products: add missing items or remove items already in stock.
+Move a barcode out of the frame and back to rescan a completed or dismissed item.
+Holding the same label in view does not repeatedly capture it. Unknown products stay available
+for **Retry lookup**. **Done** closes the session;
 only products you explicitly added are saved.
 
 ## Adding a supermarket

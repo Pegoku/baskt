@@ -5,13 +5,22 @@ internal class BarcodeConfirmation {
     private var candidate: String? = null
     private var count = 0
     private var lastAt = 0L
+    private var latched: String? = null
+    private var lastVisibleAt = 0L
 
     fun observe(raw: String?, now: Long): String? {
         val code = raw?.takeIf(::validRetailBarcode)
+        // Re-arm only after the captured label leaves view, or another label is confirmed.
+        // Brief detector dropouts must not undo a dismissal or replay a stock action.
+        if (code == latched && code != null) lastVisibleAt = now
+        if (code == null && now - lastVisibleAt >= 500) latched = null
         count = if (code != null && code == candidate && now - lastAt <= 750) count + 1 else 1
         candidate = code
         lastAt = now
-        return code?.takeIf { count >= 3 }
+        if (code == null || count < 3 || code == latched) return null
+        latched = code
+        lastVisibleAt = now
+        return code
     }
 }
 
