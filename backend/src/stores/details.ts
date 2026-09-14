@@ -42,7 +42,7 @@ export async function productDetails(product: ProductRow) {
     if (adapter.details) {
       const detail = await cachedUpstream(`adapter-product-details:v1:${product.id}`, 86400000,
         () => adapter.details!(product.sourceId), { cacheable: (value) => !!value.description, staleMs: 604800000 });
-      if (detail.description) return { description: plainText(detail.description), imageUrls: [...new Set([...fallback.imageUrls, ...detail.imageUrls])] };
+      if (detail.description) return { description: plainText(detail.description), imageUrls: detail.imageUrls.length ? [...new Set(detail.imageUrls)] : fallback.imageUrls };
     }
   } catch { /* Fall back to the public product page. */ }
   if (!product.sourceUrl) return fallback;
@@ -50,11 +50,11 @@ export async function productDetails(product: ProductRow) {
   if (url.protocol !== "https:" || url.port || url.username || url.password ||
       !["www.ah.nl", "www.jumbo.com"].includes(url.hostname) || !url.pathname.startsWith("/producten/")) return fallback;
   try {
-    return await cachedUpstream(`product-details:v1:${product.id}`, 86400000, async () => {
+    return await cachedUpstream(`product-details:v2:${product.id}`, 86400000, async () => {
       const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(12000), headers: { "user-agent": "Mozilla/5.0", accept: "text/html" } });
       if (!response.ok) throw new Error("Product page unavailable");
       const detail = parseProductDetails(await response.text());
-      return { ...detail, imageUrls: [...new Set([...fallback.imageUrls, ...detail.imageUrls])] };
+      return { ...detail, imageUrls: detail.imageUrls.length ? [...new Set(detail.imageUrls)] : fallback.imageUrls };
     }, { cacheable: (value) => !!value.description, staleMs: 604800000 });
   } catch { return fallback; }
 }

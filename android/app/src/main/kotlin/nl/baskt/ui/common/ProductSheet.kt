@@ -64,7 +64,7 @@ fun ProductSheet(product: Product, onDismiss: () -> Unit) {
                 OriginalToggle(original) { original = !original }
             }
             if (!original && translation?.translated != true) Text(if (translation == null) "Translating…" else "Translation unavailable · showing original", style = MaterialTheme.typography.labelSmall)
-            val images = (listOfNotNull(source.imageUrl) + detail?.imageUrls.orEmpty()).distinct()
+            val images = (detail?.imageUrls?.takeIf { it.isNotEmpty() } ?: listOfNotNull(source.imageUrl)).distinct()
             for (image in images) ZoomableImage(image, shown[0], Modifier.fillMaxWidth().height(220.dp))
             Text(shown[0], style = MaterialTheme.typography.headlineSmall)
             Text(listOfNotNull(source.brand, shown[2], source.priceCents.euros(), source.unitPriceLabel()).joinToString(" · "))
