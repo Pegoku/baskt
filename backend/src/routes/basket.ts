@@ -383,7 +383,7 @@ basket.post("/groups/:id/servings", async (c) => {
     db().transaction((tx) => {
       for (const child of body.children!) tx.update(basketItems).set({ text: child.text.trim(), quantity: child.quantity, status: "NEW", parsedJson: null, updatedAt: now() }).where(eq(basketItems.id, child.id)).run();
       tx.update(basketItems).set({ recipeJson: { ...info, ingredientLines: lines,
-        skipped: info.skipped.map((entry) => ({ ...entry, text: scaleLine(entry.text, body.servings! / (info.currentServings ?? info.baseServings ?? 1)) })),
+        skipped: (info.skipped ?? []).map((entry) => ({ ...entry, text: scaleLine(entry.text, body.servings! / (info.currentServings ?? info.baseServings ?? 1)) })),
         baseServings: body.servings!, currentServings: body.servings!, servings: String(body.servings) }, status: "MATCHED", updatedAt: now() }).where(eq(basketItems.id, group.id)).run();
     });
     for (const child of body.children) enqueue(child.id);
