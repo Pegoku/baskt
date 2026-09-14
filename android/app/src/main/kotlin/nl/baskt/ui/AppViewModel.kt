@@ -341,29 +341,36 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     /** Continuous scanner: one entry per distinct barcode seen in this session. */
     data class Scan(val gtin: String, val products: List<Product> = emptyList(), val loading: Boolean = true, val done: String? = null, val at: Long = System.currentTimeMillis())
     val scans = MutableStateFlow<List<Scan>>(emptyList())
-    private var lastSeen: Pair<String, Long>? = null
-    fun onBarcodeSeen(raw: String) {
-        val gtin = raw.filter { it.isDigit() }
-        if (gtin.length < 8) return
-        val now = System.currentTimeMillis()
-        // Ignore the same code while it stays in view; a different code (or the same after 4 s) is a new scan.
-        if (lastSeen?.first == gtin && now - (lastSeen?.second ?: 0) < 4000) { lastSeen = gtin to now; return }
-        lastSeen = gtin to now
-        if (scans.value.any { it.gtin == gtin }) return
-        scans.update { listOf(Scan(gtin)) + it } // newest first
-        viewModelScope.launch {
+    private val scanJobs = mutableMapOf<String, Job>()
+    fun onBarcodeSeen(raw: String): Boolean {
+        val gtin = raw.trim()
+        if (!nl.baskt.ui.search.validRetailBarcode(gtin) || scans.value.any { it.gtin == gtin }) return false
+        scans.update { listOf(Scan(gtin)) + it }
+        lookupScan(gtin)
+        return true
+    }
+    private fun lookupScan(gtin: String) {
+        scanJobs[gtin]?.cancel()
+        scanJobs[gtin] = viewModelScope.launch {
             val result = basket.barcode(gtin)
             val products = result?.results?.mapNotNull { it.product } ?: emptyList()
             scans.update { list -> list.map { if (it.gtin == gtin) it.copy(products = products, loading = false) else it } }
-            if (products.isEmpty()) {
-                // Unknown codes only clutter the list: show the notice briefly, then drop it.
-                delay(3000)
-                scans.update { list -> list.filterNot { it.gtin == gtin && it.products.isEmpty() } }
-            }
         }
     }
+    fun retryScan(gtin: String) {
+        scans.update { list -> list.map { if (it.gtin == gtin) it.copy(loading = true) else it } }
+        lookupScan(gtin)
+    }
+    fun dismissScan(gtin: String) {
+        scanJobs.remove(gtin)?.cancel()
+        scans.update { list -> list.filterNot { it.gtin == gtin } }
+    }
     fun markScan(gtin: String, done: String) { scans.update { list -> list.map { if (it.gtin == gtin) it.copy(done = done) else it } } }
-    fun clearScans() { scans.value = emptyList(); lastSeen = null }
+    fun clearScans() {
+        scanJobs.values.forEach { it.cancel() }
+        scanJobs.clear()
+        scans.value = emptyList()
+    }
 
     /** Assistant chat for the current basket. */
     private val _chat = MutableStateFlow<List<ChatMessage>>(emptyList())
