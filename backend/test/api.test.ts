@@ -123,6 +123,7 @@ describe("api", () => {
     const match = item.matches.find((entry: any) => entry.store === "AH");
     expect(match.status).toBe("PENDING");
     expect(match.page).toBe(2);
+    expect(match.hasRejectedSuggestions).toBe(true);
     expect(match.options.map((option: any) => option.id)).toEqual(["AH:4"]);
     const memory = (await (await api("/memory")).json()) as any;
     expect(memory.choices).toHaveLength(1);
@@ -536,6 +537,11 @@ test("refresh restores the first suggestions and only clears this store's item r
   await waitForMatched(id);
   await api(`/basket/items/${id}/matches/AH/reject`, { method: "POST" });
   await api(`/basket/items/${id}/matches/AH/reject`, { method: "POST" });
+  const rejected = await (await api(`/basket/items/${id}/matches/AH/reject`, { method: "POST" })).json() as any;
+  expect(rejected.matches.find((entry: any) => entry.store === "AH").hasRejectedSuggestions).toBe(true);
+  const { chooseMatch, getMatches } = await import("@/matching/pipeline");
+  chooseMatch(id, "AH", "AH:1");
+  expect(getMatches(id).find((entry) => entry.store === "AH")?.hasRejectedSuggestions).toBe(true);
   const otherStore = recordChoice({ itemText: "halfvolle melk", canonical: "halfvolle melk", store: "JUMBO", chosenProductId: null, chosenTitle: null, rejectedTitles: ["Milk"] });
   const otherItem = recordChoice({ itemText: "bread", canonical: "bread", store: "AH", chosenProductId: null, chosenTitle: null, rejectedTitles: ["Bread"] });
   const pick = recordChoice({ itemText: "halfvolle melk", canonical: "halfvolle melk", store: "AH", chosenProductId: "AH:1", chosenTitle: "Milk", rejectedTitles: ["Other milk"] });
@@ -547,6 +553,7 @@ test("refresh restores the first suggestions and only clears this store's item r
   expect(match.page).toBe(1);
   expect(match.options).toHaveLength(3);
   expect(match.chosen).toBeNull();
+  expect(match.hasRejectedSuggestions).toBe(false);
   const remaining = listChoices();
   expect(remaining.map((row) => row.id)).toContain(otherStore.id);
   expect(remaining.map((row) => row.id)).toContain(otherItem.id);

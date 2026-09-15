@@ -250,6 +250,7 @@ export async function processItem(
         }
 
         saveMatch({
+          hasRejectedSuggestions: previous?.hasRejectedSuggestions ?? false,
           id: previous?.id ?? newId(),
           itemId,
           store,
@@ -272,6 +273,7 @@ export async function processItem(
           `[pipeline] ${store} failed for "${item.text}": ${error instanceof Error ? error.message : error}`,
         );
         saveMatch({
+          hasRejectedSuggestions: previous?.hasRejectedSuggestions ?? false,
           id: previous?.id ?? newId(),
           itemId,
           store,
@@ -435,6 +437,7 @@ export function resetRejections(itemId: string, store: string) {
   clearRejections(item.parsedJson?.canonicalName ?? item.text, item.text, store);
   return saveMatch({
     ...match,
+    hasRejectedSuggestions: false,
     windowStart: 0,
     shownCount: Math.min(OPTIONS_PER_PAGE, match.candidateIds.length),
     status: match.candidateIds.length ? "PENDING" : "EXHAUSTED",
@@ -493,6 +496,7 @@ export async function rejectShown(itemId: string, store: string) {
         : "No alternative searches available";
       return saveMatch({
         ...match,
+        hasRejectedSuggestions: match.hasRejectedSuggestions || shownProducts.length > 0,
         windowStart,
         shownCount: windowStart,
         status: "EXHAUSTED",
@@ -507,6 +511,7 @@ export async function rejectShown(itemId: string, store: string) {
     for (const id of more) equivalences[id] = equivalences[id] ?? "SUBSTITUTE";
     return saveMatch({
       ...match,
+      hasRejectedSuggestions: match.hasRejectedSuggestions || shownProducts.length > 0,
       candidateIds,
       equivalences,
       windowStart,
@@ -520,6 +525,7 @@ export async function rejectShown(itemId: string, store: string) {
   }
   return saveMatch({
     ...match,
+    hasRejectedSuggestions: match.hasRejectedSuggestions || shownProducts.length > 0,
     candidateIds,
     windowStart,
     shownCount: Math.min(windowStart + OPTIONS_PER_PAGE, candidateIds.length),

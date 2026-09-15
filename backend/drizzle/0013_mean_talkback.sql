@@ -1,0 +1,1 @@
+ALTER TABLE `basket_matches` ADD `has_rejected_suggestions` integer DEFAULT false NOT NULL;

@@ -181,6 +181,7 @@ export const basketMatches = sqliteTable(
     store: text("store").notNull(),
     candidateIds: text("candidate_ids", { mode: "json" }).$type<string[]>().notNull(),
     equivalences: text("equivalences", { mode: "json" }).$type<Record<string, Equivalence>>().notNull(),
+    hasRejectedSuggestions: integer("has_rejected_suggestions", { mode: "boolean" }).notNull().default(false),
     windowStart: integer("window_start").notNull().default(0),
     shownCount: integer("shown_count").notNull().default(3),
     chosenProductId: text("chosen_product_id"),

@@ -13,6 +13,7 @@ export type MatchView = {
   options: ProductView[];
   equivalences: Record<string, string>;
   hasMore: boolean;
+  hasRejectedSuggestions: boolean;
   totalCandidates: number;
   page: number;
   confidence: number | null;
@@ -53,6 +54,7 @@ export function matchView(match: BasketMatchRow, products: Map<string, ProductRo
     provisional,
     options: optionIds.map((id) => products.get(id)).filter((product): product is ProductRow => Boolean(product)),
     equivalences: Object.fromEntries(optionIds.map((id) => [id, match.equivalences[id] ?? "EQUIVALENT"])),
+    hasRejectedSuggestions: match.hasRejectedSuggestions,
     hasMore: match.status !== "EXHAUSTED",
     totalCandidates: match.candidateIds.length,
     page: Math.max(1, Math.floor(match.windowStart / OPTIONS_PER_PAGE) + 1),

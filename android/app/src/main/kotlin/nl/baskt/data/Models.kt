@@ -48,12 +48,14 @@ data class StoreMatch(
     val options: List<Product> = emptyList(),
     val equivalences: Map<String, String> = emptyMap(),
     val hasMore: Boolean = true,
+    val hasRejectedSuggestions: Boolean = false,
     val totalCandidates: Int = 0,
     val page: Int = 1,
     val confidence: Double? = null,
     val reason: String? = null,
     val updatedAt: Long = 0,
 ) {
+    fun canResetSuggestions(changing: Boolean): Boolean = hasRejectedSuggestions && (chosen == null || changing)
     val effective: Product? get() = chosen ?: provisional
 }
 

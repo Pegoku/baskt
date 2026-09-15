@@ -275,7 +275,7 @@ private fun StoreCard(
                 )
                 if (busy) LoadingIndicator(modifier = Modifier.size(22.dp))
                 else if (match?.status == "CHOSEN" && !showOptions) TextButton(onClick = { showOptions = true }) { Text("Change") }
-                if (match != null) TooltipIconButton(
+                if (match?.canResetSuggestions(showOptions) == true) TooltipIconButton(
                     text = "Reset suggestions",
                     icon = Icons.Default.Autorenew,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
