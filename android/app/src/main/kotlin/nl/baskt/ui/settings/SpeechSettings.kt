@@ -69,9 +69,11 @@ fun SpeechSettings(viewModel: AppViewModel) {
                             }
                         }
                     }
-                    TextButton(onClick = { selectedVoice?.let { viewModel.previewSpeech(chosen.id, it) } }) { Text("Test voice") }
+                    TextButton(onClick = {
+                        if (speaking == "preview") viewModel.stopSpeaking()
+                        else selectedVoice?.let { viewModel.previewSpeech(chosen.id, it) }
+                    }) { Text(if (speaking == "preview") "Stop preview" else "Test voice") }
                 }
-                if (speaking == "preview") TextButton(onClick = { viewModel.stopSpeaking() }) { Text("Stop preview") }
                 Text("Samples are generated when played and cached for later.", style = MaterialTheme.typography.bodySmall)
             }
         }
