@@ -1,3 +1,4 @@
+import { tts } from "@/routes/tts";
 import { idempotency } from "@/lib/idempotency";
 import { Hono } from "hono";
 import { logger } from "hono/logger";
@@ -44,6 +45,7 @@ export function createApp(options: { token?: string; log?: boolean } = {}) {
   app.route("/api/v1/purchases", purchasesRoute);
   app.route("/api/v1/whatsapp", whatsapp);
   app.route("/api/v1/chat", chatRoute);
+  app.route("/api/v1/tts", tts);
 
   app.notFound((c) => c.json({ error: { code: "NOT_FOUND", message: `no route for ${c.req.method} ${c.req.path}` } }, 404));
   app.onError((error, c) => {
