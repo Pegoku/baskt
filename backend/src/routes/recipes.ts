@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { db, newId, now } from "@/db";
 import { recipeFavourites, userRecipes, type UserRecipeRow } from "@/db/schema";
 import { appLanguage } from "@/db/settings";
-import { dishQueries, dishesFromStock, draftRecipe } from "@/matching/cook";
+import { discoverDishes, dishQueries, dishesFromStock, draftRecipe, parseDiscoverParams } from "@/matching/cook";
 import { localizeRecipe, localizeTitles } from "@/matching/localize";
 import type { Recipe } from "@/matching/recipes";
 import { fetchRecipeFromUrl, searchAllSources, SITE_SOURCES } from "@/matching/sources";
@@ -81,7 +81,17 @@ recipes.get("/fetch", async (c) => {
   }
 });
 
-/** What can be cooked from the stock list. */
+/**
+ * Dish ideas: `mode=stock` (with `coverage=all|most|half`), `mode=new` (optional `style`), `mode=cuisine`
+ * (`cuisine=<country>`); `maxMinutes` limits the total time in every mode.
+ */
+recipes.get("/discover", async (c) => {
+  const params = parseDiscoverParams(c.req.query());
+  if (params.mode === "cuisine" && !params.cuisine) return c.json({ error: { code: "BAD_REQUEST", message: "cuisine is required for mode=cuisine" } }, 400);
+  return c.json({ params, dishes: await discoverDishes(params) });
+});
+
+/** Older clients: what can be cooked from the stock list, with most ingredients at home. */
 recipes.get("/from-stock", async (c) => c.json({ dishes: await dishesFromStock() }));
 
 /**
