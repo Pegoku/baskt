@@ -275,13 +275,15 @@ private fun StoreCard(
                 )
                 if (busy) LoadingIndicator(modifier = Modifier.size(22.dp))
                 else if (match?.status == "CHOSEN" && !showOptions) TextButton(onClick = { showOptions = true }) { Text("Change") }
+                if (match != null) TooltipIconButton(
+                    text = "Reset suggestions",
+                    icon = Icons.Default.Autorenew,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    enabled = !busy && !item.isProcessing,
+                    onClick = onReset,
+                )
             }
             if (match == null) return@Column
-            TextButton(onClick = onReset, enabled = !busy && !item.isProcessing) {
-                Icon(Icons.Default.Autorenew, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Refresh suggestions")
-            }
             if (busy) Text("Looking for alternatives…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
 
             val chosen = match.chosen
@@ -379,13 +381,13 @@ private fun OptionRow(product: Product, equivalence: String?, selected: Boolean,
 }
 
 @Composable
-private fun TooltipIconButton(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tint: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+private fun TooltipIconButton(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tint: androidx.compose.ui.graphics.Color, enabled: Boolean = true, onClick: () -> Unit) {
     androidx.compose.material3.TooltipBox(
         positionProvider = androidx.compose.material3.TooltipDefaults.rememberTooltipPositionProvider(),
         tooltip = { PlainTooltip { Text(text) } },
         state = androidx.compose.material3.rememberTooltipState(),
     ) {
-        IconButton(onClick = onClick) { Icon(icon, contentDescription = text, tint = tint) }
+        IconButton(onClick = onClick, enabled = enabled) { Icon(icon, contentDescription = text, tint = tint) }
     }
 }
 
