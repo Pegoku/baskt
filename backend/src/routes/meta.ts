@@ -87,8 +87,10 @@ meta.post("/translate", async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body || typeof body.language !== "string" || !/^[a-z]{2,3}(-[a-zA-Z0-9]+)?$/.test(body.language) ||
       !Array.isArray(body.texts) || body.texts.length > 200 || body.texts.some((text: unknown) => typeof text !== "string") ||
-      body.texts.join("").length > 24000) return c.json({ error: { code: "BAD_REQUEST", message: "Invalid translation request" } }, 400);
-  return c.json(await translateContent(body.texts, body.language));
+      body.texts.join("").length > 24000 ||
+      (body.descriptionIndices !== undefined && (!Array.isArray(body.descriptionIndices) || body.descriptionIndices.length > body.texts.length ||
+        body.descriptionIndices.some((index: unknown) => !Number.isInteger(index) || Number(index) < 0 || Number(index) >= body.texts.length)))) return c.json({ error: { code: "BAD_REQUEST", message: "Invalid translation request" } }, 400);
+  return c.json(await translateContent(body.texts, body.language, body.descriptionIndices));
 });
 
 meta.get("/products/:id/details", async (c) => {

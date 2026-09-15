@@ -492,7 +492,7 @@ data class TransferResult(val id: String, val children: List<BasketItem> = empty
 data class ScaledIngredient(val id: String, val text: String, val quantity: Int)
 
 @Serializable
-data class TranslationRequest(val texts: List<String>, val language: String)
+data class TranslationRequest(val texts: List<String>, val language: String, val descriptionIndices: List<Int> = emptyList())
 @Serializable
 data class TranslationResponse(val texts: List<String>, val language: String, val translated: Boolean = false)
 @Serializable

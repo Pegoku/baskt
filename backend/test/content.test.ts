@@ -1,10 +1,24 @@
 import { mapAhDetails } from "@/stores/ah";
+import { formatDescription, preservesDescription } from "@/matching/format-description";
 import { describe, expect, test } from "bun:test";
 import { completeTranslation, translateContent } from "@/matching/translate";
 import { parseProductDetails, plainText } from "@/stores/details";
 import { localizeRecipe } from "@/matching/localize";
 
 describe("source-preserving content", () => {
+  test("AI layout may repair wrapping and bullets without changing source facts", () => {
+    expect(preservesDescription("Fresh\nmilk.\n\n\nKeep chilled.", "Fresh milk.\n\n• Keep chilled.")).toBe(true);
+    const source = "Contains milk. Keep below 4°C. Use within 2 days.";
+    expect(preservesDescription(source, "Contains milk.\n\nKeep below 4°C.\nUse within 2 days.")).toBe(true);
+    for (const changed of [source.replace("4°C", "8°C"), source.replace("Contains milk. ", ""), source + " Organic.", "", null]) {
+      expect(preservesDescription(source, changed)).toBe(false);
+    }
+    expect(preservesDescription("1. Open\n2. Chill", "1. Open\n\n2. Chill")).toBe(true);
+    expect(preservesDescription("1. Open\n2. Chill", "2. Chill\n1. Open")).toBe(false);
+  });
+  test("formatting falls back to unchanged source when AI is unavailable", async () => {
+    expect(await formatDescription("Fresh\nmilk.")).toBe("Fresh\nmilk.");
+  });
   test("rejects incomplete translations and empty required fields", () => {
     expect(completeTranslation(["Milk"], ["Melk", "1 litre"])).toBe(false);
     expect(completeTranslation(["Milk", ""], ["Melk", "1 litre"])).toBe(false);

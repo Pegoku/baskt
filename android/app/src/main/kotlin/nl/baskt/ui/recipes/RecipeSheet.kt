@@ -40,7 +40,7 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, act
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
     var original by androidx.compose.runtime.saveable.rememberSaveable(detail?.sourceUrl, title) { androidx.compose.runtime.mutableStateOf(false) }
     val texts = source?.let { listOf(it.title) + it.ingredientLines + it.steps.map { step -> step.text } + listOf(it.servings.orEmpty(), it.totalTime.orEmpty(), it.description.orEmpty()) } ?: emptyList()
-    val translation = nl.baskt.ui.common.rememberTranslation(texts, source != null && !original)
+    val translation = nl.baskt.ui.common.rememberTranslation(texts, source != null && !original, descriptionIndices = if (texts.isEmpty()) emptyList() else listOf(texts.lastIndex))
     val displayed = if (source != null && !original && translation?.translated == true) {
         var index = 0
         source.copy(title = translation.texts[index++], ingredientLines = source.ingredientLines.map { translation.texts[index++] },

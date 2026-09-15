@@ -55,7 +55,7 @@ fun ProductSheet(product: Product, onDismiss: () -> Unit) {
     }
     val source = detail?.product ?: product
     val texts = listOf(source.title, detail?.description.orEmpty(), source.quantityText, source.category.orEmpty(), source.dealText.orEmpty())
-    val translation = rememberTranslation(texts, !original)
+    val translation = rememberTranslation(texts, !original, descriptionIndices = listOf(1))
     val shown = if (!original && translation?.translated == true) translation.texts else texts
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxHeight(.92f).verticalScroll(rememberScrollState()).padding(20.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {

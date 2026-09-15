@@ -21,19 +21,19 @@ private val translationSlots = Semaphore(2)
 
 /** Translation is presentation-only: source values are never changed or written back. */
 @Composable
-fun rememberTranslation(texts: List<String>, enabled: Boolean = true): TranslationResponse? {
+fun rememberTranslation(texts: List<String>, enabled: Boolean = true, descriptionIndices: List<Int> = emptyList()): TranslationResponse? {
     val container = (LocalContext.current.applicationContext as BasktApp).container
     val settings by container.settingsStore.settings.collectAsState(initial = container.currentSettings)
     val language = settings.resolvedLanguage
-    var result by remember(texts, language, settings.baseUrl, settings.token) { mutableStateOf<TranslationResponse?>(null) }
-    LaunchedEffect(texts, language, settings.baseUrl, settings.token, enabled) {
+    var result by remember(texts, descriptionIndices, language, settings.baseUrl, settings.token) { mutableStateOf<TranslationResponse?>(null) }
+    LaunchedEffect(texts, descriptionIndices, language, settings.baseUrl, settings.token, enabled) {
         if (!enabled) return@LaunchedEffect
-        val key = "translation-v1-$language-${texts.joinToString("\u0000")}"
+        val key = "translation-v2-$language-${descriptionIndices.joinToString(",")}-${texts.joinToString("\u0000")}"
         val cached = container.offline.load<TranslationResponse>(key)
         if (cached != null) { result = cached; return@LaunchedEffect }
         result = try {
             translationSlots.withPermit {
-                container.offline.load<TranslationResponse>(key) ?: container.api.translate(texts, language).also {
+                container.offline.load<TranslationResponse>(key) ?: container.api.translate(texts, language, descriptionIndices).also {
                     if (it.translated && it.texts.size == texts.size) container.offline.save(key, it)
                 }
             }.takeIf { it.texts.size == texts.size } ?: TranslationResponse(texts, language, false)
