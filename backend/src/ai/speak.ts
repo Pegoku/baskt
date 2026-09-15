@@ -15,6 +15,14 @@ export function speechCatalogue(language?: string) {
     return { ...model, voices, voiceNames: Object.fromEntries(minimaxVoices.filter((voice) => voices.includes(voice.id)).map((voice) => [voice.id, voice.name])) };
   }).filter((model) => model.voices.length > 0 && (!language || model.languages.includes(language)));
 }
+// Replicate's MiniMax schema expects language names, not ISO codes.
+export const minimaxLanguageBoost: Record<string, string> = {
+  en: "English", zh: "Chinese", yue: "Cantonese", ja: "Japanese", ko: "Korean",
+  es: "Spanish", pt: "Portuguese", id: "Indonesian", ru: "Russian", fr: "French",
+  it: "Italian", th: "Thai", pl: "Polish", ro: "Romanian", de: "German",
+  el: "Greek", cs: "Czech", fi: "Finnish", hi: "Hindi", nl: "Dutch",
+  ar: "Arabic", tr: "Turkish", uk: "Ukrainian", vi: "Vietnamese",
+};
 const base = "https://ai.hackclub.com/proxy/v1/replicate";
 export function speechChoice(modelId: string, voice: string, language: string) {
   const model = speechModels.find((item) => item.id === modelId);
@@ -55,11 +63,15 @@ export function speechOutput(value: unknown): string | null {
 /** Persist audio bytes, since Replicate output links expire. Coalesce simultaneous cache misses. */
 export async function synthesize(text: string, model: string, voice: string, language: string): Promise<Uint8Array> {
   if (!process.env.REPLICATE_API_TOKEN) throw new Error("Speech is not configured");
-  const key = "speech-audio:v1:" + await sha256(JSON.stringify([model, voice, language, text]));
+  const minimax = model.startsWith("minimax/");
+  const boost = minimax ? minimaxLanguageBoost[language] : undefined;
+  if (minimax && !boost) throw new Error("Unsupported MiniMax speech language");
+  // Keep other models' cached audio; regenerate MiniMax clips made with automatic detection.
+  const key = "speech-audio:v1:" + await sha256(JSON.stringify([model, voice, language, text, ...(boost ? [boost] : [])]));
   const audio = await cachedUpstream(key, 90 * 86400000, async () => {
     let result = await prediction(`/models/${model}/predictions`, { input: {
       text, voice_id: voice, audio_format: "mp3",
-      ...(model.startsWith("minimax/") ? { language_boost: "Automatic" } : {}),
+      ...(boost ? { language_boost: boost } : {}),
     } });
     const deadline = Date.now() + 90000;
     while (result.status !== "succeeded") {

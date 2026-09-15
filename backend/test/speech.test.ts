@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { resetDbForTests } from "@/db";
-import { speechCatalogue, speechChoice, speechOutput, synthesize } from "@/ai/speak";
+import { minimaxLanguageBoost, speechCatalogue, speechChoice, speechOutput, synthesize } from "@/ai/speak";
 import { tts } from "@/routes/tts";
 
 const originalFetch = globalThis.fetch;
@@ -28,6 +28,28 @@ describe("multilingual speech", () => {
     expect(speechCatalogue("ca").some((model) => model.id.startsWith("minimax/"))).toBe(false);
     expect(speechChoice("minimax/speech-2.8-turbo", "English_Wiselady", "es")).toBeNull();
     expect(speechChoice("minimax/speech-2.8-turbo", "Spanish_SereneWoman", "es")).not.toBeNull();
+  });
+  test("sends explicit language boosts for every MiniMax catalog language", async () => {
+    const model = speechCatalogue().find((item) => item.id.startsWith("minimax/"))!;
+    let expected = "";
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).includes("/models/")) {
+        expect(JSON.parse(String(init?.body)).input.language_boost).toBe(expected);
+        return Response.json({ status: "succeeded", output: "https://replicate.delivery/test.mp3" });
+      }
+      return new Response(new Uint8Array([1, 2, 3]));
+    }) as unknown as typeof fetch;
+    for (const language of model.languages) {
+      expected = minimaxLanguageBoost[language];
+      expect(expected).toBeTruthy();
+      expect(expected).not.toBe("Automatic");
+      const voice = speechCatalogue(language).find((item) => item.id === model.id)!.voices[0];
+      await synthesize("Test", model.id, voice, language);
+    }
+    expect(minimaxLanguageBoost.es).toBe("Spanish");
+    expect(minimaxLanguageBoost.nl).toBe("Dutch");
+    expect(minimaxLanguageBoost.zh).toBe("Chinese");
+    expect(minimaxLanguageBoost.yue).toBe("Cantonese");
   });
   test("restricts audio downloads to provider output hosts", () => {
     expect(speechOutput("https://replicate.delivery/audio.mp3")).not.toBeNull();
