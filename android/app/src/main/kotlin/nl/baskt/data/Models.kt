@@ -281,10 +281,22 @@ data class RecipeSummary(val title: String, val url: String, val imageUrl: Strin
 }
 
 @Serializable
-data class StockDish(val title: String, val searchQuery: String, val uses: List<String> = emptyList(), val missing: List<String> = emptyList(), val minutes: Int? = null, val imageUrl: String? = null, val recipeUrl: String? = null, val source: String? = null)
+data class DiscoverDish(val title: String, val searchQuery: String, val uses: List<String> = emptyList(), val missing: List<String> = emptyList(), val minutes: Int? = null, val imageUrl: String? = null, val recipeUrl: String? = null, val source: String? = null)
 
 @Serializable
-data class StockDishesResponse(val dishes: List<StockDish> = emptyList())
+data class DiscoverResponse(val dishes: List<DiscoverDish> = emptyList())
+
+/**
+ * What the Discover tab asks for: the mode ("stock", "new", "cuisine"), how much of a dish must be in stock
+ * ("all", "most", "half"), a style hint for new ideas, a country for the cuisine mode, and a time limit.
+ */
+@Serializable
+data class DiscoverParams(val mode: String = "stock", val coverage: String = "most", val style: String? = null, val cuisine: String? = null, val maxMinutes: Int? = null) {
+    /** Stable name for the offline cache entry of this exact request. */
+    val cacheKey get() = "discover-$mode-$coverage-${style.orEmpty()}-${cuisine.orEmpty()}-${maxMinutes ?: 0}"
+    /** The cuisine mode needs a country before anything can be asked. */
+    val complete get() = mode != "cuisine" || !cuisine.isNullOrBlank()
+}
 
 @Serializable
 data class UserRecipe(

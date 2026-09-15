@@ -235,7 +235,14 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
 
     suspend fun groupRecipe(groupId: String): RecipeDetail = client.get(url("/basket/groups/$groupId/recipe")) { auth() }.expect()
 
-    suspend fun dishesFromStock(): List<StockDish> = client.get(url("/recipes/from-stock")) { auth() }.expect<StockDishesResponse>().dishes
+    suspend fun discover(params: DiscoverParams): List<DiscoverDish> = client.get(url("/recipes/discover")) {
+        auth()
+        parameter("mode", params.mode)
+        parameter("coverage", params.coverage)
+        params.style?.let { parameter("style", it) }
+        params.cuisine?.let { parameter("cuisine", it) }
+        params.maxMinutes?.let { parameter("maxMinutes", it) }
+    }.expect<DiscoverResponse>().dishes
 
     suspend fun myRecipes(): List<UserRecipe> = client.get(url("/recipes/mine")) { auth() }.expect<UserRecipesResponse>().recipes
 

@@ -31,7 +31,8 @@ import nl.baskt.data.SpendSummary
 import nl.baskt.data.PricePoint
 import nl.baskt.data.GenerateResponse
 import nl.baskt.data.RecipeDraft
-import nl.baskt.data.StockDish
+import nl.baskt.data.DiscoverDish
+import nl.baskt.data.DiscoverParams
 import nl.baskt.data.UserRecipe
 import nl.baskt.data.RecipeDetail
 import nl.baskt.data.RecipeFavourite
@@ -191,9 +192,36 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     fun closeRecipe() { _recipeDetail.value = null }
 
-    private val _stockDishes = MutableStateFlow<List<StockDish>?>(null)
-    val stockDishes: StateFlow<List<StockDish>?> = _stockDishes
-    fun loadStockDishes() = viewModelScope.launch { _recipesBusy.value = true; _stockDishes.value = cachedLoad("stock-dishes", emptyList()) { container.api.dishesFromStock() }; _recipesBusy.value = false }
+    /** Discover tab: the current question, the ideas answering it (null until loaded), and how to order them. */
+    private val _discoverParams = MutableStateFlow(DiscoverParams())
+    val discoverParams: StateFlow<DiscoverParams> = _discoverParams
+    private val _discoverDishes = MutableStateFlow<List<DiscoverDish>?>(null)
+    val discoverDishes: StateFlow<List<DiscoverDish>?> = _discoverDishes
+    private val _discoverByTime = MutableStateFlow(false)
+    val discoverByTime: StateFlow<Boolean> = _discoverByTime
+    private val _discoverBusy = MutableStateFlow(false)
+    val discoverBusy: StateFlow<Boolean> = _discoverBusy
+    private var discoverLoaded: DiscoverParams? = null
+    private var discoverJob: kotlinx.coroutines.Job? = null
+
+    fun setDiscoverParams(params: DiscoverParams) { _discoverParams.value = params }
+    fun setDiscoverByTime(byTime: Boolean) { _discoverByTime.value = byTime }
+
+    /** Fetches ideas for the current parameters; unchanged parameters reuse what is on screen unless forced. */
+    fun loadDiscover(force: Boolean = false) {
+        val params = _discoverParams.value
+        if (!params.complete) { discoverJob?.cancel(); _discoverDishes.value = null; discoverLoaded = null; _discoverBusy.value = false; return }
+        if (!force && params == discoverLoaded && _discoverDishes.value != null) return
+        discoverJob?.cancel()
+        discoverJob = viewModelScope.launch {
+            _discoverBusy.value = true
+            _discoverDishes.value = null
+            try {
+                _discoverDishes.value = cachedLoad(params.cacheKey, emptyList()) { container.api.discover(params) }
+                discoverLoaded = params
+            } finally { _discoverBusy.value = false }
+        }
+    }
 
     private val _myRecipes = container.recipes.mine
     val myRecipes: StateFlow<List<UserRecipe>> = _myRecipes
