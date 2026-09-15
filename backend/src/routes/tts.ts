@@ -12,7 +12,7 @@ tts.post("/", async (c) => {
   const text = body.preview === true ? speechSamples[body.language] ?? speechSamples.en : body.text.trim();
   try {
     const bytes = await synthesize(text, body.model, body.voice, body.language);
-    return new Response(new Uint8Array(bytes).buffer, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "private, max-age=86400" } });
+    return new Response(new Uint8Array(bytes).buffer, { headers: { "Content-Type": body.model === "qwen/qwen3-tts" ? "audio/wav" : "audio/mpeg", "Cache-Control": "private, max-age=86400" } });
   } catch {
     return c.json({ error: { code: "SPEECH_UNAVAILABLE", message: "Speech is unavailable. Please try again." } }, 503);
   }

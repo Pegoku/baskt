@@ -100,3 +100,26 @@ for downloaded cooking instructions. Transfer responses include `children` to ma
 IDs. Serving changes can include explicit `children` (`id`, `text`, `quantity`) plus
 `recipe.ingredientLines`; the server preserves child IDs and rejects a changed ingredient set with
 409 instead of deleting newer server ingredients.
+
+### Speech previews and logs
+
+TTS uses the Hack Club Replicate proxy. Set `REPLICATE_API_TOKEN` in the backend's ignored `.env`.
+The app selects models and voices from the server catalogue. Qwen3 TTS uses its nine preset
+speakers in `custom_voice` mode with an explicit language; MiniMax sends `language_boost`
+matching the selected language.
+
+From `backend/`:
+
+- `bun run tts:previews es` generates all Spanish MiniMax and Qwen3 samples, two at a time.
+  Existing cached samples are reused. Failed samples are retried and reported with a nonzero exit status.
+- `bun run logs` shows the latest 50 speech log entries.
+- `bun run logs --follow` follows new entries.
+- `bun run logs --lines 10 --remote` reads recent predictions from the provider, including the
+  language/boost actually stored on each request.
+
+Local speech logs are in `data/logs/speech.jsonl` (beside the configured database), with one
+rotated file at 5 MB. Override with `SPEECH_LOG_PATH`. They record metadata, cache use,
+prediction IDs and provider-confirmed language settings, never keys, spoken text or audio URLs.
+Provider history may expire; local logs retain confirmation for newly generated speech.
+Audio previews are cached for 90 days and are generated only on demand unless the preview
+command above is explicitly run.

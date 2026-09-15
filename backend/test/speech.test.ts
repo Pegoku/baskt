@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { resetDbForTests } from "@/db";
-import { minimaxLanguageBoost, speechCatalogue, speechChoice, speechOutput, synthesize } from "@/ai/speak";
+import { speechInput, minimaxLanguageBoost, speechCatalogue, speechChoice, speechOutput, synthesize } from "@/ai/speak";
 import { tts } from "@/routes/tts";
 
 const originalFetch = globalThis.fetch;
@@ -51,6 +51,15 @@ describe("multilingual speech", () => {
     expect(minimaxLanguageBoost.zh).toBe("Chinese");
     expect(minimaxLanguageBoost.yue).toBe("Cantonese");
   });
+  test("Qwen exposes all nine multilingual speakers and sends its own schema", () => {
+    const qwen = speechCatalogue("es").find((model) => model.id === "qwen/qwen3-tts")!;
+    expect(qwen.voices.length).toBe(9);
+    expect(speechInput("Hola", qwen.id, "Serena", "es")).toEqual({
+      text: "Hola", mode: "custom_voice", speaker: "Serena", language: "Spanish",
+    });
+    expect(speechCatalogue("nl").some((model) => model.id === qwen.id)).toBe(false);
+    expect(() => speechInput("Hola", qwen.id, "unknown", "es")).toThrow();
+  });
   test("restricts audio downloads to provider output hosts", () => {
     expect(speechOutput("https://replicate.delivery/audio.mp3")).not.toBeNull();
     expect(speechOutput({ audio: "https://replicate.delivery/audio.mp3" })).not.toBeNull();
@@ -62,7 +71,7 @@ describe("multilingual speech", () => {
     globalThis.fetch = (async () => { throw new Error("Unexpected generation"); }) as unknown as typeof fetch;
     const result = await tts.request("/voices");
     expect(result.status).toBe(200);
-    expect((await result.json()).models.length).toBe(3);
+    expect((await result.json()).models.length).toBe(4);
   });
   test("caches audio bytes and coalesces previews without leaking credentials to the file host", async () => {
     let calls = 0;
