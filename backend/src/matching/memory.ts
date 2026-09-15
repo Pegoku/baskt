@@ -101,3 +101,16 @@ export function memoryContext(canonical: string, itemText: string, store: string
   if (!lines.length) return "";
   return `${atStore.length ? "" : ""}${lines.join("\n")}`;
 }
+
+/** Undo rejection-only memories for this exact idea at this supermarket. */
+export function clearRejections(canonical: string, itemText: string, store: string) {
+  const canonicalKey = normalizeText(canonical);
+  const textKey = normalizeText(itemText);
+  const rows = db().select().from(choices).where(eq(choices.store, store)).all();
+  for (const row of rows) {
+    if (!row.chosenProductId && row.rejectedTitles.length &&
+        (normalizeText(row.itemText) === textKey || normalizeText(row.canonical) === canonicalKey)) {
+      deleteChoice(row.id);
+    }
+  }
+}

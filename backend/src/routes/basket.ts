@@ -7,7 +7,7 @@ import { defaultServings, rankBy, skipInStock } from "@/db/settings";
 import { inStock, listStock } from "@/stock";
 import { enabledStoreCodes } from "@/db/settings";
 import { compareBasket, type CompareMatch } from "@/matching/compare";
-import { chooseMatch, enqueue, feedback, getItem, getMatches, isRunning, rejectShown, rematchItem, searchMoreCandidates, unskipMatch } from "@/matching/pipeline";
+import { chooseMatch, enqueue, feedback, getItem, getMatches, isRunning, rejectShown, resetRejections, rematchItem, searchMoreCandidates, unskipMatch } from "@/matching/pipeline";
 import { splitShoppingText } from "@/matching/parse";
 import { suggest } from "@/matching/suggest";
 import { buildRecipeGroup, itemsForServings, looksLikeRecipe, type RecipeItem } from "@/matching/recipes";
@@ -16,7 +16,8 @@ import { termRelevance } from "@/stores/promotions";
 import { interpretVoice } from "@/matching/voice";
 import { speechTranscript } from "@/routes/speech";
 import { fetchRecipe, getUserRecipe, userRecipeAsRecipe } from "@/routes/recipes";
-import { detectRecipeIntent, parseServings, scaleLine } from "@/matching/recipes";
+import { localizeRecipe } from "@/matching/localize";
+import { parseServings, scaleLine } from "@/matching/recipes";
 import { collectProductIds, itemView } from "@/serialize";
 import { getAdapter, hasStore } from "@/stores/registry";
 import { productsByIds } from "@/stores/search";
@@ -134,16 +135,16 @@ export function createGroupFromUrl(url: string, basketId = DEFAULT_BASKET_ID, se
     const own = url.match(/^baskt:\/\/recipe\/(.+)$/);
     const recipe = own ? (getUserRecipe(own[1]) ? userRecipeAsRecipe(getUserRecipe(own[1])!) : null) : await fetchRecipe(url);
     if (!recipe) throw new Error("No recipe data found on that page");
-    const intent = await detectRecipeIntent(recipe.title);
+    const localized = await localizeRecipe(recipe);
     const baseServings = parseServings(recipe.servings);
     const target = servings ?? defaultServings() ?? baseServings;
-    const items = await itemsForServings(recipe, intent.dish || recipe.title, baseServings, target);
+    const items = await itemsForServings(recipe, localized.title, baseServings, target);
     if (!getItem(group.id)) return;
     const skipped = createChildren(group.id, items);
     db()
       .update(basketItems)
       .set({
-        text: intent.dish || recipe.title,
+        text: localized.title,
         recipeJson: { title: recipe.title, sourceUrl: recipe.sourceUrl, servings: recipe.servings, ingredientLines: recipe.ingredientLines, skipped, baseServings, currentServings: target, imageUrl: recipe.imageUrl ?? null, steps: recipe.steps ?? [] },
         status: items.length ? "MATCHED" : "ERROR",
         error: items.length ? null : "No ingredients found in this recipe",
@@ -578,6 +579,15 @@ basket.post("/items/:id/matches/:store/unskip", (c) => {
   const invalid = storeGuard(store);
   if (invalid) return c.json(invalid, 400);
   const match = unskipMatch(c.req.param("id"), store);
+  if (!match) return c.json({ error: { code: "NOT_FOUND", message: "item or store not found" } }, 404);
+  return c.json(viewOf(c.req.param("id")));
+});
+
+basket.post("/items/:id/matches/:store/reset", (c) => {
+  const store = c.req.param("store");
+  const invalid = storeGuard(store);
+  if (invalid) return c.json(invalid, 400);
+  const match = resetRejections(c.req.param("id"), store);
   if (!match) return c.json({ error: { code: "NOT_FOUND", message: "item or store not found" } }, 404);
   return c.json(viewOf(c.req.param("id")));
 });

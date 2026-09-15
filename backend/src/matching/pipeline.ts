@@ -13,6 +13,7 @@ import {
 import { enabledStoreCodes } from "@/db/settings";
 import { normalizeText } from "@/lib/text";
 import {
+  clearRejections,
   memoryContext,
   recordChoice,
   rememberedProductId,
@@ -422,6 +423,25 @@ export function unskipMatch(itemId: string, store: string) {
     chosenBy: match.candidateIds.length ? "AI" : null,
     windowStart: 0,
     shownCount: Math.min(OPTIONS_PER_PAGE, match.candidateIds.length),
+    updatedAt: now(),
+  });
+}
+
+/** Restore all suggestion pages and forget this store's rejection-only memories. */
+export function resetRejections(itemId: string, store: string) {
+  const item = getItem(itemId);
+  const match = getMatch(itemId, store);
+  if (!item || !match) return null;
+  clearRejections(item.parsedJson?.canonicalName ?? item.text, item.text, store);
+  return saveMatch({
+    ...match,
+    windowStart: 0,
+    shownCount: Math.min(OPTIONS_PER_PAGE, match.candidateIds.length),
+    status: match.candidateIds.length ? "PENDING" : "EXHAUSTED",
+    chosenProductId: null,
+    chosenBy: null,
+    confidence: null,
+    reason: null,
     updatedAt: now(),
   });
 }

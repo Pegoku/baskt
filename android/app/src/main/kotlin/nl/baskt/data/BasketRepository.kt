@@ -592,6 +592,7 @@ class BasketRepository(
         })
     }
 
+    suspend fun resetRejections(item: BasketItem, store: String) = guard { replace(api.resetRejections(item.id, store)) }
     suspend fun reject(item: BasketItem, store: String) = guard { replace(api.reject(item.id, store)) }
     suspend fun unskip(item: BasketItem, store: String) = queued(PendingOp(type = "unskip", itemId = item.id, store = store), {
         patchLocal(item.id) { it.copy(matches = it.matches.map { match -> if (match.store == store) match.copy(status = "PENDING") else match }) }
@@ -671,10 +672,21 @@ class BasketRepository(
         for (item in items.filter { it.wanted }) { if (item.kind == "group") addGroup(item.text) else add(item.text, item.quantity) }
     }
 
-    suspend fun addGroupFromUrl(recipeUrl: String) {
+    suspend fun addGroupFromUrl(recipeUrl: String, language: String) {
         val recipe = recipeLibrary?.detail(recipeUrl)
         if (recipe == null) { _error.value = "Open this recipe online to download its ingredients first"; return }
-        addGroup(recipe.title, recipe.ingredientLines, RecipeInfo(recipe.title, recipe.sourceUrl, recipe.servings, recipe.ingredientLines,
+        val source = recipe.original ?: recipe
+        val texts = listOf(source.title) + source.ingredientLines + source.steps.map { it.text } + listOf(source.servings.orEmpty(), source.totalTime.orEmpty(), source.description.orEmpty())
+        val descriptionIndices = listOf(texts.lastIndex)
+        val key = "translation-v2-$language-${descriptionIndices.joinToString(",")}-${texts.joinToString("\u0000")}"
+        val translated = offline?.load<TranslationResponse>(key) ?: try {
+            api.translate(texts, language, descriptionIndices).also {
+                if (it.translated && it.texts.size == texts.size) offline?.save(key, it)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (_: Exception) { null }
+        val title = translated?.takeIf { it.translated }?.texts?.firstOrNull() ?: recipe.title
+        addGroup(title, recipe.ingredientLines, RecipeInfo(recipe.title, recipe.sourceUrl, recipe.servings, recipe.ingredientLines,
             baseServings = recipe.servings?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull(),
             currentServings = recipe.servings?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull(), imageUrl = recipe.imageUrl, steps = recipe.steps))
     }

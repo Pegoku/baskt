@@ -527,3 +527,30 @@ describe("api", () => {
     expect(body.deletedIds).toContain(itemId);
   });
 });
+
+
+test("refresh restores the first suggestions and only clears this store's item rejections", async () => {
+  const { recordChoice, listChoices } = await import("@/matching/memory");
+  const created = await (await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "halfvolle melk" }) })).json() as any;
+  const id = created.id;
+  await waitForMatched(id);
+  await api(`/basket/items/${id}/matches/AH/reject`, { method: "POST" });
+  await api(`/basket/items/${id}/matches/AH/reject`, { method: "POST" });
+  const otherStore = recordChoice({ itemText: "halfvolle melk", canonical: "halfvolle melk", store: "JUMBO", chosenProductId: null, chosenTitle: null, rejectedTitles: ["Milk"] });
+  const otherItem = recordChoice({ itemText: "bread", canonical: "bread", store: "AH", chosenProductId: null, chosenTitle: null, rejectedTitles: ["Bread"] });
+  const pick = recordChoice({ itemText: "halfvolle melk", canonical: "halfvolle melk", store: "AH", chosenProductId: "AH:1", chosenTitle: "Milk", rejectedTitles: ["Other milk"] });
+  const response = await api(`/basket/items/${id}/matches/AH/reset`, { method: "POST" });
+  expect(response.status).toBe(200);
+  const item = await response.json() as any;
+  const match = item.matches.find((entry: any) => entry.store === "AH");
+  expect(match.status).toBe("PENDING");
+  expect(match.page).toBe(1);
+  expect(match.options).toHaveLength(3);
+  expect(match.chosen).toBeNull();
+  const remaining = listChoices();
+  expect(remaining.map((row) => row.id)).toContain(otherStore.id);
+  expect(remaining.map((row) => row.id)).toContain(otherItem.id);
+  expect(remaining.map((row) => row.id)).toContain(pick.id);
+  expect(remaining.filter((row) => row.store === "AH" && row.itemText === "halfvolle melk" && !row.chosenProductId)).toHaveLength(0);
+  expect((await api(`/basket/items/missing/matches/AH/reset`, { method: "POST" })).status).toBe(404);
+});

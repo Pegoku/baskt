@@ -202,6 +202,8 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
 
     suspend fun unskip(id: String, store: String): BasketItem = client.post(url("/basket/items/$id/matches/$store/unskip")) { auth() }.expect()
 
+    suspend fun resetRejections(id: String, store: String): BasketItem = client.post(url("/basket/items/$id/matches/$store/reset")) { auth() }.expect()
+
     suspend fun reject(id: String, store: String): BasketItem =
         client.post(url("/basket/items/$id/matches/$store/reject")) { auth() }.expect()
 

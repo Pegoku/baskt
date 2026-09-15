@@ -180,6 +180,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
                         stores = stores,
                         match = match,
                         onChoose = { productId -> viewModel.choose(item, store.code, productId) },
+                        onReset = { viewModel.resetRejections(item, store.code) },
                         onReject = { viewModel.reject(item, store.code) },
                         onSearch = { query -> viewModel.searchMore(item, store.code, query) },
                         onFeedback = { productId, up -> viewModel.feedback(item, store.code, productId, up) },
@@ -231,6 +232,7 @@ private fun StoreCard(
     match: StoreMatch?,
     onChoose: (String?) -> Unit,
     onReject: () -> Unit,
+    onReset: () -> Unit,
     onSearch: (String) -> Unit,
     onFeedback: (String, Boolean) -> Unit,
     onUnskip: () -> Unit = {},
@@ -275,6 +277,11 @@ private fun StoreCard(
                 else if (match?.status == "CHOSEN" && !showOptions) TextButton(onClick = { showOptions = true }) { Text("Change") }
             }
             if (match == null) return@Column
+            TextButton(onClick = onReset, enabled = !busy && !item.isProcessing) {
+                Icon(Icons.Default.Autorenew, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Refresh suggestions")
+            }
             if (busy) Text("Looking for alternatives…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
 
             val chosen = match.chosen

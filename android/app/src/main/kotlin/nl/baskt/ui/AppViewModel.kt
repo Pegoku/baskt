@@ -234,7 +234,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         _recipesBusy.value = false
     }
 
-    fun addRecipeFolder(recipeUrl: String) = viewModelScope.launch { basket.addGroupFromUrl(recipeUrl) }
+    fun addRecipeFolder(recipeUrl: String) = viewModelScope.launch { basket.addGroupFromUrl(recipeUrl, container.currentSettings.resolvedLanguage) }
 
     private val _priceChanges = MutableStateFlow<PriceChangesResponse?>(null)
     val priceChanges: StateFlow<PriceChangesResponse?> = _priceChanges
@@ -639,6 +639,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         try { block() } finally { busyMatches.update { it - key } }
     }
     fun choose(item: BasketItem, store: String, productId: String?) = busy(item, store) { basket.choose(item, store, productId) }
+    fun resetRejections(item: BasketItem, store: String) = busy(item, store) { basket.resetRejections(item, store) }
     fun reject(item: BasketItem, store: String) = busy(item, store) { basket.reject(item, store) }
     fun unskip(item: BasketItem, store: String) = busy(item, store) { basket.unskip(item, store) }
     fun feedback(item: BasketItem, store: String, productId: String, up: Boolean) = viewModelScope.launch { basket.feedback(item, store, productId, up) }

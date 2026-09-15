@@ -19,6 +19,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -35,6 +36,12 @@ import nl.baskt.data.RecipeDetail
 /** Recipe viewer: photo, ingredients and numbered steps (with step images when the site has them), translated by the server. */
 @Composable
 fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, actions: @Composable () -> Unit) {
+    val container = (androidx.compose.ui.platform.LocalContext.current.applicationContext as nl.baskt.BasktApp).container
+    val stock by container.basket.stock.collectAsState()
+    val basketItems by container.basket.items.collectAsState()
+    val shopping = basketItems.filter { it.kind != "group" && !it.checked }
+    val ownedTexts = stock.map { it.text } + shopping.map { it.text }
+    val ownedTranslation = nl.baskt.ui.common.rememberTranslation(ownedTexts, ownedTexts.isNotEmpty())
     val source = detail?.original ?: detail
     val originalMissing = detail?.original == null && detail?.originalTitle != null && detail.originalTitle != detail.title
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
@@ -78,7 +85,20 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, act
                     SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 2), enabled = displayed.steps.isNotEmpty()) { Text("Steps (${displayed.steps.size})") }
                 }
                 if (tab == 0) {
-                    for (line in displayed.ingredientLines) Text("• $line", style = MaterialTheme.typography.bodyMedium)
+                    for ((index, line) in displayed.ingredientLines.withIndex()) {
+                        val variants = listOfNotNull(line, source?.ingredientLines?.getOrNull(index), detail?.ingredientLines?.getOrNull(index), translation?.texts?.getOrNull(index + 1))
+                        fun matches(position: Int): Boolean = variants.any { ingredient ->
+                            nl.baskt.data.ingredientMatches(ingredient, ownedTexts[position]) ||
+                                ownedTranslation?.texts?.getOrNull(position)?.let { nl.baskt.data.ingredientMatches(ingredient, it) } == true
+                        }
+                        val inStock = stock.indices.any { matches(it) }
+                        val inBasket = shopping.indices.any { matches(stock.size + it) }
+                        Column {
+                            Text("• $line", style = MaterialTheme.typography.bodyMedium)
+                            val labels = listOfNotNull(if (inStock) "In stock" else null, if (inBasket) "In basket" else null)
+                            if (labels.isNotEmpty()) Text(labels.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 12.dp))
+                        }
+                    }
                 } else {
                     for ((index, step) in displayed.steps.withIndex()) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 4.dp)) {
