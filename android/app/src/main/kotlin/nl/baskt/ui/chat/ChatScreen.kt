@@ -90,24 +90,7 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
     val stores by viewModel.basket.stores.collectAsState()
     val recipeDetail by viewModel.recipeDetail.collectAsState()
     var input by remember { mutableStateOf("") }
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val settings by viewModel.settings.collectAsState()
-    val speech = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == android.app.Activity.RESULT_OK) {
-            val spoken = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-            if (!spoken.isNullOrBlank()) input = spoken
-        }
-    }
-    fun dictate() {
-        val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, settings?.resolvedLanguage ?: java.util.Locale.getDefault().language)
-            putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "What would you like to ask?")
-        }
-        runCatching { speech.launch(intent) }.onFailure {
-            android.widget.Toast.makeText(context, "Speech recognition is not available", android.widget.Toast.LENGTH_SHORT).show()
-        }
-    }
+    val dictate = nl.baskt.ui.common.rememberVoiceInput(viewModel, "What would you like to ask?") { input = it }
     var openRecipe by remember { mutableStateOf<RecipeCard?>(null) }
     val listState = rememberLazyListState()
     LaunchedEffect(Unit) { viewModel.loadChat() }

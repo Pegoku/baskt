@@ -1,3 +1,4 @@
+import { speechTranscript } from "@/routes/speech";
 import { translateContent } from "@/matching/translate";
 import { productDetails } from "@/stores/details";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
@@ -81,6 +82,11 @@ meta.get("/products/barcode/:gtin", async (c) => {
   if (gtin.length < 8 || gtin.length > 14) return c.json({ error: { code: "BAD_REQUEST", message: "gtin must be 8-14 digits" } }, 400);
   const results = await lookupBarcode(enabledStoreCodes(), gtin);
   return c.json({ gtin, results });
+});
+
+meta.post("/transcribe", async (c) => {
+  const transcript = await speechTranscript(c);
+  return typeof transcript === "string" ? c.json({ transcript }) : transcript;
 });
 
 meta.post("/translate", async (c) => {

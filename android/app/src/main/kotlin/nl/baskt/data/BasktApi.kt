@@ -281,8 +281,12 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
         client.post(url("/basket/interpret")) { auth(); contentType(ContentType.Application.Json); setBody(FromTextRequest(text)) }.expect<InterpretResponse>().items
 
     /** Uploads a recording for server-side transcription; 503 means the server has no speech-to-text. */
-    suspend fun dictate(audio: ByteArray, language: String): DictateResponse =
-        client.post(url("/basket/dictate")) {
+    suspend fun dictate(audio: ByteArray, language: String): DictateResponse = uploadDictation(audio, language, "/basket/dictate")
+
+    suspend fun transcribe(audio: ByteArray, language: String): String = uploadDictation(audio, language, "/transcribe").transcript
+
+    private suspend fun uploadDictation(audio: ByteArray, language: String, path: String): DictateResponse =
+        client.post(url(path)) {
             auth()
             setBody(
                 io.ktor.client.request.forms.MultiPartFormDataContent(

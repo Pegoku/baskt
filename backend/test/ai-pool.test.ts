@@ -1,3 +1,5 @@
+import { Hono } from "hono";
+import { speechTranscript } from "@/routes/speech";
 import { afterEach, describe, expect, test } from "bun:test";
 import { attemptOrder, cooldownFor, noteFailure, noteUsage, resetPoolStats } from "@/ai/pool";
 import { transcribeAudio } from "@/ai/transcribe";
@@ -234,5 +236,29 @@ describe("the dictation pool", () => {
   test("a non-Groq chat provider gets no dictation unless one is configured", async () => {
     const ai = await pools({ AI_BASE_URL: "https://openrouter.ai/api/v1", AI_API_KEY: "sk-or", AI_STT_MODEL: "whisper-large-v3" });
     expect(ai.stt).toEqual([]);
+  });
+});
+
+
+describe("shared speech upload", () => {
+  const app = new Hono().post("/transcribe", async (c) => {
+    const result = await speechTranscript(c);
+    return typeof result === "string" ? c.json({ transcript: result }) : result;
+  });
+  test("returns transcript without interpreting it as shopping items", async () => {
+    env.ai.stt = [provider("speech-route", 1, { model: "whisper-large-v3" })];
+    globalThis.fetch = (async () => Response.json({ text: "Tell me a joke" })) as typeof fetch;
+    const form = new FormData();
+    form.append("audio", new File(["audio"], "voice.m4a", { type: "audio/m4a" }));
+    form.append("language", "en");
+    const result = await app.request("/transcribe", { method: "POST", body: form });
+    expect(result.status).toBe(200);
+    expect(await result.json()).toEqual({ transcript: "Tell me a joke" });
+  });
+  test("signals unavailable STT and validates uploads", async () => {
+    env.ai.stt = [];
+    expect((await app.request("/transcribe", { method: "POST" })).status).toBe(503);
+    env.ai.stt = [provider("speech-route", 1, { model: "whisper-large-v3" })];
+    expect((await app.request("/transcribe", { method: "POST", body: new FormData() })).status).toBe(400);
   });
 });

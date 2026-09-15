@@ -56,9 +56,6 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     val focusInputRequest = MutableStateFlow(false)
     val dictateRequest = MutableStateFlow(false)
 
-    /** Set when server dictation is unusable and the phone's own recogniser should take over. */
-    val onDeviceDictateRequest = MutableStateFlow(false)
-
     /** Whether the server transcribes speech itself; otherwise the microphone opens Android's recogniser. */
     val serverStt: StateFlow<Boolean> = basket.serverStt
 
@@ -260,23 +257,6 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         _transcript.value = transcript
         _voiceProposal.value = basket.interpret(transcript) ?: emptyList()
         _interpreting.value = false
-    }
-
-    /**
-     * Sends a recording to the server's Whisper pool. When nothing there answers, the phone dictates
-     * instead: the user only has to speak again, never to fix settings.
-     */
-    fun dictateAudio(audio: ByteArray) = viewModelScope.launch {
-        _interpreting.value = true
-        _transcript.value = null
-        val result = basket.dictate(audio, container.currentSettings.resolvedLanguage)
-        _interpreting.value = false
-        if (result == null) {
-            onDeviceDictateRequest.value = true
-            return@launch
-        }
-        _transcript.value = result.transcript.ifBlank { null }
-        _voiceProposal.value = result.items
     }
 
     fun confirmProposal(items: List<VoiceItem>) = viewModelScope.launch {
