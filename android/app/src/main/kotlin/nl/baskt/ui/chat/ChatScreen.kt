@@ -90,7 +90,9 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
     val stores by viewModel.basket.stores.collectAsState()
     val recipeDetail by viewModel.recipeDetail.collectAsState()
     var input by remember { mutableStateOf("") }
-    val dictate = nl.baskt.ui.common.rememberVoiceInput(viewModel, "What would you like to ask?") { input = it }
+    val dictate = nl.baskt.ui.common.rememberVoiceInput(viewModel, "What would you like to ask?") {
+        if (online) { input = ""; viewModel.sendChat(it, voiceInput = true) } else input = it
+    }
     var openRecipe by remember { mutableStateOf<RecipeCard?>(null) }
     val listState = rememberLazyListState()
     LaunchedEffect(Unit) { viewModel.loadChat() }
@@ -146,7 +148,7 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
             LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(messages, key = { it.id }) { message ->
                     if (message.role == "user") UserBubble(message.content)
-                    else AssistantMessage(message, stores.map { it.code to it.name }.toMap(), onApply = { indices -> viewModel.applyProposal(message, indices) }, onOpenRecipe = { openRecipe = it; viewModel.openRecipe(it.url) }, onAddFolder = { viewModel.addRecipeFolder(it.url); onFolderAdded() })
+                    else AssistantMessage(viewModel, message, stores.map { it.code to it.name }.toMap(), onApply = { indices -> viewModel.applyProposal(message, indices) }, onOpenRecipe = { openRecipe = it; viewModel.openRecipe(it.url) }, onAddFolder = { viewModel.addRecipeFolder(it.url); onFolderAdded() })
                 }
                 if (busy) item("busy") {
                     // Live trace of the assistant's work: earlier steps dimmed, the current one with the spinner.
@@ -188,7 +190,7 @@ private fun UserBubble(text: String) {
 }
 
 @Composable
-private fun AssistantMessage(message: ChatMessage, storeNames: Map<String, String>, onApply: (List<Int>) -> Unit, onOpenRecipe: (RecipeCard) -> Unit, onAddFolder: (RecipeCard) -> Unit) {
+private fun AssistantMessage(viewModel: AppViewModel, message: ChatMessage, storeNames: Map<String, String>, onApply: (List<Int>) -> Unit, onOpenRecipe: (RecipeCard) -> Unit, onAddFolder: (RecipeCard) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (message.content.isNotBlank()) {
             Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)) {
@@ -210,6 +212,7 @@ private fun AssistantMessage(message: ChatMessage, storeNames: Map<String, Strin
                 }
             }
         }
+        SpeechToggle(viewModel, message)
     }
 }
 

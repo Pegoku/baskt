@@ -147,7 +147,7 @@ describe("transcription", () => {
       used.push(key);
       if (key === "STT_A") return new Response("rate limited", { status: 429, headers: { "retry-after": "30" } });
       return Response.json({ text: " two litres of milk " });
-    }) as unknown as unknown as typeof fetch;
+    }) as unknown as typeof fetch;
 
     // Two calls, so the round-robin has offered the clip to both keys and A has hit its 429 once.
     expect(await transcribeAudio(clip, "en")).toBe("two litres of milk");
@@ -160,7 +160,7 @@ describe("transcription", () => {
 
   test("returns null when the whole pool fails so the app can dictate on-device", async () => {
     env.ai.stt = [provider("STT_A", 1, { model: "whisper-large-v3" })];
-    globalThis.fetch = (async () => new Response("boom", { status: 500 })) as unknown as unknown as typeof fetch;
+    globalThis.fetch = (async () => new Response("boom", { status: 500 })) as unknown as typeof fetch;
     expect(await transcribeAudio(clip)).toBeNull();
   });
 
@@ -172,7 +172,7 @@ describe("transcription", () => {
       url = target;
       form = init.body as FormData;
       return Response.json({ text: "eggs" });
-    }) as unknown as unknown as typeof fetch;
+    }) as unknown as typeof fetch;
 
     await transcribeAudio(clip, "nl");
     expect(url).toBe("https://api.groq.com/openai/v1/audio/transcriptions");

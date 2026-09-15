@@ -22,6 +22,7 @@ import nl.baskt.data.SettingsStore
 class AppContainer(app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val settingsStore = SettingsStore(app)
+    val speechPlayback = nl.baskt.data.SpeechPlayback(app)
 
     @Volatile
     var currentSettings = AppSettings(SettingsStore.DEFAULT_BASE_URL, "")

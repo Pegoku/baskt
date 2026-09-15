@@ -65,6 +65,12 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
 
     suspend fun productDetail(id: String): ProductDetail = client.get(url("/products/$id/details")) { auth() }.expect()
 
+    suspend fun speechModels(): SpeechModels = client.get(url("/tts/voices")) { auth() }.expect()
+    suspend fun speech(request: SpeechRequest): ByteArray = client.post(url("/tts")) {
+        auth(); contentType(ContentType.Application.Json); setBody(request)
+        timeout { requestTimeoutMillis = 150_000; socketTimeoutMillis = 150_000 }
+    }.expect()
+
     suspend fun health(): HealthResponse = client.get(url("/health")) { auth() }.expect()
 
     suspend fun stores(): List<StoreInfo> = client.get(url("/stores")) { auth() }.expect<StoresResponse>().stores

@@ -430,7 +430,9 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     val chatSteps: StateFlow<List<String>> = _chatSteps
     private var stepsJob: Job? = null
 
-    fun sendChat(text: String) = viewModelScope.launch {
+    fun sendChat(text: String, voiceInput: Boolean = false) = viewModelScope.launch {
+        if (_chatBusy.value || text.isBlank()) return@launch
+        stopSpeaking()
         if (!online.value) { notify("The assistant needs a connection"); return@launch }
         _chatBusy.value = true
         _chatSteps.value = listOf("Sending…")
@@ -447,11 +449,62 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         if (reply != null) {
             _chat.update { list -> list.filterNot { it.id.startsWith("local-") } + reply }
             container.offline.save("chat-${basket.currentBasketId.value}", _chat.value)
+            if (voiceInput && settings.value?.speakReplies == true) {
+                reply.lastOrNull { it.role == "assistant" }?.let { speakMessage(it) }
+            }
         }
         stepsJob?.cancel()
         _chatSteps.value = emptyList()
         _chatBusy.value = false
     }
+    private var speechGeneration = 0
+    private var speechJob: Job? = null
+    private val _speaking = MutableStateFlow<String?>(null)
+    val speaking: StateFlow<String?> = _speaking
+    fun stopSpeaking() { speechGeneration++; speechJob?.cancel(); speechJob = null; _speaking.value = null }
+    fun setSpeakReplies(enabled: Boolean) = viewModelScope.launch {
+        if (!enabled) stopSpeaking()
+        container.settingsStore.saveSpeakReplies(enabled)
+    }
+    fun setSpeechVoice(model: String, voice: String) = viewModelScope.launch {
+        stopSpeaking()
+        container.settingsStore.saveVoice(model, voice)
+    }
+    fun toggleMessageSpeech(message: ChatMessage) = viewModelScope.launch {
+        val enabled = !(settings.value?.speakReplies ?: false)
+        container.settingsStore.saveSpeakReplies(enabled)
+        if (enabled) speakMessage(message) else stopSpeaking()
+    }
+    fun speakMessage(message: ChatMessage) {
+        val text = message.content.ifBlank { message.proposalJson?.summary.orEmpty() }
+        speak(text, message.id)
+    }
+    fun previewSpeech(model: String, voice: String) { speak("", "preview", model, voice, true) }
+    private fun speak(text: String, id: String, modelOverride: String? = null, voiceOverride: String? = null, preview: Boolean = false) {
+        stopSpeaking()
+        if (!preview && text.isBlank()) return
+        val generation = speechGeneration
+        speechJob = viewModelScope.launch {
+            _speaking.value = id
+            try {
+                val current = settings.value ?: container.currentSettings
+                val language = current.resolvedLanguage
+                val models = container.api.speechModels().models
+                val selected = models.firstOrNull { it.id == (modelOverride ?: current.ttsModel) && language in it.languages }
+                    ?: models.firstOrNull { language in it.languages }
+                    ?: error("No speech voice supports this language")
+                val voice = (voiceOverride ?: current.ttsVoice).takeIf { it in selected.voices } ?: selected.voices.first()
+                val chunks = if (preview) listOf("") else nl.baskt.data.speechChunks(text)
+                for (chunk in chunks) {
+                    val bytes = container.api.speech(nl.baskt.data.SpeechRequest(chunk, selected.id, voice, language, preview))
+                    container.speechPlayback.play(bytes)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (_: Exception) { notify("Speech is unavailable. You can still read the reply.") }
+            finally { if (speechGeneration == generation) _speaking.value = null }
+        }
+    }
+
     fun clearChat() = viewModelScope.launch { basket.queued(nl.baskt.data.PendingOp(type = "chatClear", basketId = basket.currentBasketId.value), {
         _chat.value = emptyList(); container.offline.save("chat-${basket.currentBasketId.value}", _chat.value)
     }) }
@@ -629,4 +682,6 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         "Connected to baskt ${health.version}" + (if (ai) " · AI ready" else " · AI not configured (text matching only)") +
             if (stt) " · dictation on the server" else " · dictation on this phone"
     }
+    override fun onCleared() { stopSpeaking(); super.onCleared() }
+
 }

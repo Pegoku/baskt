@@ -83,6 +83,7 @@ fun rememberVoiceInput(viewModel: AppViewModel, prompt: String, onTranscript: (S
     )
     return {
         if (!recording && !transcribing) {
+            viewModel.stopSpeaking()
             if (!useServerDictation(online, serverStt)) local()
             else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) recording = true
             else permission.launch(Manifest.permission.RECORD_AUDIO)
