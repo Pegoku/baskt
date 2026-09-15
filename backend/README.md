@@ -112,6 +112,7 @@ From `backend/`:
 
 - `bun run tts:previews es` generates all Spanish MiniMax and Qwen3 samples, two at a time.
   Existing cached samples are reused. Failed samples are retried and reported with a nonzero exit status.
+  A daily spending cap stops the batch immediately; rerun the same command after it resets or is increased.
 - `bun run logs` shows the latest 50 speech log entries.
 - `bun run logs --follow` follows new entries.
 - `bun run logs --lines 10 --remote` reads recent predictions from the provider, including the

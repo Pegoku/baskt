@@ -90,6 +90,10 @@ describe("multilingual speech", () => {
     expect([...await request()]).toEqual([1, 2, 3]);
     expect(calls).toBe(2);
   });
+  test("reports daily spending cap distinctly so batch jobs can stop", async () => {
+    globalThis.fetch = (async () => new Response("Daily spending limit of $3 reached", { status: 429 })) as unknown as typeof fetch;
+    await expect(synthesize("Hola", "qwen/qwen3-tts", "Aiden", "es")).rejects.toThrow("daily spending limit reached");
+  });
   test("failed generation is not cached and can be retried", async () => {
     let calls = 0;
     globalThis.fetch = (async () => { calls++; return Response.json({ status: "failed" }); }) as unknown as typeof fetch;

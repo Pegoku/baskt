@@ -48,7 +48,12 @@ async function prediction(path: string, body?: unknown): Promise<Prediction> {
     ...(body ? { body: JSON.stringify(body) } : {}),
     signal: AbortSignal.timeout(30000),
   });
-  if (!response.ok) throw new Error(`Speech provider unavailable (${response.status})`);
+  if (!response.ok) {
+    // Classify the known spending cap without exposing arbitrary provider response content.
+    const detail = response.status === 429 ? await response.text() : "";
+    if (/daily spending limit/i.test(detail)) throw new Error("Speech provider daily spending limit reached");
+    throw new Error(`Speech provider unavailable (${response.status})`);
+  }
   return response.json() as Promise<Prediction>;
 }
 export function speechOutput(value: unknown): string | null {
@@ -110,7 +115,7 @@ export async function synthesize(text: string, model: string, voice: string, lan
     speechLog("ready", { ...metadata, source: generated ? "generated" : "cache-or-shared", bytes: bytes.length, elapsedMs: Date.now() - started });
     return bytes;
   } catch (error) {
-    speechLog("failed", { ...metadata, elapsedMs: Date.now() - started });
+    speechLog("failed", { ...metadata, reason: error instanceof Error && error.message === "Speech provider daily spending limit reached" ? "daily-spending-limit" : "provider-or-audio-error", elapsedMs: Date.now() - started });
     throw error;
   }
 }
