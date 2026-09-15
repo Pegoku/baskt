@@ -489,7 +489,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
             try {
                 val current = settings.value ?: container.currentSettings
                 val language = current.resolvedLanguage
-                val models = container.api.speechModels().models
+                val models = container.api.speechModels(language).models
                 val selected = models.firstOrNull { it.id == (modelOverride ?: current.ttsModel) && language in it.languages }
                     ?: models.firstOrNull { language in it.languages }
                     ?: error("No speech voice supports this language")

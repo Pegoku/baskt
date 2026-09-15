@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { resetDbForTests } from "@/db";
-import { speechChoice, speechOutput, synthesize } from "@/ai/speak";
+import { speechCatalogue, speechChoice, speechOutput, synthesize } from "@/ai/speak";
 import { tts } from "@/routes/tts";
 
 const originalFetch = globalThis.fetch;
@@ -15,9 +15,19 @@ describe("multilingual speech", () => {
   test("only allows known voices and supported languages", () => {
     expect(speechChoice("inworld/realtime-tts-1.5-mini", "Ashley", "es")).not.toBeNull();
     expect(speechChoice("inworld/realtime-tts-1.5-mini", "Ashley", "ca")).toBeNull();
-    expect(speechChoice("minimax/speech-2.8-turbo", "English_Wiselady", "ca")).not.toBeNull();
+    expect(speechChoice("minimax/speech-2.8-turbo", "English_Wiselady", "ca")).toBeNull();
     expect(speechChoice("unknown", "Ashley", "en")).toBeNull();
     expect(speechChoice("inworld/realtime-tts-1.5-mini", "unknown", "en")).toBeNull();
+  });
+  test("catalogue only exposes MiniMax voices for the requested language", () => {
+    const spanish = speechCatalogue("es").find((model) => model.id.startsWith("minimax/"))!;
+    expect(spanish.voices.length).toBe(47);
+    expect(spanish.voices.every((voice) => voice.startsWith("Spanish_"))).toBe(true);
+    expect(spanish.voiceNames.Spanish_SereneWoman).toBe("Serene Woman");
+    expect(speechCatalogue("nl").find((model) => model.id.startsWith("minimax/"))!.voices.length).toBe(2);
+    expect(speechCatalogue("ca").some((model) => model.id.startsWith("minimax/"))).toBe(false);
+    expect(speechChoice("minimax/speech-2.8-turbo", "English_Wiselady", "es")).toBeNull();
+    expect(speechChoice("minimax/speech-2.8-turbo", "Spanish_SereneWoman", "es")).not.toBeNull();
   });
   test("restricts audio downloads to provider output hosts", () => {
     expect(speechOutput("https://replicate.delivery/audio.mp3")).not.toBeNull();

@@ -499,7 +499,7 @@ data class TranslationResponse(val texts: List<String>, val language: String, va
 data class ProductDetail(val product: Product, val description: String? = null, val imageUrls: List<String> = emptyList())
 
 @Serializable
-data class SpeechModel(val id: String, val name: String, val description: String, val voices: List<String>, val languages: List<String>)
+data class SpeechModel(val id: String, val name: String, val description: String, val voices: List<String>, val languages: List<String>, val voiceNames: Map<String, String> = emptyMap())
 @Serializable
 data class SpeechModels(val configured: Boolean = false, val models: List<SpeechModel> = emptyList())
 @Serializable

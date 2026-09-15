@@ -1,15 +1,25 @@
+import { minimaxVoices } from "@/ai/minimax-voices";
 import { cachedUpstream } from "@/lib/cache";
 import { sha256 } from "@/lib/text";
 
 export const speechModels = [
   { id: "inworld/realtime-tts-1.5-mini", name: "Inworld Mini", description: "Fast · lowest cost", voices: ["Ashley", "Dennis", "Alex"], languages: ["en", "es", "fr", "de", "nl", "it", "pt", "zh", "ja", "ko", "ru", "ar", "pl", "he", "hi"] },
   { id: "inworld/realtime-tts-1.5-max", name: "Inworld Max", description: "More expressive", voices: ["Ashley", "Dennis", "Alex"], languages: ["en", "es", "fr", "de", "nl", "it", "pt", "zh", "ja", "ko", "ru", "ar", "pl", "he", "hi"] },
-  { id: "minimax/speech-2.8-turbo", name: "MiniMax Turbo", description: "Widest language support · includes Catalan", voices: ["English_Wiselady", "English_Deep-VoicedGentleman"], languages: ["en", "es", "ca", "fr", "de", "nl", "it", "pt", "zh", "ja", "ko", "ru", "ar", "pl", "he", "hi", "tr", "uk", "vi", "id", "th", "ro", "el", "cs", "fi", "bg", "da", "ms", "fa", "sk", "sv", "hr", "tl", "hu", "no", "sl", "nn", "ta", "af"] },
+  { id: "minimax/speech-2.8-turbo", name: "MiniMax Turbo", description: "Natural multilingual voices", voices: minimaxVoices.map((voice) => voice.id), languages: [...new Set(minimaxVoices.map((voice) => voice.language))] },
 ];
+export function speechCatalogue(language?: string) {
+  return speechModels.map((model) => {
+    const voices = model.id.startsWith("minimax/")
+      ? minimaxVoices.filter((voice) => !language || voice.language === language).map((voice) => voice.id)
+      : model.voices;
+    return { ...model, voices, voiceNames: Object.fromEntries(minimaxVoices.filter((voice) => voices.includes(voice.id)).map((voice) => [voice.id, voice.name])) };
+  }).filter((model) => model.voices.length > 0 && (!language || model.languages.includes(language)));
+}
 const base = "https://ai.hackclub.com/proxy/v1/replicate";
 export function speechChoice(modelId: string, voice: string, language: string) {
   const model = speechModels.find((item) => item.id === modelId);
   if (!model || !model.voices.includes(voice) || !model.languages.includes(language)) return null;
+  if (modelId.startsWith("minimax/") && !minimaxVoices.some((item) => item.id === voice && item.language === language)) return null;
   return model;
 }
 export const speechSamples: Record<string, string> = {

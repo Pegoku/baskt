@@ -17,14 +17,14 @@ fun SpeechSettings(viewModel: AppViewModel) {
     var catalogue by remember { mutableStateOf<SpeechModels?>(null) }
     var error by remember { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
-    LaunchedEffect(settings?.baseUrl, settings?.token, retry) {
+    val language = settings?.resolvedLanguage ?: "en"
+    LaunchedEffect(settings?.baseUrl, settings?.token, language, retry) {
         error = false
         catalogue = null
-        try { catalogue = viewModel.container.api.speechModels() }
+        try { catalogue = viewModel.container.api.speechModels(language) }
         catch (e: CancellationException) { throw e }
         catch (_: Exception) { error = true }
     }
-    val language = settings?.resolvedLanguage ?: "en"
     val supported = catalogue?.models.orEmpty().filter { language in it.languages }
     val chosen = supported.firstOrNull { it.id == settings?.ttsModel } ?: supported.firstOrNull()
     val selectedVoice = settings?.ttsVoice?.takeIf { it in chosen?.voices.orEmpty() } ?: chosen?.voices?.firstOrNull()
@@ -56,12 +56,20 @@ fun SpeechSettings(viewModel: AppViewModel) {
                 }
                 Text(chosen.description, style = MaterialTheme.typography.bodySmall)
                 if (chosen.id != settings?.ttsModel) Text("Using a model that supports your language.", style = MaterialTheme.typography.bodySmall)
-                chosen.voices.forEach { voice ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = voice == selectedVoice, onClick = { viewModel.setSpeechVoice(chosen.id, voice) })
-                        Text(voice.removePrefix("English_").replace("_", " "), modifier = Modifier.weight(1f))
-                        TextButton(onClick = { viewModel.previewSpeech(chosen.id, voice) }) { Text("Test voice") }
+                var voiceMenu by remember(chosen.id, language) { mutableStateOf(false) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) {
+                        OutlinedButton(onClick = { voiceMenu = true }) {
+                            Text(chosen.voiceNames[selectedVoice] ?: selectedVoice.orEmpty())
+                        }
+                        DropdownMenu(expanded = voiceMenu, onDismissRequest = { voiceMenu = false }, modifier = Modifier.heightIn(max = 320.dp)) {
+                            chosen.voices.forEach { voice ->
+                                DropdownMenuItem(text = { Text(chosen.voiceNames[voice] ?: voice) },
+                                    onClick = { voiceMenu = false; viewModel.setSpeechVoice(chosen.id, voice) })
+                            }
+                        }
                     }
+                    TextButton(onClick = { selectedVoice?.let { viewModel.previewSpeech(chosen.id, it) } }) { Text("Test voice") }
                 }
                 if (speaking == "preview") TextButton(onClick = { viewModel.stopSpeaking() }) { Text("Stop preview") }
                 Text("Samples are generated when played and cached for later.", style = MaterialTheme.typography.bodySmall)

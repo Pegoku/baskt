@@ -105,8 +105,6 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
             if (status != null) Text(status!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             HorizontalDivider()
-            SpeechSettings(viewModel)
-            HorizontalDivider()
             Text("Language", style = MaterialTheme.typography.titleMedium)
             Text("Used for suggestions and for how the AI describes your ideas.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             var languageMenu by remember { mutableStateOf(false) }
@@ -127,6 +125,8 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
                 }
             }
 
+            HorizontalDivider()
+            SpeechSettings(viewModel)
             HorizontalDivider()
             val serverSettings by viewModel.basket.serverSettings.collectAsState()
             LaunchedEffect(Unit) { viewModel.refreshStock() }
