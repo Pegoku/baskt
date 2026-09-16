@@ -27,6 +27,12 @@ fun SpeechSettings(viewModel: AppViewModel) {
     }
     val supported = catalogue?.models.orEmpty().filter { language in it.languages }
     val chosen = supported.firstOrNull { it.id == settings?.ttsModel } ?: supported.firstOrNull()
+    val sortedVoices = remember(chosen, language) {
+        val collator = java.text.Collator.getInstance(java.util.Locale.forLanguageTag(language))
+        chosen?.voices.orEmpty().sortedWith { first, second ->
+            collator.compare(chosen?.voiceNames?.get(first) ?: first, chosen?.voiceNames?.get(second) ?: second)
+        }
+    }
     val selectedVoice = settings?.ttsVoice?.takeIf { it in chosen?.voices.orEmpty() } ?: chosen?.voices?.firstOrNull()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Voice conversations", style = MaterialTheme.typography.titleMedium)
@@ -63,7 +69,7 @@ fun SpeechSettings(viewModel: AppViewModel) {
                             Text(chosen.voiceNames[selectedVoice] ?: selectedVoice.orEmpty())
                         }
                         DropdownMenu(expanded = voiceMenu, onDismissRequest = { voiceMenu = false }, modifier = Modifier.heightIn(max = 320.dp)) {
-                            chosen.voices.forEach { voice ->
+                            sortedVoices.forEach { voice ->
                                 DropdownMenuItem(text = { Text(chosen.voiceNames[voice] ?: voice) },
                                     onClick = { voiceMenu = false; viewModel.setSpeechVoice(chosen.id, voice) })
                             }
