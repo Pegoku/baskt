@@ -11,6 +11,8 @@ import nl.baskt.AppContainer
 import nl.baskt.data.AppSettings
 import nl.baskt.data.BasketItem
 import nl.baskt.data.Comparison
+import nl.baskt.data.DuplicateGroup
+import nl.baskt.data.DuplicateResolution
 import nl.baskt.data.AllDealsResponse
 import nl.baskt.data.ChatMessage
 import nl.baskt.data.Choice
@@ -293,6 +295,25 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun dismissProposal() { _voiceProposal.value = null; _transcript.value = null }
+
+    /** Duplicate groups from the last scan; null until the user asks, empty when the list is clean. */
+    private val _duplicates = MutableStateFlow<List<DuplicateGroup>?>(null)
+    val duplicates: StateFlow<List<DuplicateGroup>?> = _duplicates
+    private val _findingDuplicates = MutableStateFlow(false)
+    val findingDuplicates: StateFlow<Boolean> = _findingDuplicates
+
+    fun findDuplicates() = viewModelScope.launch {
+        _findingDuplicates.value = true
+        _duplicates.value = basket.findDuplicates()?.groups ?: emptyList()
+        _findingDuplicates.value = false
+    }
+
+    fun resolveDuplicates(decisions: List<Pair<DuplicateGroup, DuplicateResolution>>) = viewModelScope.launch {
+        _duplicates.value = null
+        basket.resolveDuplicates(decisions)
+    }
+
+    fun dismissDuplicates() { _duplicates.value = null }
 
     private val _scan = MutableStateFlow<ReceiptScan?>(null)
     val scan: StateFlow<ReceiptScan?> = _scan

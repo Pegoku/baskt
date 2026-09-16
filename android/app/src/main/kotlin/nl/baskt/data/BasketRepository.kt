@@ -668,6 +668,33 @@ class BasketRepository(
         }
     }
 
+    suspend fun findDuplicates(): DedupeResponse? = guard { api.findDuplicates(_currentBasketId.value) }
+
+    /**
+     * Applies the user's decisions through the normal item operations, so they queue offline like any edit.
+     * Merging keeps the entry whose products are furthest along (a user's pick beats suggestions beats nothing)
+     * so no confirmed choice is thrown away, and gives it the summed quantity.
+     */
+    suspend fun resolveDuplicates(decisions: List<Pair<DuplicateGroup, DuplicateResolution>>) {
+        val current = _items.value
+        val toDelete = mutableListOf<BasketItem>()
+        for ((group, resolution) in decisions) {
+            val members = group.items.mapNotNull { member -> current.firstOrNull { it.id == member.id } }
+            if (members.size < 2) continue
+            when (resolution) {
+                DuplicateResolution.KeepAll -> continue
+                is DuplicateResolution.Keep -> toDelete += members.filter { it.id != resolution.id }
+                DuplicateResolution.Merge -> {
+                    val keep = members.maxWith(compareBy<BasketItem>({ item -> item.matches.count { it.chosenBy == "USER" } }, { item -> item.matches.count { it.effective != null } }, { -it.createdAt }))
+                    val total = members.sumOf { it.quantity.coerceAtLeast(1) }
+                    if (keep.quantity != total) setQuantity(keep, total)
+                    toDelete += members.filter { it.id != keep.id }
+                }
+            }
+        }
+        if (toDelete.isNotEmpty()) deleteMany(toDelete)
+    }
+
     suspend fun confirm(items: List<VoiceItem>) {
         for (item in items.filter { it.wanted }) { if (item.kind == "group") addGroup(item.text) else add(item.text, item.quantity) }
     }

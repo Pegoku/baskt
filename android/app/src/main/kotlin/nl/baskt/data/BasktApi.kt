@@ -317,6 +317,9 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
             timeout { requestTimeoutMillis = 120_000; socketTimeoutMillis = 120_000 }
         }.expect()
 
+    suspend fun findDuplicates(basketId: String): DedupeResponse =
+        client.post(url("/basket/dedupe")) { auth(); contentType(ContentType.Application.Json); setBody(BasketIdRequest(basketId)) }.expect()
+
     suspend fun confirm(items: List<VoiceItem>, basketId: String): List<BasketItem> =
         client.post(url("/basket/confirm")) {
             auth(); contentType(ContentType.Application.Json); setBody(ConfirmRequest(items, basketId))
@@ -438,6 +441,7 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
 @Serializable private data class TransferRequest(val basketId: String, val copy: Boolean)
 @Serializable private data class GroupFromItemsRequest(val text: String, val itemIds: List<String>)
 @Serializable private data class ItemIdsRequest(val itemIds: List<String>)
+@Serializable private data class BasketIdRequest(val basketId: String)
 @Serializable private data class QueryRequest(val query: String)
 @Serializable private data class ItemsResponse(val items: List<BasketItem>)
 @Serializable private data class DeletedResponse(val deleted: Int)

@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.filled.Balance
+import androidx.compose.material.icons.filled.CallMerge
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Kitchen
@@ -190,6 +191,20 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
     if (proposal != null || interpreting) {
         VoiceConfirmSheet(proposal ?: emptyList(), interpreting, transcript, onDismiss = { viewModel.dismissProposal() }, onConfirm = { viewModel.confirmProposal(it) })
     }
+    val duplicates by viewModel.duplicates.collectAsState()
+    val findingDuplicates by viewModel.findingDuplicates.collectAsState()
+    if (duplicates != null || findingDuplicates) {
+        DuplicatesSheet(
+            groups = duplicates ?: emptyList(),
+            loading = findingDuplicates,
+            onDismiss = { viewModel.dismissDuplicates() },
+            onApply = { decisions ->
+                viewModel.resolveDuplicates(decisions)
+                val removed = decisions.sumOf { (group, resolution) -> when (resolution) { nl.baskt.data.DuplicateResolution.KeepAll -> 0; else -> group.items.size - 1 } }
+                if (removed > 0) scope.launch { snackbar.showSnackbar(if (removed == 1) "Removed 1 duplicate" else "Removed $removed duplicates") }
+            },
+        )
+    }
 
 
     androidx.activity.compose.BackHandler(enabled = selectionMode) { viewModel.clearSelection() }
@@ -244,6 +259,9 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                             DropdownMenuItem(text = { Text("Search products") }, leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }, onClick = { menu = false; onSearch() })
                             DropdownMenuItem(text = { Text("Stock") }, leadingIcon = { Icon(Icons.Default.Kitchen, contentDescription = null) }, onClick = { menu = false; onStock() })
                             DropdownMenuItem(text = { Text("Receipts & spending") }, leadingIcon = { Icon(Icons.Default.Receipt, contentDescription = null) }, onClick = { menu = false; onPurchases() })
+                            if (items.count { !it.checked && !it.isGroup } >= 2) {
+                                DropdownMenuItem(text = { Text("Find duplicates") }, leadingIcon = { Icon(Icons.Default.CallMerge, contentDescription = null) }, onClick = { menu = false; viewModel.findDuplicates() })
+                            }
                             DropdownMenuItem(text = { Text("Refresh") }, leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }, onClick = { menu = false; viewModel.reload() })
                             if (items.any { it.checked }) {
                                 DropdownMenuItem(text = { Text("Clear checked") }, leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }, onClick = { menu = false; viewModel.clearChecked() })

@@ -377,6 +377,33 @@ data class VoiceItem(val text: String, val quantity: Int = 1, val wanted: Boolea
 data class InterpretResponse(val items: List<VoiceItem> = emptyList())
 
 @Serializable
+data class DuplicateItem(val id: String, val text: String, val quantity: Int = 1, val folder: String? = null)
+
+/** Open items the server thinks mean the same product; the user decides what happens to them. */
+@Serializable
+data class DuplicateGroup(
+    val items: List<DuplicateItem>,
+    val reason: String = "",
+    val mergedText: String = "",
+    val mergedQuantity: Int = 1,
+    /** Literal repeats (same text), as opposed to the AI's judgement. */
+    val exact: Boolean = false,
+)
+
+@Serializable
+data class DedupeResponse(val groups: List<DuplicateGroup> = emptyList(), val scanned: Int = 0)
+
+/** What to do with one duplicate group. */
+sealed interface DuplicateResolution {
+    /** Keep one entry with the summed quantity, remove the rest. */
+    data object Merge : DuplicateResolution
+    /** Keep exactly this entry as is, remove the rest. */
+    data class Keep(val id: String) : DuplicateResolution
+    /** Leave every entry alone. */
+    data object KeepAll : DuplicateResolution
+}
+
+@Serializable
 data class ReceiptLine(
     val name: String,
     val quantity: Double = 1.0,

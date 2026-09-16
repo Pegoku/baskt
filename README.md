@@ -103,6 +103,16 @@ to be configured. `AI_STT_MODEL` switches model (`whisper-large-v3-turbo` is fas
 dictation its own endpoint and keys when the chat models live somewhere without Whisper, and `AI_STT=off`
 keeps every dictation on the phone.
 
+## Duplicates
+
+**Find duplicates** in the basket menu scans the open items. Entries that spell the same thing (or
+whose parsed generic names match) are grouped without AI; the model then looks for the rest: the same
+product in another language, singular/plural, or a generic entry next to a specific one. Real variants
+(whole vs semi-skimmed milk) are left alone. Each group gets one decision: merge into a single entry
+(keeps the one with the best product picks and sums the quantities), keep exactly one, or keep all.
+Nothing changes until you tap **Apply**; the edits go through the normal item operations, so they queue
+offline like any other change.
+
 ## Adding a supermarket
 
 Write one adapter in `backend/src/stores/` implementing `StoreAdapter` and register it in `backend/src/stores/registry.ts`. The app fetches the store list from the server, so it needs no change.
