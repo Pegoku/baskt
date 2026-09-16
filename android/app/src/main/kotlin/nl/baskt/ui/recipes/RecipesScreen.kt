@@ -76,13 +76,14 @@ import nl.baskt.ui.AppViewModel
 
 /**
  * Meal browser: search several recipe sites at once (the dish is understood and translated first),
- * your own and favourite recipes, and Discover: ideas from your stock, something new, or a country's cuisine.
+ * your library (own recipes, favourites and recently viewed), and Discover: ideas from your stock, something new, or a country's cuisine.
  */
 @Composable
 fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () -> Unit, onCreate: (String?) -> Unit) {
     val results by viewModel.recipeResults.collectAsState()
     val favourites by viewModel.recipeFavourites.collectAsState()
     val mine by viewModel.myRecipes.collectAsState()
+    val recent by viewModel.recentRecipes.collectAsState()
     val discoverParams by viewModel.discoverParams.collectAsState()
     val discoverDishes by viewModel.discoverDishes.collectAsState()
     val discoverByTime by viewModel.discoverByTime.collectAsState()
@@ -143,7 +144,7 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
             )
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                 SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 3)) { Text("Search") }
-                SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 3)) { Text("Favourites (${mine.size + favourites.size})") }
+                SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 3)) { Text("Library (${mine.size + favourites.size})") }
                 SegmentedButton(selected = tab == 2, onClick = { tab = 2 }, shape = SegmentedButtonDefaults.itemShape(2, 3)) { Text("Discover") }
             }
             if (busy) Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { LoadingIndicator(); Text("Searching recipe sites…") }
@@ -153,11 +154,11 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
                     empty = searchMessage ?: "Type a dish, e.g. \"arroz cubano\" or \"iets met kip\". baskt understands it, searches Allerhande, Leuke Recepten, BBC Good Food, RecetasGratis, Cookpad and TheMealDB, and shows results in your language.",
                     busy = busy,
                     isFavourite = ::isFavourite,
-                    onOpen = { selected = it; viewModel.openRecipe(it.url) },
+                    onOpen = { selected = it; viewModel.openRecipe(it) },
                     onFavourite = { viewModel.toggleRecipeFavourite(it) },
                     onFolder = { viewModel.addRecipeFolder(it.url); onFolderAdded() },
                 )
-                1 -> MineList(mine, favourites.map { RecipeSummary(it.title, it.url, it.imageUrl, source = "Favourite") }, viewModel, onEdit = { onCreate(it.id) }, onOpen = { selected = it; viewModel.openRecipe(it.url) }, onFolder = { viewModel.addRecipeFolder(it); onFolderAdded() })
+                1 -> MineList(mine, favourites.map { RecipeSummary(it.title, it.url, it.imageUrl, source = "Favourite") }, recent, viewModel, isFavourite = ::isFavourite, onEdit = { onCreate(it.id) }, onOpen = { selected = it; viewModel.openRecipe(it) }, onFolder = { viewModel.addRecipeFolder(it); onFolderAdded() })
                 else -> DiscoverPane(
                     params = discoverParams,
                     dishes = discoverDishes,
@@ -213,9 +214,9 @@ private fun RecipeList(list: List<RecipeSummary>, empty: String, busy: Boolean, 
 }
 
 @Composable
-private fun MineList(mine: List<UserRecipe>, favourites: List<RecipeSummary>, viewModel: AppViewModel, onEdit: (UserRecipe) -> Unit, onOpen: (RecipeSummary) -> Unit, onFolder: (String) -> Unit) {
-    if (mine.isEmpty() && favourites.isEmpty()) {
-        Text("Your own recipes and favourites appear here. Tap \"New recipe\" to write one or let the AI draft it from a description.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(20.dp))
+private fun MineList(mine: List<UserRecipe>, favourites: List<RecipeSummary>, recent: List<RecipeSummary>, viewModel: AppViewModel, isFavourite: (RecipeSummary) -> Boolean, onEdit: (UserRecipe) -> Unit, onOpen: (RecipeSummary) -> Unit, onFolder: (String) -> Unit) {
+    if (mine.isEmpty() && favourites.isEmpty() && recent.isEmpty()) {
+        Text("Your own recipes, favourites and recently viewed recipes appear here. Tap \"New recipe\" to write one or let the AI draft it from a description.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(20.dp))
         return
     }
     LazyColumn(contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -241,6 +242,26 @@ private fun MineList(mine: List<UserRecipe>, favourites: List<RecipeSummary>, vi
                     if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)))
                     nl.baskt.ui.common.TranslatedLabel(recipe.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                     IconButton(onClick = { viewModel.toggleRecipeFavourite(recipe) }) { Icon(Icons.Default.Favorite, contentDescription = "Remove favourite", tint = MaterialTheme.colorScheme.primary) }
+                    IconButton(onClick = { onFolder(recipe.url) }) { Icon(Icons.Default.CreateNewFolder, contentDescription = "Add as folder") }
+                }
+            }
+        }
+        if (recent.isNotEmpty()) item("h3") {
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Recently viewed", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                TextButton(onClick = { viewModel.clearRecentRecipes() }) { Text("Clear") }
+            }
+        }
+        items(recent, key = { "recent-" + it.url }) { recipe ->
+            val own = recipe.url.startsWith("baskt://recipe/")
+            Card(onClick = { onOpen(recipe) }) {
+                Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)))
+                    Column(modifier = Modifier.weight(1f)) {
+                        nl.baskt.ui.common.TranslatedLabel(recipe.displayTitle, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        if (recipe.source != null) Text(recipe.source, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    if (!own) IconButton(onClick = { viewModel.toggleRecipeFavourite(recipe) }) { Icon(if (isFavourite(recipe)) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "Favourite", tint = MaterialTheme.colorScheme.primary) }
                     IconButton(onClick = { onFolder(recipe.url) }) { Icon(Icons.Default.CreateNewFolder, contentDescription = "Add as folder") }
                 }
             }

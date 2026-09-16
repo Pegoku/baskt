@@ -42,11 +42,16 @@ class OfflineTest {
             val original = recipes.save(RecipeDraft("Soup", ingredientLines = listOf("2 carrots"), steps = listOf(RecipeStep("Boil"))), "manual")
             recipes.save(RecipeDraft("Carrot soup", ingredientLines = listOf("3 carrots")), "manual", original.id)
             recipes.toggle(RecipeSummary("Soup", original.url))
+            recipes.recordViewed(RecipeSummary("Pasta", "https://example.com/pasta"))
+            recipes.recordViewed(RecipeSummary("Soup", original.url))
+            recipes.recordViewed(RecipeSummary("Pasta", "https://example.com/pasta"))
             val restored = RecipeLibrary(api(), disk, repo).also { it.reloadLocal() }
             assertEquals("Carrot soup", restored.detail(original.url)?.title)
             assertEquals(1, restored.favourites.value.size)
+            assertEquals(listOf("https://example.com/pasta", original.url), restored.recent.value.map { it.url })
             restored.delete(original.id)
             assertTrue(restored.mine.value.isEmpty())
+            assertEquals(listOf("https://example.com/pasta"), restored.recent.value.map { it.url })
             assertEquals(listOf("recipeSave", "recipeUpdate", "favouriteAdd", "recipeDelete"), repo.pending.value.map { it.type })
         } finally { scope.cancel() }
     }

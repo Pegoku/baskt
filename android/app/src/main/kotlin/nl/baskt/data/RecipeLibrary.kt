@@ -8,15 +8,25 @@ import kotlinx.coroutines.flow.update
 class RecipeLibrary(private val api: BasktApi, private val offline: OfflineStore, private val basket: BasketRepository, private val cacheImages: (List<String>) -> Unit = {}) {
     val mine = MutableStateFlow<List<UserRecipe>>(emptyList())
     val favourites = MutableStateFlow<List<RecipeFavourite>>(emptyList())
+    /** Recipes opened on this device, newest first. Kept locally only, capped at [RECENT_LIMIT]. */
+    val recent = MutableStateFlow<List<RecipeSummary>>(emptyList())
 
     fun reloadLocal() {
         mine.value = offline.load("my-recipes") ?: emptyList()
         favourites.value = offline.load("recipe-favourites") ?: emptyList()
+        recent.value = offline.load("recipe-recent") ?: emptyList()
     }
     private fun persist() {
         offline.save("my-recipes", mine.value)
         offline.save("recipe-favourites", favourites.value)
+        offline.save("recipe-recent", recent.value)
     }
+    /** Moves [recipe] to the front of the recently viewed list. */
+    fun recordViewed(recipe: RecipeSummary) {
+        recent.update { list -> (listOf(recipe) + list.filterNot { it.url == recipe.url }).take(RECENT_LIMIT) }
+        persist()
+    }
+    fun clearRecent() { recent.value = emptyList(); persist() }
     suspend fun refresh() {
         if (!basket.online.value || basket.pending.value.isNotEmpty()) return
         try {
@@ -80,9 +90,14 @@ class RecipeLibrary(private val api: BasktApi, private val offline: OfflineStore
     fun discardLocal(ids: Set<String>) {
         mine.update { list -> list.filterNot { it.id in ids } }
         favourites.update { list -> list.filterNot { it.id in ids } }
+        recent.update { list -> list.filterNot { it.url.removePrefix("baskt://recipe/") in ids } }
         persist()
     }
     suspend fun delete(id: String) = basket.queued(PendingOp(type = "recipeDelete", itemId = id), {
-        mine.update { list -> list.filterNot { it.id == id } }; persist()
+        mine.update { list -> list.filterNot { it.id == id } }
+        recent.update { list -> list.filterNot { it.url == "baskt://recipe/$id" } }
+        persist()
     })
+
+    private companion object { const val RECENT_LIMIT = 20 }
 }

@@ -132,6 +132,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     val recipeResults: StateFlow<List<RecipeSummary>> = _recipeResults
     private val _recipeFavourites = container.recipes.favourites
     val recipeFavourites: StateFlow<List<RecipeFavourite>> = _recipeFavourites
+    val recentRecipes: StateFlow<List<RecipeSummary>> = container.recipes.recent
     private val _recipeDetail = MutableStateFlow<RecipeDetail?>(null)
     val recipeDetail: StateFlow<RecipeDetail?> = _recipeDetail
     private val _recipesBusy = MutableStateFlow(false)
@@ -187,12 +188,14 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     fun loadRecipeFavourites() = viewModelScope.launch { container.recipes.refresh() }
     fun toggleRecipeFavourite(recipe: RecipeSummary) = viewModelScope.launch { container.recipes.toggle(recipe) }
-    fun openRecipe(recipeUrl: String) = viewModelScope.launch {
-        _recipeDetail.value = container.recipes.detail(recipeUrl)
+    fun openRecipe(recipe: RecipeSummary) = viewModelScope.launch {
+        container.recipes.recordViewed(recipe)
+        _recipeDetail.value = container.recipes.detail(recipe.url)
         if (_recipeDetail.value == null) notify("This recipe has not been downloaded. Connect to open it.")
     }
 
     fun closeRecipe() { _recipeDetail.value = null }
+    fun clearRecentRecipes() = container.recipes.clearRecent()
 
     /** Discover tab: the current question, the ideas answering it (null until loaded), and how to order them. */
     private val _discoverParams = MutableStateFlow(DiscoverParams())

@@ -148,7 +148,7 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
             LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(messages, key = { it.id }) { message ->
                     if (message.role == "user") UserBubble(message.content)
-                    else AssistantMessage(viewModel, message, stores.map { it.code to it.name }.toMap(), onApply = { indices -> viewModel.applyProposal(message, indices) }, onOpenRecipe = { openRecipe = it; viewModel.openRecipe(it.url) }, onAddFolder = { viewModel.addRecipeFolder(it.url); onFolderAdded() })
+                    else AssistantMessage(viewModel, message, stores.map { it.code to it.name }.toMap(), onApply = { indices -> viewModel.applyProposal(message, indices) }, onOpenRecipe = { openRecipe = it; viewModel.openRecipe(nl.baskt.data.RecipeSummary(it.title, it.url, it.imageUrl, source = it.source)) }, onAddFolder = { viewModel.addRecipeFolder(it.url); onFolderAdded() })
                 }
                 if (busy) item("busy") {
                     // Live trace of the assistant's work: earlier steps dimmed, the current one with the spinner.
