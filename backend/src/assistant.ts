@@ -51,8 +51,8 @@ function save(row: Omit<ChatMessageRow, "id" | "createdAt">): ChatMessageRow {
   return full;
 }
 
-/** Compact view of the basket for the model: ids, texts, quantities, per-store picks with sizes and prices. */
-function basketSnapshot(basketId: string) {
+/** Compact view of the basket for the model: ids, texts, quantities, and on request the per-store picks. */
+function basketSnapshot(basketId: string, detail: boolean) {
   const items = db()
     .select()
     .from(basketItems)
@@ -60,6 +60,14 @@ function basketSnapshot(basketId: string) {
     .orderBy(asc(basketItems.sortOrder))
     .all()
     .filter((item) => item.kind === "item");
+  // Without the per-store picks a whole basket fits in one tool result; with them ~7 items fill the budget.
+  if (!detail)
+    return items.map((item) => ({
+      itemId: item.id,
+      text: item.text,
+      quantity: item.quantity,
+      checked: item.checked,
+    }));
   const ids = items.map((item) => item.id);
   const matches = ids.length
     ? db()
@@ -106,6 +114,17 @@ function basketSnapshot(basketId: string) {
   });
 }
 
+/** Items and recipe folders sitting directly in the basket; deleting a folder takes its children with it. */
+function topLevelRows(basketId: string) {
+  return db()
+    .select()
+    .from(basketItems)
+    .where(eq(basketItems.basketId, basketId))
+    .orderBy(asc(basketItems.sortOrder))
+    .all()
+    .filter((item) => !item.parentId);
+}
+
 type ToolCall = { name: string; args: Record<string, unknown> };
 
 /** What the assistant is doing right now, per basket, for the app to show while it waits. */
@@ -150,8 +169,18 @@ function describeTool(call: ToolCall): string {
 const TOOL_SPECS = [
   {
     name: "list_basket",
-    description: "Items in the basket with the chosen product per store.",
-    parameters: { type: "object", properties: {} },
+    description:
+      "Every item in the basket. Pass detail=true to also get the chosen product per store.",
+    parameters: {
+      type: "object",
+      properties: {
+        detail: {
+          type: "boolean",
+          description:
+            "include the per-store pick (productId, title, size, price); only needed for product swaps",
+        },
+      },
+    },
   },
   {
     name: "list_stock",
@@ -190,11 +219,35 @@ const TOOL_SPECS = [
   },
 ].map((fn) => ({ type: "function", function: fn }));
 
+/** Budget per tool for the result text fed back to the model (free tiers meter tokens per minute). */
+const TOOL_RESULT_CHARS: Record<string, number> = {
+  list_basket: 6000,
+  list_stock: 4000,
+};
+
+/**
+ * Tool results go back to the model as text. Drop whole entries instead of raw characters: a mid-JSON cut
+ * used to hand the model half a basket, so "delete everything" only ever proposed the first handful of items.
+ */
+export function toolResultText(result: unknown, tool: string): string {
+  const budget = TOOL_RESULT_CHARS[tool] ?? 2500;
+  const json = JSON.stringify(result);
+  if (json.length <= budget) return json;
+  if (!Array.isArray(result)) return `${json.slice(0, budget)}… (truncated)`;
+  let kept = result.length;
+  while (kept > 0 && JSON.stringify(result.slice(0, kept)).length > budget)
+    kept -= 1;
+  return `${JSON.stringify(result.slice(0, kept))}\n(only the first ${kept} of ${result.length} entries are shown)`;
+}
+
 async function runTool(call: ToolCall, basketId: string): Promise<unknown> {
   const args = call.args ?? {};
   switch (call.name) {
     case "list_basket":
-      return basketSnapshot(basketId);
+      return basketSnapshot(
+        basketId,
+        args.detail === true || args.detail === "true",
+      );
     case "list_stock": {
       const { listStock } = await import("@/stock");
       return listStock().map((row) => ({
@@ -258,10 +311,12 @@ Answer in ${language}. Be brief.
 
 Work in steps. Each turn return ONLY a JSON object:
 {"answer": string, "tool": {"name","args"} | null, "proposal": {"summary", "changes": [...]} | null, "recipes": [{"title","url","source","imageUrl"}] | null}
-Tools: list_basket (items: itemId, quantity, per-store pick with productId/title/size/price) · list_stock (what is at home) · search_products {store, query} (store codes: STORES) · search_recipes {query} (recipe cards) · read_recipe {url} (ingredients + steps).
-Change types (real itemIds/productIds from tool results only): {"type":"add","text","quantity"} · {"type":"delete","itemId","text"} · {"type":"rename","itemId","from","to"} · {"type":"quantity","itemId","text","quantity"} · {"type":"replace","itemId","text","store","productId","from","to"} · {"type":"skip","itemId","text","store"} · {"type":"add_recipe_folder","url","title"}.
+Tools: list_basket {detail} (every item: itemId, text, quantity; detail=true also gives the per-store pick with productId/title/size/price) · list_stock (what is at home) · search_products {store, query} (store codes: STORES) · search_recipes {query} (recipe cards) · read_recipe {url} (ingredients + steps).
+Change types (real itemIds/productIds from tool results only): {"type":"add","text","quantity"} · {"type":"delete","itemId","text"} · {"type":"delete_all"} (empties the basket; the app expands it to one row per item) · {"type":"rename","itemId","from","to"} · {"type":"quantity","itemId","text","quantity"} · {"type":"replace","itemId","text","store","productId","from","to"} · {"type":"skip","itemId","text","store"} · {"type":"add_recipe_folder","url","title"}.
 Rules:
-- Product swaps (e.g. "1 kg bags to 500 g"): list_basket, then search_products per store; propose "replace" only where you found a fitting product and say which you could not.
+- Emptying the basket ("delete everything", "clear the list"): ONE {"type":"delete_all"} change, never a list of deletes, and no need to call list_basket first.
+- A tool result ending in "only the first N of M entries are shown" is incomplete: never conclude from it that the basket is empty or that you have seen everything.
+- Product swaps (e.g. "1 kg bags to 500 g"): list_basket {"detail":true}, then search_products per store; propose "replace" only where you found a fitting product and say which you could not.
 - Never ask permission in text; put ALL changes in "proposal" in the same turn. The app shows it as a card titled "summary" (e.g. "What you still need to buy for pancakes").
 - "answer" is ONLY for answering a question (e.g. cooking time) or a warning; "" when the card says it all; NEVER name items that are in "changes". Plain text, no markdown.
 - Recipes: ALWAYS search_recipes first and return real results in "recipes" (max 5); never invent one. Use read_recipe when the user is specific.
@@ -340,7 +395,10 @@ function withNamedDuplicates(
     : { ...proposal, changes };
 }
 
-function sanitizeProposal(raw: unknown, basketId: string): Proposal | null {
+export function sanitizeProposal(
+  raw: unknown,
+  basketId: string,
+): Proposal | null {
   if (!raw || typeof raw !== "object") return null;
   const record = raw as { summary?: unknown; changes?: unknown };
   const changes: ProposedChange[] = [];
@@ -377,6 +435,18 @@ function sanitizeProposal(raw: unknown, basketId: string): Proposal | null {
       case "delete":
         if (item)
           changes.push({ type: "delete", itemId: item.id, text: item.text });
+        break;
+      // "Empty the basket" as one change: the model cannot be trusted to echo every itemId, so expand it here.
+      case "delete_all":
+        for (const row of topLevelRows(basketId)) {
+          if (
+            changes.some(
+              (done) => done.type === "delete" && done.itemId === row.id,
+            )
+          )
+            continue;
+          changes.push({ type: "delete", itemId: row.id, text: row.text });
+        }
         break;
       case "rename":
         if (item && typeof change.to === "string" && change.to.trim())
@@ -585,7 +655,7 @@ export async function chat(
       });
       messages.push({
         role: "user",
-        content: `TOOL RESULT ${tool.name}: ${JSON.stringify(result).slice(0, 2500)}${
+        content: `TOOL RESULT ${tool.name}: ${toolResultText(result, tool.name)}${
           tool.name === "list_basket" || tool.name === "list_stock"
             ? "\n(Reminder: items the user explicitly named to add must still appear as add changes even if they are listed here; the app marks duplicates.)"
             : ""
