@@ -14,6 +14,7 @@ import { buildRecipeGroup, itemsForServings, looksLikeRecipe, type RecipeItem } 
 import { expandDealQuery, findDeals } from "@/matching/deals";
 import { termRelevance } from "@/stores/promotions";
 import { interpretVoice } from "@/matching/voice";
+import { findDuplicates } from "@/matching/dedupe";
 import { speechTranscript } from "@/routes/speech";
 import { fetchRecipe, getUserRecipe, userRecipeAsRecipe } from "@/routes/recipes";
 import { localizeRecipe } from "@/matching/localize";
@@ -440,6 +441,23 @@ basket.post("/dictate", async (c) => {
   const transcript = await speechTranscript(c);
   if (typeof transcript !== "string") return transcript;
   return c.json({ transcript, items: transcript ? await interpretVoice(transcript) : [] });
+});
+
+/**
+ * Deduplication: open items that mean the same thing, grouped. Nothing changes here; the app applies the
+ * user's decision (merge, keep one, keep all) through the normal item endpoints.
+ */
+basket.post("/dedupe", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { basketId?: string };
+  const basketId = body.basketId ?? DEFAULT_BASKET_ID;
+  if (!basketExists(basketId)) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
+  const rows = childrenAndItems(basketId);
+  const folders = new Map(rows.filter((row) => row.kind === "group").map((row) => [row.id, row.text]));
+  const open = rows.filter((row) => row.kind === "item" && !row.checked);
+  const groups = await findDuplicates(
+    open.map((row) => ({ id: row.id, text: row.text, quantity: row.quantity, canonical: row.parsedJson?.canonicalName ?? null, folder: row.parentId ? folders.get(row.parentId) ?? null : null })),
+  );
+  return c.json({ groups, scanned: open.length });
 });
 
 /** Adds a confirmed proposal: plain items and recipe folders in one go. */
