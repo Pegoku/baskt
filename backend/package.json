@@ -11,7 +11,8 @@
     "db:generate": "bunx drizzle-kit generate",
     "bench": "bun scripts/llm-bench.ts",
     "logs": "bun scripts/logs.ts",
-    "tts:previews": "bun scripts/tts-previews.ts"
+    "tts:previews": "bun scripts/tts-previews.ts",
+    "tts:export": "bun scripts/tts-export.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.44.0",

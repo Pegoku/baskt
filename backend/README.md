@@ -124,3 +124,15 @@ prediction IDs and provider-confirmed language settings, never keys, spoken text
 Provider history may expire; local logs retain confirmation for newly generated speech.
 Audio previews are cached for 90 days and are generated only on demand unless the preview
 command above is explicitly run.
+
+Export cached Spanish previews to MP3 without contacting the provider:
+
+```sh
+bun run tts:export es
+# Or choose a destination:
+bun run tts:export es /path/to/voices
+```
+
+Default output: `backend/data/tts-export/es/`, grouped by model and named by voice ID.
+MiniMax MP3s are copied directly. Qwen WAVs are converted locally with `ffmpeg`.
+Existing files are skipped; missing cached previews are listed without generating them.
