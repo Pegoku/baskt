@@ -85,7 +85,7 @@ export function noteFailure(id: string, error: string, cooldownMs = 0) {
 /** Per-provider counters for /health and the benchmark. */
 export function poolStats() {
   const pools: Record<string, unknown[]> = {};
-  for (const profile of ["default", "assistant", "vision", "stt"] as const) {
+  for (const profile of ["default", "assistant", "vision", "stt", "replicate"] as const) {
     if (profile === "assistant" && !env.ai.assistant.length) continue; // shares the chat pool
     const providers = aiPool(profile);
     if (!providers.length) continue;

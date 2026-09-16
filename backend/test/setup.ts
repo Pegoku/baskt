@@ -1,7 +1,7 @@
-// Tests must never hit the real AI provider or depend on a developer's .env (Bun loads it automatically),
-// including the numbered load-balancer slots (AI_2_API_KEY, AI_VISION_..., AI_STT_...).
+// Tests must never hit a real provider or depend on a developer's .env (Bun loads it automatically),
+// including the numbered load-balancer slots (AI_2, AI_VISION_..., AI_STT_..., REPLICATE_2).
 for (const key of Object.keys(process.env)) {
-  if (/^(AI|HACKCLUB_AI)_/.test(key)) delete process.env[key];
+  if (/^(AI|HACKCLUB_AI|REPLICATE)_/.test(key)) delete process.env[key];
 }
 process.env.APP_API_TOKEN = "secret";
 process.env.DATABASE_PATH = ":memory:";

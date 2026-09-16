@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import { speechCatalogue, speechSamples, speechChoice, synthesize } from "@/ai/speak";
+import { speechCatalogue, speechConfigured, speechSamples, speechChoice, synthesize } from "@/ai/speak";
 
 export const tts = new Hono();
-tts.get("/voices", (c) => c.json({ configured: !!process.env.REPLICATE_API_TOKEN, models: speechCatalogue(c.req.query("language")) }));
+tts.get("/voices", (c) => c.json({ configured: speechConfigured(), models: speechCatalogue(c.req.query("language")) }));
 tts.post("/", async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body || typeof body.model !== "string" || typeof body.voice !== "string" || typeof body.language !== "string" ||

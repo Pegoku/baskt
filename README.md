@@ -77,6 +77,10 @@ above — a second account really is one word. `key=`, `model=`, `url=`, `priori
 `order=` and `quant=` name a field explicitly (the last two carry OpenRouter's routing and use `|`
 between values, since commas separate fields).
 
+Speech synthesis has the same pools under `REPLICATE_API_TOKEN` / `REPLICATE_2` … — one Replicate (or
+Hack Club proxy) account per line, each with its own daily spending cap, so a cap that is reached moves
+the next clip to the next token instead of failing.
+
 Priority (default 1) decides the order: the lowest number is tried first and providers sharing a number
 are used round-robin, which spreads the load over both keys and doubles a per-minute quota. A paid
 fallback at priority 2 is only used when the free ones are exhausted. A provider that fails is skipped

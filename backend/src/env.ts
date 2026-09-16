@@ -24,7 +24,7 @@ export type AiTarget = {
 export type AiProvider = AiTarget & { id: string; priority: number };
 
 /** Which purpose a pool serves; each has its own env prefix and its own round-robin cursor. */
-export type AiProfile = "default" | "assistant" | "vision" | "stt";
+export type AiProfile = "default" | "assistant" | "vision" | "stt" | "replicate";
 
 const MAX_SLOTS = 9;
 
@@ -103,13 +103,14 @@ function assign(slot: AiSlot, name: keyof AiSlot, value: string) {
 /**
  * Reads a pool: the first provider comes from the plain `PREFIX_BASE_URL`/`PREFIX_API_KEY`/`PREFIX_MODEL`
  * variables (or a `PREFIX_1` line), the rest from one line each in `PREFIX_2` … `PREFIX_9`. Providers
- * without a key or a model are dropped. `activatedBy` narrows which of its own variables make a pool
- * count as configured. Exported for the tests.
+ * without a key are dropped, and without a model too unless `requireModel` is false (Replicate takes the
+ * model per request). `activatedBy` narrows which of its own variables make a pool count as configured.
+ * Exported for the tests.
  */
 export function readPool(
   prefix: string,
   base: Omit<AiTarget, "providerOrder" | "providerQuantizations">,
-  options: { requireOwnVars?: boolean; activatedBy?: string[] } = {},
+  options: { requireOwnVars?: boolean; activatedBy?: string[]; requireModel?: boolean } = {},
 ): AiProvider[] {
   const own = (name: string) => process.env[`${prefix}_${name}`]?.trim() || undefined;
   const classic: AiSlot = {
@@ -124,13 +125,14 @@ export function readPool(
   const line = own("1");
   const first = (line && parseProvider(line, classic, `${prefix}_1`)) || classic;
   const configured = (options.activatedBy ?? ["1", "BASE_URL", "API_KEY", "MODEL", "REASONING", "PRIORITY", "PROVIDER_ORDER", "PROVIDER_QUANTIZATIONS"]).some(own);
+  const usable = (target: AiSlot | null) => Boolean(target?.apiKey && (target.model || options.requireModel === false));
   const pool: AiProvider[] = [];
-  if ((configured || !options.requireOwnVars) && first.apiKey && first.model) pool.push({ ...first, id: `${prefix}_1` });
+  if ((configured || !options.requireOwnVars) && usable(first)) pool.push({ ...first, id: `${prefix}_1` });
   for (let slot = 2; slot <= MAX_SLOTS; slot += 1) {
     const entry = own(String(slot));
     if (!entry) continue;
     const target = parseProvider(entry, first, `${prefix}_${slot}`);
-    if (target?.apiKey && target.model) pool.push({ ...target, id: `${prefix}_${slot}` });
+    if (usable(target)) pool.push({ ...target!, id: `${prefix}_${slot}` });
   }
   return pool;
 }
@@ -176,6 +178,21 @@ export const env = {
      * pool, which serve whisper-large-v3 on the same key; when nothing speaks it the app dictates on-device.
      */
     stt: sttPool(),
+    /**
+     * Speech synthesis through Replicate (Hack Club's proxy by default). Each account has its own daily
+     * spending cap, so a second token is a second budget: `REPLICATE_2=...`. The model is part of every
+     * request, not of the provider.
+     */
+    replicate: readPool(
+      "REPLICATE",
+      {
+        baseUrl: process.env.REPLICATE_BASE_URL ?? "https://ai.hackclub.com/proxy/v1/replicate",
+        apiKey: process.env.REPLICATE_API_TOKEN ?? "",
+        model: "",
+        reasoning: "none",
+      },
+      { requireModel: false },
+    ),
   },
   storeProxyUrl: process.env.STORE_PROXY_URL?.trim() || undefined,
   /** Set RECIPE_LOOKUP=off to skip fetching recipe pages (tests, offline). */
@@ -215,6 +232,7 @@ export function aiPool(profile: AiProfile = "default"): AiProvider[] {
   if (profile === "assistant") return env.ai.assistant.length ? env.ai.assistant : env.ai.chat;
   if (profile === "vision") return env.ai.vision;
   if (profile === "stt") return env.ai.stt;
+  if (profile === "replicate") return env.ai.replicate;
   return env.ai.chat;
 }
 

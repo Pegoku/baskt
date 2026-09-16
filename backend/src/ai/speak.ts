@@ -1,3 +1,5 @@
+import { attemptOrder, cooldownFor, noteCall, noteFailure, noteUsage } from "@/ai/pool";
+import { aiPool, type AiProvider } from "@/env";
 import { speechLog } from "@/lib/speech-log";
 import { minimaxVoices } from "@/ai/minimax-voices";
 import { cachedUpstream } from "@/lib/cache";
@@ -25,7 +27,17 @@ export const minimaxLanguageBoost: Record<string, string> = {
   el: "Greek", cs: "Czech", fi: "Finnish", hi: "Hindi", nl: "Dutch",
   ar: "Arabic", tr: "Turkish", uk: "Ukrainian", vi: "Vietnamese",
 };
-const base = "https://ai.hackclub.com/proxy/v1/replicate";
+/** Whether any speech provider is configured (REPLICATE_API_TOKEN, REPLICATE_2, ...). */
+export function speechConfigured() {
+  return aiPool("replicate").length > 0;
+}
+
+/** A failure of this account — the same request is worth trying on the next token in the pool. */
+class ProviderError extends Error {
+  constructor(message: string, readonly cooldownMs: number) {
+    super(message);
+  }
+}
 export function speechChoice(modelId: string, voice: string, language: string) {
   const model = speechModels.find((item) => item.id === modelId);
   if (!model || !model.voices.includes(voice) || !model.languages.includes(language)) return null;
@@ -41,18 +53,24 @@ export const speechSamples: Record<string, string> = {
   fr: "Bonjour ! Je suis votre assistant de courses. Que souhaitez-vous cuisiner aujourd'hui ?",
 };
 type Prediction = { id?: string; status?: string; output?: unknown; input?: { language_boost?: string; language?: string } };
-async function prediction(path: string, body?: unknown): Promise<Prediction> {
-  const response = await fetch(base + path, {
-    method: body ? "POST" : "GET",
-    headers: { Authorization: `Bearer ${process.env.REPLICATE_API_TOKEN}`, "Content-Type": "application/json", Prefer: "wait=20" },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-    signal: AbortSignal.timeout(30000),
-  });
+async function prediction(target: AiProvider, path: string, body?: unknown): Promise<Prediction> {
+  let response: Response;
+  try {
+    response = await fetch(target.baseUrl + path, {
+      method: body ? "POST" : "GET",
+      headers: { Authorization: `Bearer ${target.apiKey}`, "Content-Type": "application/json", Prefer: "wait=20" },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      signal: AbortSignal.timeout(30000),
+    });
+  } catch (error) {
+    throw new ProviderError(`Speech provider unreachable (${error instanceof Error ? error.message : error})`, 15_000);
+  }
   if (!response.ok) {
     // Classify the known spending cap without exposing arbitrary provider response content.
     const detail = response.status === 429 ? await response.text() : "";
-    if (/daily spending limit/i.test(detail)) throw new Error("Speech provider daily spending limit reached");
-    throw new Error(`Speech provider unavailable (${response.status})`);
+    // The cap resets daily, so park this token for a while instead of asking it again every minute.
+    if (/daily spending limit/i.test(detail)) throw new ProviderError("Speech provider daily spending limit reached", 30 * 60_000);
+    throw new ProviderError(`Speech provider unavailable (${response.status})`, cooldownFor(response.status, response.headers.get("retry-after")));
   }
   return response.json() as Promise<Prediction>;
 }
@@ -75,7 +93,7 @@ export function speechInput(text: string, model: string, voice: string, language
 }
 /** Persist audio bytes, since Replicate output links expire. Coalesce simultaneous cache misses. */
 export async function synthesize(text: string, model: string, voice: string, language: string): Promise<Uint8Array> {
-  if (!process.env.REPLICATE_API_TOKEN) throw new Error("Speech is not configured");
+  if (!speechConfigured()) throw new Error("Speech is not configured");
   const minimax = model.startsWith("minimax/");
   const boost = minimax ? minimaxLanguageBoost[language] : undefined;
   if (minimax && !boost) throw new Error("Unsupported MiniMax speech language");
@@ -90,26 +108,31 @@ export async function synthesize(text: string, model: string, voice: string, lan
     const audio = await cachedUpstream(key, 90 * 86400000, async () => {
       generated = true;
       speechLog("generation", metadata);
-      let result = await prediction(`/models/${model}/predictions`, { input });
-      speechLog("prediction", { ...metadata, predictionId: result.id, status: result.status,
-        confirmedLanguageBoost: result.input?.language_boost, confirmedLanguage: result.input?.language });
-      const deadline = Date.now() + 90000;
-      while (result.status !== "succeeded") {
-        if (["failed", "canceled"].includes(result.status ?? "") || !result.id || !/^[a-zA-Z0-9_-]+$/.test(result.id)) throw new Error("Speech generation failed");
-        if (Date.now() > deadline) throw new Error("Speech generation timed out");
-        await new Promise((resolve) => setTimeout(resolve, 700));
-        result = await prediction("/predictions/" + result.id);
-      }
-      speechLog("generated", { ...metadata, predictionId: result.id, status: result.status,
-        confirmedLanguageBoost: result.input?.language_boost, confirmedLanguage: result.input?.language });
-      const url = speechOutput(result.output);
-      if (!url) throw new Error("Speech provider returned no audio");
-      const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(30000),
-        headers: new URL(url).hostname === "ai.hackclub.com" ? { Authorization: `Bearer ${process.env.REPLICATE_API_TOKEN}` } : {} });
-      if (!response.ok) throw new Error("Could not download speech");
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (!bytes.length || bytes.length > 10 * 1024 * 1024) throw new Error("Invalid speech audio");
-      return Buffer.from(bytes).toString("base64");
+      // A prediction id only exists on the account that created it, so one token runs the whole
+      // generation; only a provider-level failure (cap reached, endpoint down) moves to the next.
+      return await onAnyProvider(async (target) => {
+        let result = await prediction(target, `/models/${model}/predictions`, { input });
+        speechLog("prediction", { ...metadata, provider: target.id, predictionId: result.id, status: result.status,
+          confirmedLanguageBoost: result.input?.language_boost, confirmedLanguage: result.input?.language });
+        const deadline = Date.now() + 90000;
+        while (result.status !== "succeeded") {
+          if (["failed", "canceled"].includes(result.status ?? "") || !result.id || !/^[a-zA-Z0-9_-]+$/.test(result.id)) throw new Error("Speech generation failed");
+          if (Date.now() > deadline) throw new Error("Speech generation timed out");
+          await new Promise((resolve) => setTimeout(resolve, 700));
+          result = await prediction(target, "/predictions/" + result.id);
+        }
+        speechLog("generated", { ...metadata, provider: target.id, predictionId: result.id, status: result.status,
+          confirmedLanguageBoost: result.input?.language_boost, confirmedLanguage: result.input?.language });
+        const url = speechOutput(result.output);
+        if (!url) throw new Error("Speech provider returned no audio");
+        const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(30000),
+          headers: new URL(url).hostname === "ai.hackclub.com" ? { Authorization: `Bearer ${target.apiKey}` } : {} });
+        if (!response.ok) throw new Error("Could not download speech");
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (!bytes.length || bytes.length > 10 * 1024 * 1024) throw new Error("Invalid speech audio");
+        noteUsage(target.id, 0, 0);
+        return Buffer.from(bytes).toString("base64");
+      });
     });
     const bytes = Buffer.from(audio, "base64");
     speechLog("ready", { ...metadata, source: generated ? "generated" : "cache-or-shared", bytes: bytes.length, elapsedMs: Date.now() - started });
@@ -118,4 +141,28 @@ export async function synthesize(text: string, model: string, voice: string, lan
     speechLog("failed", { ...metadata, reason: error instanceof Error && error.message === "Speech provider daily spending limit reached" ? "daily-spending-limit" : "provider-or-audio-error", elapsedMs: Date.now() - started });
     throw error;
   }
+}
+
+/**
+ * Runs one generation on the speech pool: best priority first, round-robin between equal ones. Only a
+ * ProviderError moves on — a rejected voice or a failed prediction would fail the same way everywhere and
+ * generating it twice costs money.
+ */
+async function onAnyProvider<T>(run: (target: AiProvider) => Promise<T>): Promise<T> {
+  const order = attemptOrder("replicate");
+  let last: unknown = new Error("Speech is not configured");
+  for (const target of order) {
+    noteCall(target.id);
+    try {
+      return await run(target);
+    } catch (error) {
+      if (!(error instanceof ProviderError)) {
+        noteFailure(target.id, error instanceof Error ? error.message : String(error));
+        throw error;
+      }
+      noteFailure(target.id, error.message, error.cooldownMs);
+      last = error;
+    }
+  }
+  throw last;
 }

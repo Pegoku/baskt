@@ -103,7 +103,9 @@ IDs. Serving changes can include explicit `children` (`id`, `text`, `quantity`) 
 
 ### Speech previews and logs
 
-TTS uses the Hack Club Replicate proxy. Set `REPLICATE_API_TOKEN` in the backend's ignored `.env`.
+TTS uses the Hack Club Replicate proxy. Set `REPLICATE_API_TOKEN` in the backend's ignored `.env`, and
+`REPLICATE_2` … for further accounts: the pool round-robins between them, and a token that reports its
+daily spending cap is parked for half an hour while the others keep answering.
 The app selects models and voices from the server catalogue. Qwen3 TTS uses its nine preset
 speakers in `custom_voice` mode with an explicit language; MiniMax sends `language_boost`
 matching the selected language.
