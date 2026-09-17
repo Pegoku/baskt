@@ -227,6 +227,11 @@ export function aiConfigured() {
   return env.ai.chat.length > 0;
 }
 
+/** An image-capable pool is set up (receipt photos, product pictures). */
+export function visionConfigured() {
+  return env.ai.vision.length > 0;
+}
+
 /** The providers to try for a purpose, best first; the assistant falls back to the chat pool. */
 export function aiPool(profile: AiProfile = "default"): AiProvider[] {
   if (profile === "assistant") return env.ai.assistant.length ? env.ai.assistant : env.ai.chat;

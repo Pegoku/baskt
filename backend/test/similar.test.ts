@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { resetDbForTests } from "@/db";
 import { createApp } from "@/app";
-import { findSimilar, heuristicKind, heuristicQueries } from "@/matching/similar";
+import { findSimilar, heuristicKind, heuristicQueries, setSimilarFeedback } from "@/matching/similar";
 import { setAdaptersForTests } from "@/stores/registry";
 import { toRow, upsertProducts } from "@/stores/search";
 import { StoreThrottle } from "@/stores/throttle";
@@ -98,7 +98,30 @@ describe("similar products", () => {
     expect(body.results.map((result) => result.store).sort()).toEqual(["AH", "JUMBO"]);
     expect(body.results.every((result) => result.matches.length <= 2)).toBe(true);
     expect(body.results[0].queries.length).toBeGreaterThan(0);
+    expect((await api("/products/JUMBO:b/similar?limit=99")).status).toBe(200);
     expect((await api("/products/NOPE:1/similar")).status).toBe(404);
     expect((await api("/products/JUMBO:b/similar?store=LIDL")).status).toBe(400);
+  });
+
+  test("thumbs down hides a pairing, thumbs up pins it first, null forgets", async () => {
+    const reference = toRow(campinaJumbo);
+    setSimilarFeedback(reference.id, "AH:2", false);
+    setSimilarFeedback(reference.id, "AH:3", true);
+    const [atAh] = await findSimilar(reference, ["AH"], { limit: 5 });
+    const ids = atAh.matches.map((match) => match.product.id);
+    expect(ids).not.toContain("AH:2");
+    expect(ids[0]).toBe("AH:3");
+    expect(atAh.matches[0].feedback).toBe("UP");
+    expect(atAh.vision).toBe(false);
+
+    const response = await api("/products/JUMBO:b/similar/feedback", { method: "POST", body: JSON.stringify({ productId: "AH:2", up: null }) });
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { feedback: string | null }).feedback).toBeNull();
+    const [again] = await findSimilar(reference, ["AH"], { limit: 5 });
+    expect(again.matches.map((match) => match.product.id)).toContain("AH:2");
+
+    expect((await api("/products/JUMBO:b/similar/feedback", { method: "POST", body: JSON.stringify({ productId: "JUMBO:b", up: true }) })).status).toBe(400);
+    expect((await api("/products/JUMBO:b/similar/feedback", { method: "POST", body: JSON.stringify({ productId: "AH:1" }) })).status).toBe(400);
+    expect((await api("/products/NOPE:1/similar/feedback", { method: "POST", body: JSON.stringify({ productId: "AH:1", up: true }) })).status).toBe(404);
   });
 });

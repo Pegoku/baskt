@@ -237,6 +237,19 @@ export type Proposal = { summary: string; changes: ProposedChange[]; applied: nu
 export type RecipeCard = { title: string; url: string; source: string | null; imageUrl: string | null };
 export type ChatMessageRow = typeof chatMessages.$inferSelect;
 
+/** Thumbs up/down on a "find similar" result: which product is (not) a stand-in for the reference. */
+export const similarFeedback = sqliteTable(
+  "similar_feedback",
+  {
+    referenceProductId: text("reference_product_id").notNull(),
+    productId: text("product_id").notNull(),
+    up: integer("up", { mode: "boolean" }).notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.referenceProductId, table.productId] })],
+);
+export type SimilarFeedbackRow = typeof similarFeedback.$inferSelect;
+
 export const aiCache = sqliteTable(
   "ai_cache",
   {

@@ -1,6 +1,6 @@
 import { speechTranscript } from "@/routes/speech";
 import { translateContent } from "@/matching/translate";
-import { findSimilar } from "@/matching/similar";
+import { findSimilar, setSimilarFeedback, SIMILAR_MAX } from "@/matching/similar";
 import { productDetails } from "@/stores/details";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -107,8 +107,19 @@ meta.get("/products/:id/similar", async (c) => {
   const requested = c.req.query("store");
   const stores = requested ? [requested] : enabledStoreCodes();
   if (stores.some((code) => !hasStore(code))) return c.json({ error: { code: "BAD_REQUEST", message: "unknown store" } }, 400);
-  const limit = Math.min(Number(c.req.query("limit") ?? 5) || 5, 10);
+  const limit = Math.min(Number(c.req.query("limit") ?? 8) || 8, SIMILAR_MAX);
   return c.json({ product, results: await findSimilar(product, stores, { limit }) });
+});
+
+/** Thumbs on a similar-product pairing: `{productId, up: true|false|null}` (null forgets it). */
+meta.post("/products/:id/similar/feedback", async (c) => {
+  const reference = db().select({ id: products.id }).from(products).where(eq(products.id, c.req.param("id"))).get();
+  if (!reference) return c.json({ error: { code: "NOT_FOUND", message: "product not found" } }, 404);
+  const body = (await c.req.json().catch(() => null)) as { productId?: unknown; up?: unknown } | null;
+  if (!body || typeof body.productId !== "string" || !(typeof body.up === "boolean" || body.up === null))
+    return c.json({ error: { code: "BAD_REQUEST", message: "productId and up (true, false or null) are required" } }, 400);
+  if (body.productId === reference.id) return c.json({ error: { code: "BAD_REQUEST", message: "a product cannot be its own match" } }, 400);
+  return c.json({ referenceProductId: reference.id, productId: body.productId, feedback: setSimilarFeedback(reference.id, body.productId, body.up) });
 });
 
 meta.get("/products/:id/details", async (c) => {

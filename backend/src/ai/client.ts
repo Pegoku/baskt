@@ -2,9 +2,15 @@ import { and, eq } from "drizzle-orm";
 import { db, now } from "@/db";
 import { aiCache } from "@/db/schema";
 import { attemptOrder, cooldownFor, cooldownLeft, noteCall, noteFailure, noteUsage, poolStats, resetPoolStats } from "@/ai/pool";
-import { aiConfigured, aiVendor, env, type AiTarget } from "@/env";
+import { aiConfigured, aiVendor, env, type AiProfile, type AiTarget } from "@/env";
 
-export type ChatMessage = { role: "system" | "user"; content: string };
+export type ChatPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
+/** Content is a string for text models; vision calls send a list of text and image parts. */
+export type ChatMessage = { role: "system" | "user"; content: string | ChatPart[] };
+
+function messageText(message: ChatMessage) {
+  return typeof message.content === "string" ? message.content : message.content.map((part) => (part.type === "text" ? part.text : "")).join(" ");
+}
 
 let calls = 0;
 let failures = 0;
@@ -41,7 +47,7 @@ export async function chatJson<T>(
     maxTokens?: number;
     retries?: number;
     tools?: unknown[];
-    profile?: "default" | "assistant";
+    profile?: AiProfile;
   } = {},
 ): Promise<T | null> {
   // The attempt order balances the pool: best priority first, round-robin between equal ones.
@@ -68,7 +74,7 @@ export async function chatJson<T>(
         body: JSON.stringify({
           model: target.model,
           // Some providers (Alibaba's Qwen) refuse JSON mode unless the prompt literally mentions JSON.
-          messages: messages.some((message) => /json/i.test(message.content))
+          messages: messages.some((message) => /json/i.test(messageText(message)))
             ? messages
             : [
                 ...messages,
@@ -283,7 +289,7 @@ export async function cachedChatJson<T>(
   kind: string,
   key: string,
   messages: ChatMessage[],
-  options: { maxTokens?: number } = {},
+  options: { maxTokens?: number; profile?: AiProfile } = {},
 ): Promise<T | null> {
   const database = db();
   const hit = database
