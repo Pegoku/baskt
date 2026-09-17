@@ -120,9 +120,20 @@ stores**. The server works out what the product is and searches every enabled st
 the exact product with its brand, then the same type and size, then the store's own equivalent. Results
 per store are labelled **Same product** (same brand, variant and pack), **Similar** (same thing from
 another brand or in another pack size, with a short note on what differs) or **Substitute**. The
-product's own store lists alternatives instead. The add button pins that product for its store and
-matches the other stores as usual, exactly like adding from a scan. The last answer is kept for
-offline viewing.
+product's own store lists alternatives instead. Up to 12 results per store come back; the sheet shows
+four and **Show more** unfolds the rest. The add button pins that product for its store and matches the
+other stores as usual, exactly like adding from a scan. The last answer is kept for offline viewing.
+
+When a vision pool is configured (`AI_VISION_*`, the same one that reads receipts; gpt-oss cannot see
+images, so this is Gemini or another picture model), the packaging pictures are compared as well as the
+titles: the reference picture is read first to work out brand, variant and flavour, then every candidate
+picture is compared against it in groups of four. Without a vision provider the comparison is by name and
+size only, and the sheet says so.
+
+Every result has thumbs. A thumbs down hides that pairing for good and its place goes to the next
+candidate; a thumbs up pins it first as **Confirmed**. Both are told to the model on later lookups so
+that look-alikes of what you confirmed rank higher and look-alikes of what you rejected rank lower.
+Tap a thumb again to take it back.
 
 ## Adding a supermarket
 

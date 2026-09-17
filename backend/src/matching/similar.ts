@@ -10,7 +10,7 @@ import { lexicalRank, referenceSimilarity } from "@/matching/rank";
 import { productsByIds, searchStore } from "@/stores/search";
 import type { StoreCode } from "@/stores/types";
 
-export const SIMILAR_PROMPT_VERSION = "v2";
+export const SIMILAR_PROMPT_VERSION = "v3";
 
 /** How many candidates per store are ranked and returned at most. */
 export const SIMILAR_MAX = 12;
@@ -49,7 +49,7 @@ Queries: first the exact product with its brand (so the identical product is fou
 const RANK_SYSTEM = `You compare supermarket products for a shopper in the Netherlands. Given a REFERENCE product and CANDIDATES from one store, label every candidate:
 SAME = the identical product (same brand, same variant, same or nearly the same pack size), EQUIVALENT = the same product type and variant but another brand (typically the store brand) or a different pack size, SUBSTITUTE = a different product that could stand in.
 When pictures are given, compare the packaging: the same product looks the same; a different flavour, variant or claim on the pack makes it EQUIVALENT or SUBSTITUTE even if the titles look alike.
-Also give a similarity score from 0 (nothing alike) to 100 (identical). Leave out candidates that are clearly a different kind of product.
+Also give a similarity score from 0 (nothing alike) to 100 (identical): within a label the single pack closest to the reference size scores highest; multipacks, cases and bulk packs of the same product score lower than its single pack. Leave out candidates that are clearly a different kind of product.
 The user's earlier feedback, when given, is the truth: rank candidates that resemble the ones they confirmed higher and the ones that resemble what they rejected lower.
 Return ONLY {"ranking":[{"idx": candidate index, "kind": "SAME"|"EQUIVALENT"|"SUBSTITUTE", "score": 0-100, "note": at most 8 words in LANGUAGE saying what differs (empty for SAME)}]}.`;
 

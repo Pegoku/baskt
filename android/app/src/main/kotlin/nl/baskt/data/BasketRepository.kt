@@ -650,6 +650,9 @@ class BasketRepository(
     /** The same or the closest product at every enabled store; the last answer is kept for offline viewing. */
     suspend fun similarProducts(product: Product): SimilarResponse? = cachedRead("similar-${product.id}") { api.similarProducts(product.id) }
 
+    /** Thumbs on a similar-product pairing; the server drops rejected pairings and pins confirmed ones next time. */
+    suspend fun similarFeedback(reference: Product, product: Product, up: Boolean?): Boolean = guard { api.similarFeedback(reference.id, product.id, up) } != null
+
     suspend fun deals(live: Boolean): DealsResponse? = guard { api.deals(_currentBasketId.value, live) }
 
     suspend fun interpret(text: String): List<VoiceItem>? = guard { api.interpret(text) }

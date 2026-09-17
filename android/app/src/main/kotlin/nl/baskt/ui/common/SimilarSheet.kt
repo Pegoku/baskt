@@ -13,9 +13,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -48,9 +53,13 @@ fun similarKindLabel(kind: String) = when (kind) {
     else -> "Substitute"
 }
 
+/** Results shown per store before "Show more". */
+private const val INITIAL_PER_STORE = 4
+
 /**
  * "Find similar": the same or the closest product at every enabled store, best first. The product's own
- * store lists alternatives. Every result can be added to the basket as a pinned pick for that store.
+ * store lists alternatives. Every result can be added to the basket as a pinned pick for that store, and
+ * thumbs up/down teach the server: a rejected pairing disappears next time, a confirmed one comes first.
  */
 @Composable
 fun SimilarSheet(product: Product, onDismiss: () -> Unit) {
@@ -61,7 +70,10 @@ fun SimilarSheet(product: Product, onDismiss: () -> Unit) {
     var loading by remember(product.id) { mutableStateOf(true) }
     var failed by remember(product.id) { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
-    val added = remember { mutableStateOf(setOf<String>()) }
+    var added by remember { mutableStateOf(setOf<String>()) }
+    /** Thumbs given in this sheet, layered over what the server sent. */
+    var verdicts by remember(product.id) { mutableStateOf(mapOf<String, String?>()) }
+    var expanded by remember(product.id) { mutableStateOf(setOf<String>()) }
     LaunchedEffect(product.id, retry) {
         loading = true
         failed = false
@@ -75,6 +87,15 @@ fun SimilarSheet(product: Product, onDismiss: () -> Unit) {
     val notes = translation?.takeIf { it.translated }?.texts
     var noteIndex = 0
 
+    fun verdictOf(match: SimilarMatch) = if (match.product.id in verdicts) verdicts[match.product.id] else match.feedback
+
+    fun rate(match: SimilarMatch, up: Boolean) {
+        val current = verdictOf(match)
+        val next: Boolean? = if ((current == "UP") == up && current != null) null else up
+        verdicts = verdicts + (match.product.id to next?.let { if (it) "UP" else "DOWN" })
+        scope.launch { container.basket.similarFeedback(product, match.product, next) }
+    }
+
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxHeight(.92f).verticalScroll(rememberScrollState()).padding(20.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Similar products", style = MaterialTheme.typography.titleLarge)
@@ -87,34 +108,54 @@ fun SimilarSheet(product: Product, onDismiss: () -> Unit) {
                 TextButton(onClick = { retry++ }) { Text("Try again") }
             }
             val ordered = response?.results?.sortedBy { if (it.store == product.store) 1 else 0 } ?: emptyList()
+            if (ordered.isNotEmpty()) {
+                val vision = ordered.any { it.vision }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        if (vision) "Packaging pictures were compared. Thumbs teach it what fits." else "Compared by name and size only; no picture model is configured on the server. Thumbs teach it what fits.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             for (result in ordered) {
                 val ownStore = result.store == product.store
+                val visible = result.matches.filter { verdictOf(it) != "DOWN" }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                     StoreBadge(result.store, stores)
                     Text(
                         when {
                             result.error != null -> result.error
                             ownStore -> "Alternatives at this store"
-                            result.matches.isEmpty() -> "Nothing similar found"
-                            else -> "${result.matches.size} found"
+                            visible.isEmpty() -> "Nothing similar found"
+                            else -> "${visible.size} found"
                         },
                         style = MaterialTheme.typography.labelMedium,
                         color = if (result.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (result.matches.isEmpty() && result.error == null && result.queries.isNotEmpty()) {
+                if (visible.isEmpty() && result.error == null && result.queries.isNotEmpty()) {
                     Text("Searched for: ${result.queries.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                val shownCount = if (result.store in expanded) visible.size else minOf(INITIAL_PER_STORE, visible.size)
                 for (match in result.matches) {
                     val note = notes?.getOrNull(noteIndex) ?: match.note
                     noteIndex++
-                    SimilarCard(match, note, added.value.contains(match.product.id)) {
-                        added.value = added.value + match.product.id
-                        scope.launch { container.basket.addFromProduct(match.product) }
-                    }
+                    val position = visible.indexOf(match)
+                    if (position < 0 || position >= shownCount) continue
+                    SimilarCard(
+                        match = match,
+                        note = note,
+                        verdict = verdictOf(match),
+                        added = match.product.id in added,
+                        onAdd = { added = added + match.product.id; scope.launch { container.basket.addFromProduct(match.product) } },
+                        onRate = { up -> rate(match, up) },
+                    )
                 }
+                if (visible.size > shownCount) TextButton(onClick = { expanded = expanded + result.store }) { Text("Show ${visible.size - shownCount} more") }
             }
-            if (!loading && !failed && ordered.isNotEmpty() && ordered.all { it.matches.isEmpty() }) {
+            if (!loading && !failed && ordered.isNotEmpty() && ordered.all { result -> result.matches.none { verdictOf(it) != "DOWN" } }) {
                 Text("No store had anything close. Try searching by name from the scan or search screen.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TextButton(onClick = onDismiss) { Text("Close") }
@@ -123,20 +164,29 @@ fun SimilarSheet(product: Product, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun SimilarCard(match: SimilarMatch, note: String?, added: Boolean, onAdd: () -> Unit) {
+private fun SimilarCard(match: SimilarMatch, note: String?, verdict: String?, added: Boolean, onAdd: () -> Unit, onRate: (Boolean) -> Unit) {
     Card {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    similarKindLabel(match.kind),
+                    if (verdict == "UP") "Confirmed · ${similarKindLabel(match.kind)}" else similarKindLabel(match.kind),
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (match.kind == "SAME") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (match.kind == "SAME" || verdict == "UP") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (!note.isNullOrBlank()) Text(note, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
             }
             ProductRow(match.product) {
                 FilledTonalIconButton(onClick = onAdd, enabled = !added) {
                     Icon(if (added) Icons.Default.Check else Icons.Default.AddShoppingCart, contentDescription = if (added) "Added to basket" else "Add to basket")
+                }
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                Text("Does this fit?", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                IconButton(onClick = { onRate(true) }, colors = IconButtonDefaults.iconButtonColors(contentColor = if (verdict == "UP") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)) {
+                    Icon(Icons.Default.ThumbUp, contentDescription = if (verdict == "UP") "Confirmed as a match; tap to undo" else "Yes, this fits")
+                }
+                IconButton(onClick = { onRate(false) }, colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
+                    Icon(Icons.Default.ThumbDown, contentDescription = "No, this does not fit")
                 }
             }
         }

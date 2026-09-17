@@ -227,13 +227,16 @@ data class StoreSearchResult(val store: String, val source: String = "cache", va
 data class ProductSearchResponse(val query: String, val results: List<StoreSearchResult> = emptyList())
 
 @Serializable
-data class SimilarMatch(val product: Product, val kind: String = "EQUIVALENT", val note: String? = null)
+data class SimilarMatch(val product: Product, val kind: String = "EQUIVALENT", val note: String? = null, val feedback: String? = null)
 
 @Serializable
-data class SimilarStoreResult(val store: String, val matches: List<SimilarMatch> = emptyList(), val queries: List<String> = emptyList(), val error: String? = null)
+data class SimilarStoreResult(val store: String, val matches: List<SimilarMatch> = emptyList(), val queries: List<String> = emptyList(), val vision: Boolean = false, val error: String? = null)
 
 @Serializable
 data class SimilarResponse(val product: Product, val results: List<SimilarStoreResult> = emptyList())
+
+@Serializable
+data class SimilarFeedbackResponse(val referenceProductId: String, val productId: String, val feedback: String? = null)
 
 @Serializable
 data class BarcodeResult(val store: String, val product: Product? = null, val error: String? = null)
