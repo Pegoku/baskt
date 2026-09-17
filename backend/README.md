@@ -64,6 +64,7 @@ All routes are under `/api/v1` and require `Authorization: Bearer $APP_API_TOKEN
 | GET | `/basket/compare` | comparison across enabled stores |
 | GET | `/products/search?q=&store=` | raw cached store search |
 | GET | `/products/:id`, `/products/:id/price-history` | product and price points |
+| GET | `/products/:id/similar?store=&limit=` | the same or closest product per enabled store (`SAME`/`EQUIVALENT`/`SUBSTITUTE`) |
 | GET/DELETE | `/memory`, `/memory/:id` | remembered choices |
 | GET | `/admin/stats` | counters and store cooldowns |
 | POST | `/admin/refresh` | re-price products referenced by the basket |

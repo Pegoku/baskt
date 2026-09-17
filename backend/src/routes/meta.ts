@@ -1,5 +1,6 @@
 import { speechTranscript } from "@/routes/speech";
 import { translateContent } from "@/matching/translate";
+import { findSimilar } from "@/matching/similar";
 import { productDetails } from "@/stores/details";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -97,6 +98,17 @@ meta.post("/translate", async (c) => {
       (body.descriptionIndices !== undefined && (!Array.isArray(body.descriptionIndices) || body.descriptionIndices.length > body.texts.length ||
         body.descriptionIndices.some((index: unknown) => !Number.isInteger(index) || Number(index) < 0 || Number(index) >= body.texts.length)))) return c.json({ error: { code: "BAD_REQUEST", message: "Invalid translation request" } }, 400);
   return c.json(await translateContent(body.texts, body.language, body.descriptionIndices));
+});
+
+/** "Find something like this": the same or the closest product at every enabled store, best first. */
+meta.get("/products/:id/similar", async (c) => {
+  const product = db().select().from(products).where(eq(products.id, c.req.param("id"))).get();
+  if (!product) return c.json({ error: { code: "NOT_FOUND", message: "product not found" } }, 404);
+  const requested = c.req.query("store");
+  const stores = requested ? [requested] : enabledStoreCodes();
+  if (stores.some((code) => !hasStore(code))) return c.json({ error: { code: "BAD_REQUEST", message: "unknown store" } }, 400);
+  const limit = Math.min(Number(c.req.query("limit") ?? 5) || 5, 10);
+  return c.json({ product, results: await findSimilar(product, stores, { limit }) });
 });
 
 meta.get("/products/:id/details", async (c) => {
