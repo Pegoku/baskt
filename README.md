@@ -113,6 +113,17 @@ product in another language, singular/plural, or a generic entry next to a speci
 Nothing changes until you tap **Apply**; the edits go through the normal item operations, so they queue
 offline like any other change.
 
+## Find similar
+
+Open any product (from a basket item, a search, a scan or a deal) and tap **Find similar at other
+stores**. The server works out what the product is and searches every enabled store for it: first
+the exact product with its brand, then the same type and size, then the store's own equivalent. Results
+per store are labelled **Same product** (same brand, variant and pack), **Similar** (same thing from
+another brand or in another pack size, with a short note on what differs) or **Substitute**. The
+product's own store lists alternatives instead. The add button pins that product for its store and
+matches the other stores as usual, exactly like adding from a scan. The last answer is kept for
+offline viewing.
+
 ## Adding a supermarket
 
 Write one adapter in `backend/src/stores/` implementing `StoreAdapter` and register it in `backend/src/stores/registry.ts`. The app fetches the store list from the server, so it needs no change.

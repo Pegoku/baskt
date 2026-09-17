@@ -647,6 +647,9 @@ class BasketRepository(
 
     suspend fun searchProducts(query: String, force: Boolean = false): ProductSearchResponse? = cachedRead("product-search-${query.trim().lowercase()}") { api.searchProducts(query, force = force) }
 
+    /** The same or the closest product at every enabled store; the last answer is kept for offline viewing. */
+    suspend fun similarProducts(product: Product): SimilarResponse? = cachedRead("similar-${product.id}") { api.similarProducts(product.id) }
+
     suspend fun deals(live: Boolean): DealsResponse? = guard { api.deals(_currentBasketId.value, live) }
 
     suspend fun interpret(text: String): List<VoiceItem>? = guard { api.interpret(text) }

@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -44,6 +46,7 @@ fun ProductSheet(product: Product, onDismiss: () -> Unit) {
     var loading by remember(product.id) { mutableStateOf(true) }
     var original by rememberSaveable(product.id) { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
+    var similar by rememberSaveable(product.id) { mutableStateOf(false) }
     LaunchedEffect(product.id, retry) {
         loading = true
         val key = "product-detail-${product.id}"
@@ -76,6 +79,11 @@ fun ProductSheet(product: Product, onDismiss: () -> Unit) {
                 Text("No additional description is available.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 TextButton(onClick = { retry++ }) { Text("Retry details") }
             }
+            FilledTonalButton(onClick = { similar = true }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Storefront, contentDescription = null)
+                Text("  Find similar at other stores")
+            }
+            if (similar) SimilarSheet(source) { similar = false }
             source.sourceUrl?.let { url -> TextButton(onClick = { uri.openUri(url) }) { Text("View original store page") } }
             TextButton(onClick = onDismiss) { Text("Close") }
         }

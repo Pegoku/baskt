@@ -64,6 +64,7 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
     }.expect()
 
     suspend fun productDetail(id: String): ProductDetail = client.get(url("/products/$id/details")) { auth() }.expect()
+    suspend fun similarProducts(id: String, limit: Int = 5): SimilarResponse = client.get(url("/products/$id/similar")) { auth(); parameter("limit", limit) }.expect()
 
     suspend fun speechModels(language: String): SpeechModels = client.get(url("/tts/voices")) { auth(); parameter("language", language) }.expect()
     suspend fun speech(request: SpeechRequest): ByteArray = client.post(url("/tts")) {
