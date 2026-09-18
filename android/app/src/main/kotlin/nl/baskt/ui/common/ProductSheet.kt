@@ -21,6 +21,7 @@ import nl.baskt.BasktApp
 import nl.baskt.data.Product
 import nl.baskt.data.ProductDetail
 import nl.baskt.data.euros
+import nl.baskt.data.dealPricing
 import nl.baskt.data.unitPriceLabel
 
 @Composable
@@ -72,7 +73,10 @@ fun ProductSheet(product: Product, onDismiss: () -> Unit) {
             Text(shown[0], style = MaterialTheme.typography.headlineSmall)
             Text(listOfNotNull(source.brand, shown[2], source.priceCents.euros(), source.unitPriceLabel()).joinToString(" · "))
             if (shown[3].isNotBlank()) Text(shown[3], color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (shown[4].isNotBlank()) Text(shown[4], color = MaterialTheme.colorScheme.tertiary)
+            if (shown[4].isNotBlank()) {
+                val deal = source.dealPricing()
+                Text(listOfNotNull(shown[4], deal?.let { "${it.count} for ${it.bundleCents.euros()} · ${it.label()}" }).joinToString(" · "), color = MaterialTheme.colorScheme.tertiary)
+            }
             if (shown[1].isNotBlank()) DescriptionText(shown[1])
             else if (loading) Row(verticalAlignment = Alignment.CenterVertically) { LoadingIndicator(Modifier.size(24.dp)); Text("Loading description…") }
             else {

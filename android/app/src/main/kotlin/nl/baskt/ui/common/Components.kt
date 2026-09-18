@@ -29,6 +29,7 @@ import coil3.compose.AsyncImage
 import nl.baskt.data.Product
 import nl.baskt.data.StoreInfo
 import nl.baskt.data.euros
+import nl.baskt.data.dealPricing
 import nl.baskt.data.unitPriceLabel
 
 fun storeColor(store: StoreInfo?): Color = store?.color?.let { runCatching { Color(android.graphics.Color.parseColor(it)) }.getOrNull() } ?: Color.Gray
@@ -81,7 +82,12 @@ fun ProductRow(product: Product, modifier: Modifier = Modifier, trailing: @Compo
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (product.dealText != null) {
-                Text(shown?.get(2) ?: product.dealText, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+                val deal = product.dealPricing()
+                Text(
+                    listOfNotNull(shown?.get(2) ?: product.dealText, deal?.label()).joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
             }
         }
         Column(horizontalAlignment = Alignment.End) {
