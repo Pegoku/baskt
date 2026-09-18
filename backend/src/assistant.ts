@@ -12,8 +12,9 @@ import {
   type RecipeCard,
 } from "@/db/schema";
 import { appLanguageName, enabledStoreCodes } from "@/db/settings";
-import { aiConfigured } from "@/env";
+import { aiConfigured, visionConfigured } from "@/env";
 import { dishQueries } from "@/matching/cook";
+import { inspectProduct } from "@/matching/inspect";
 import { localizeRecipe } from "@/matching/localize";
 import { chooseMatch, getItem, getMatch } from "@/matching/pipeline";
 import { searchAllSources } from "@/matching/sources";
@@ -26,6 +27,7 @@ import {
 import { fetchRecipe } from "@/routes/recipes";
 import { collectProductIds, itemView } from "@/serialize";
 import { inStock, listStock, matchByText } from "@/stock";
+import { productDetails } from "@/stores/details";
 import { allStores } from "@/stores/registry";
 import { productsByIds, searchStore } from "@/stores/search";
 
@@ -125,7 +127,7 @@ function topLevelRows(basketId: string) {
     .filter((item) => !item.parentId);
 }
 
-type ToolCall = { name: string; args: Record<string, unknown> };
+export type ToolCall = { name: string; args: Record<string, unknown> };
 
 /** What the assistant is doing right now, per basket, for the app to show while it waits. */
 const progress = new Map<string, string[]>();
@@ -140,6 +142,12 @@ function report(basketId: string, step: string) {
   progress.set(basketId, steps.slice(-12));
 }
 
+/** Product title for the progress trace; falls back to the id when the product is unknown. */
+function productLabel(productId: unknown) {
+  const product = typeof productId === "string" ? productsByIds([productId])[0] : undefined;
+  return product ? `“${product.title}”` : String(productId ?? "");
+}
+
 function describeTool(call: ToolCall): string {
   const args = call.args ?? {};
   const storeName = (code: unknown) =>
@@ -152,6 +160,10 @@ function describeTool(call: ToolCall): string {
       return "Checking what you have in stock";
     case "search_products":
       return `Searching ${storeName(args.store)} for “${String(args.query ?? "")}”`;
+    case "product_details":
+      return `Reading the product page (${productLabel(args.productId)})`;
+    case "check_product_image":
+      return `Looking at the picture of ${productLabel(args.productId)}`;
     case "search_recipes":
       return `Looking for recipes: “${String(args.query ?? "")}”`;
     case "read_recipe":
@@ -200,6 +212,31 @@ const TOOL_SPECS = [
     },
   },
   {
+    name: "product_details",
+    description:
+      "The shop's full listing of one product: brand, size, price, availability and the description text (ingredients, claims). Use it to read what a search result really is.",
+    parameters: {
+      type: "object",
+      properties: {
+        productId: { type: "string", description: "productId from search_products or list_basket" },
+      },
+      required: ["productId"],
+    },
+  },
+  {
+    name: "check_product_image",
+    description:
+      "Have a vision model look at the product's packaging pictures and answer a question about them (e.g. 'is this the sugar-free variant?', 'is it whole grain?', 'does this look like the brand the user asked for?'). Use it when the title and description leave doubt.",
+    parameters: {
+      type: "object",
+      properties: {
+        productId: { type: "string", description: "productId from search_products or list_basket" },
+        question: { type: "string", description: "what to verify in the picture" },
+      },
+      required: ["productId", "question"],
+    },
+  },
+  {
     name: "search_recipes",
     description: "Find recipe cards from several recipe sites.",
     parameters: {
@@ -223,6 +260,7 @@ const TOOL_SPECS = [
 const TOOL_RESULT_CHARS: Record<string, number> = {
   list_basket: 6000,
   list_stock: 4000,
+  product_details: 3000,
 };
 
 /**
@@ -240,7 +278,7 @@ export function toolResultText(result: unknown, tool: string): string {
   return `${JSON.stringify(result.slice(0, kept))}\n(only the first ${kept} of ${result.length} entries are shown)`;
 }
 
-async function runTool(call: ToolCall, basketId: string): Promise<unknown> {
+export async function runTool(call: ToolCall, basketId: string): Promise<unknown> {
   const args = call.args ?? {};
   switch (call.name) {
     case "list_basket":
@@ -266,6 +304,7 @@ async function runTool(call: ToolCall, basketId: string): Promise<unknown> {
       return result.products.map((product) => ({
         productId: product.id,
         title: product.title,
+        brand: product.brand,
         size: product.quantityText,
         priceCents: product.priceCents,
         unitPrice: product.unitPriceCents
@@ -273,6 +312,38 @@ async function runTool(call: ToolCall, basketId: string): Promise<unknown> {
           : null,
         deal: product.dealText,
       }));
+    }
+    case "product_details": {
+      const product = productsByIds([String(args.productId ?? "")])[0];
+      if (!product)
+        return { error: "unknown productId; use one from search_products or list_basket" };
+      const details = await productDetails(product);
+      return {
+        productId: product.id,
+        store: product.store,
+        title: product.title,
+        brand: product.brand,
+        size: product.quantityText,
+        priceCents: product.priceCents,
+        regularPriceCents: product.regularPriceCents,
+        unitPrice: product.unitPriceCents
+          ? `${product.unitPriceCents}c/${product.unitPriceUnit}`
+          : null,
+        deal: product.dealText,
+        available: product.available,
+        category: product.category,
+        description: details.description?.slice(0, 1500) ?? null,
+        pictures: details.imageUrls.length,
+        canCheckPicture: visionConfigured() && details.imageUrls.length > 0,
+      };
+    }
+    case "check_product_image": {
+      const product = productsByIds([String(args.productId ?? "")])[0];
+      const question = String(args.question ?? "").trim();
+      if (!product)
+        return { error: "unknown productId; use one from search_products or list_basket" };
+      if (!question) return { error: "question required" };
+      return inspectProduct(product, question);
     }
     case "search_recipes": {
       const query = String(args.query ?? "").trim();
@@ -311,12 +382,13 @@ Answer in ${language}. Be brief.
 
 Work in steps. Each turn return ONLY a JSON object:
 {"answer": string, "tool": {"name","args"} | null, "proposal": {"summary", "changes": [...]} | null, "recipes": [{"title","url","source","imageUrl"}] | null}
-Tools: list_basket {detail} (every item: itemId, text, quantity; detail=true also gives the per-store pick with productId/title/size/price) · list_stock (what is at home) · search_products {store, query} (store codes: STORES) · search_recipes {query} (recipe cards) · read_recipe {url} (ingredients + steps).
+Tools: list_basket {detail} (every item: itemId, text, quantity; detail=true also gives the per-store pick with productId/title/size/price) · list_stock (what is at home) · search_products {store, query} (store codes: STORES) · product_details {productId} (brand, description, availability) · check_product_image {productId, question} (a vision model looks at the packaging photos and answers) · search_recipes {query} (recipe cards) · read_recipe {url} (ingredients + steps).
 Change types (real itemIds/productIds from tool results only): {"type":"add","text","quantity"} · {"type":"delete","itemId","text"} · {"type":"delete_all"} (empties the basket; the app expands it to one row per item) · {"type":"rename","itemId","from","to"} · {"type":"quantity","itemId","text","quantity"} · {"type":"replace","itemId","text","store","productId","from","to"} · {"type":"skip","itemId","text","store"} · {"type":"add_recipe_folder","url","title"}.
 Rules:
 - Emptying the basket ("delete everything", "clear the list"): ONE {"type":"delete_all"} change, never a list of deletes, and no need to call list_basket first.
 - A tool result ending in "only the first N of M entries are shown" is incomplete: never conclude from it that the basket is empty or that you have seen everything.
 - Product swaps (e.g. "1 kg bags to 500 g"): list_basket {"detail":true}, then search_products per store; propose "replace" only where you found a fitting product and say which you could not.
+- Finding a product for the user ("find me lactose-free butter at AH", "is this really the whole grain one?"): search_products, read the titles, then product_details for the likely ones, and check_product_image when the title/description leave doubt or the user asks you to check the picture. Report what you found (title, size, price, what the picture showed) in "answer"; propose "add"/"replace" only when the user wants it on the list.
 - Never ask permission in text; put ALL changes in "proposal" in the same turn. The app shows it as a card titled "summary" (e.g. "What you still need to buy for pancakes").
 - "answer" is ONLY for answering a question (e.g. cooking time) or a warning; "" when the card says it all; NEVER name items that are in "changes". Plain text, no markdown.
 - Recipes: ALWAYS search_recipes first and return real results in "recipes" (max 5); never invent one. Use read_recipe when the user is specific.
