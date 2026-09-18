@@ -65,7 +65,7 @@ export async function productDetails(product: ProductRow) {
   try {
     const adapter = getAdapter(product.store);
     if (adapter.details) {
-      const detail = await cachedUpstream(`adapter-product-details:v1:${product.id}`, 86400000,
+      const detail = await cachedUpstream(`adapter-product-details:v2:${product.id}`, 86400000,
         () => adapter.details!(product.sourceId), { cacheable: (value) => !!value.description, staleMs: 604800000 });
       if (detail.description) return { description: plainText(detail.description), imageUrls: detail.imageUrls.length ? [...new Set(detail.imageUrls)] : fallback.imageUrls };
     }

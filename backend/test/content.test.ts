@@ -45,6 +45,27 @@ describe("source-preserving content", () => {
     expect(result.description).toContain("Bevat melk.");
     expect(result.imageUrls).toEqual(["https://example.com/large.jpg"]);
   });
+  test("AH details fall back to trade item label text when the card has no copy", () => {
+    const result = mapAhDetails({ productCard: { descriptionHighlights: "", descriptionFull: "", extraDescriptions: [], images: [] }, tradeItem: {
+      description: { regulatedProductName: ["Rijstzoutjes en gecoate pinda's", "met wasabismaak"] },
+      marketingInformationModule: { tradeItemMarketingMessage: "Pittige krokante mix wasabi style", tradeItemFeatureBenefit: ["Een lekkere snack"] },
+      foodAndBeverageIngredientStatement: "Ingrediënten: 18% rijst, 14% pinda.",
+      allergenInformation: [{ items: [
+        { typeCode: { label: "Pinda's" }, levelOfContainmentCode: { value: "CONTAINS" } },
+        { typeCode: { label: "Vis" }, levelOfContainmentCode: { value: "FREE_FROM" } },
+        { typeCode: { label: "Soja" }, levelOfContainmentCode: { value: "MAY_CONTAIN" } },
+      ] }],
+      consumerInstructions: { storageInstructions: ["Koel en droog bewaren."], usageInstructions: ["Let op, kleine kinderen kunnen zich verslikken."] },
+      healthRelatedInformation: { compulsoryAdditiveLabelInformation: ["Verpakt onder beschermende atmosfeer."] },
+    } });
+    expect(result.description).toBe([
+      "Pittige krokante mix wasabi style", "Een lekkere snack", "Rijstzoutjes en gecoate pinda's met wasabismaak",
+      "Ingrediënten: 18% rijst, 14% pinda.", "Allergenen:\nBevat: pinda's\nKan bevatten: soja",
+      "Bewaren: Koel en droog bewaren.", "Gebruik: Let op, kleine kinderen kunnen zich verslikken.", "Verpakt onder beschermende atmosfeer.",
+    ].join("\n\n"));
+    expect(result.description).not.toContain("Vis");
+    expect(mapAhDetails({ productCard: { descriptionFull: "" } }).description).toBeNull();
+  });
   test("description HTML keeps lists and paragraphs but drops layout whitespace", () => {
     expect(plainText(`<p>Made\n   with\n <strong>fresh</strong>\n milk.</p><p>Keep chilled.</p>`))
       .toBe("Made with fresh milk.\n\nKeep chilled.");

@@ -77,18 +77,58 @@ export function mapAhProduct(product: AhProduct): StoreProduct | null {
   };
 }
 
+type AhTradeItem = {
+  description?: { regulatedProductName?: unknown };
+  marketingInformationModule?: { tradeItemMarketingMessage?: unknown; tradeItemFeatureBenefit?: unknown };
+  foodAndBeverageIngredientStatement?: unknown;
+  allergenInformation?: Array<{ items?: Array<{ typeCode?: { label?: unknown }; levelOfContainmentCode?: { value?: unknown } }> }>;
+  consumerInstructions?: { storageInstructions?: unknown; usageInstructions?: unknown };
+  healthRelatedInformation?: { compulsoryAdditiveLabelInformation?: unknown };
+};
+
+const strings = (value: unknown): string[] => (Array.isArray(value) ? value : [value]).filter((entry): entry is string => typeof entry === "string" && !!entry.trim()).map((entry) => entry.trim());
+
+/** Many AH products carry no card copy; the GS1 trade item still has the label text shoppers expect. */
+export function tradeItemDescription(item: AhTradeItem | undefined): string[] {
+  if (!item) return [];
+  const sections: string[] = [];
+  const marketing = item.marketingInformationModule;
+  sections.push(...strings(marketing?.tradeItemMarketingMessage), ...strings(marketing?.tradeItemFeatureBenefit));
+  const name = strings(item.description?.regulatedProductName).join(" ");
+  if (name) sections.push(name);
+  sections.push(...strings(item.foodAndBeverageIngredientStatement));
+  const allergens = new Map<string, string[]>();
+  for (const group of item.allergenInformation ?? []) {
+    for (const entry of group.items ?? []) {
+      const label = entry.typeCode?.label, level = entry.levelOfContainmentCode?.value;
+      if (typeof label !== "string" || typeof level !== "string") continue;
+      const heading = level === "CONTAINS" ? "Bevat" : level === "MAY_CONTAIN" ? "Kan bevatten" : null;
+      if (heading) allergens.set(heading, [...(allergens.get(heading) ?? []), label.toLowerCase()]);
+    }
+  }
+  const allergenLines = [...allergens].map(([heading, labels]) => `${heading}: ${[...new Set(labels)].join(", ")}`);
+  if (allergenLines.length) sections.push(`Allergenen:\n${allergenLines.join("\n")}`);
+  const storage = strings(item.consumerInstructions?.storageInstructions);
+  if (storage.length) sections.push(`Bewaren: ${storage.join(" ")}`);
+  const usage = strings(item.consumerInstructions?.usageInstructions);
+  if (usage.length) sections.push(`Gebruik: ${usage.join(" ")}`);
+  sections.push(...strings(item.healthRelatedInformation?.compulsoryAdditiveLabelInformation));
+  return sections;
+}
+
 export function mapAhDetails(body: Record<string, unknown>): { description: string | null; imageUrls: string[] } {
     const card = (body.productCard ?? body) as AhProduct & { description?: string; descriptionFull?: string; descriptionHighlights?: string; extraDescriptions?: Array<{ title?: string; description?: string }> };
     const summaries = [card.descriptionHighlights, card.descriptionFull, body.description, body.summary, card.description, ...(card.extraDescriptions ?? []).map((entry) => entry.description)];
     const text: string[] = [];
     for (const value of summaries) {
-      if (typeof value === "string") text.push(value);
+      if (typeof value === "string" && value.trim()) text.push(value);
       else if (value && typeof value === "object") {
         const data = value as Record<string, unknown>;
-        for (const field of [data.description, data.text, data.summary]) if (typeof field === "string") text.push(field);
+        for (const field of [data.description, data.text, data.summary]) if (typeof field === "string" && field.trim()) text.push(field);
         if (Array.isArray(data.bullets)) text.push(...data.bullets.filter((line): line is string => typeof line === "string"));
       }
     }
+    text.push(...tradeItemDescription(body.tradeItem as AhTradeItem | undefined));
     return { description: [...new Set(text)].join("\n\n") || null, imageUrls: (card.images ?? []).filter((image) => !!image.url).sort((a, b) => (b.width ?? 0) - (a.width ?? 0)).slice(0, 1).map((image) => image.url!) };
 }
 
