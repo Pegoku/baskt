@@ -117,11 +117,14 @@ offline like any other change.
 
 The wand in the basket's top bar tidies the open items in one pass, and shows the plan before anything
 changes. Duplicates that nobody has decided about are merged: one entry survives (the one with your
-picks, else the furthest matched, else the oldest) and gets the summed quantity. Look-alikes that each
+picks, else the furthest matched, else the oldest) and you choose per merge whether to keep just that
+one or add the amounts up. Look-alikes that each
 have their own chosen product (two different chocolate cookies, both picked at AH) are kept apart and
 only renamed so you can tell them apart. Finally every surviving entry is rewritten in the app language:
 translations ("melk" → "milk"), misspellings ("Yorkham" → "jamón york"), brands and sizes kept as
-written. Untick what you want to keep; renames go through `keepMatches`, so the picks survive the new
+written. Promotions already known for the surviving entries (one per entry and store, best saving
+first) are offered too; ticking one makes it the pick at that store, like **Use this deal** on the deals
+screen. Untick what you want to keep; renames go through `keepMatches`, so the picks survive the new
 wording. Without an AI provider only literal repeats are merged and nothing is renamed.
 
 ## Find similar

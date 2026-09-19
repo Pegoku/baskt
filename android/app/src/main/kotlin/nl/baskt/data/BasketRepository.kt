@@ -723,20 +723,26 @@ class BasketRepository(
      * Applies the confirmed parts of a tidy plan through the normal item operations, so they queue offline
      * like any edit. Renames keep the matches: the product is the same, only the wording changes.
      */
-    suspend fun applyTidy(renames: List<TidyRename>, merges: List<TidyMerge>) {
+    suspend fun applyTidy(renames: List<TidyRename>, merges: List<MergeDecision>, deals: List<Deal>) {
         val current = _items.value
         val toDelete = mutableListOf<BasketItem>()
-        for (merge in merges) {
+        for (decision in merges) {
+            val merge = decision.merge
             val members = merge.items.mapNotNull { member -> current.firstOrNull { it.id == member.id } }
             val keep = members.firstOrNull { it.id == merge.keepId } ?: continue
             if (members.size < 2) continue
             if (merge.text.isNotBlank() && merge.text != keep.text) rename(keep, merge.text, keepMatches = true)
-            if (keep.quantity != merge.quantity) setQuantity(keep, merge.quantity)
+            if (keep.quantity != decision.quantity) setQuantity(keep, decision.quantity)
             toDelete += members.filter { it.id != keep.id }
         }
         for (change in renames) {
             val item = current.firstOrNull { it.id == change.id } ?: continue
             if (change.to.isNotBlank() && change.to != item.text) rename(item, change.to, keepMatches = true)
+        }
+        // Same path as "Use this deal" on the deals screen: the promotion becomes the pick at that store.
+        for (deal in deals) {
+            val item = current.firstOrNull { it.id == deal.itemId } ?: continue
+            choose(item, deal.store, deal.product.id)
         }
         if (toDelete.isNotEmpty()) deleteMany(toDelete)
     }

@@ -13,7 +13,7 @@ import nl.baskt.data.BasketItem
 import nl.baskt.data.Comparison
 import nl.baskt.data.DuplicateGroup
 import nl.baskt.data.DuplicateResolution
-import nl.baskt.data.TidyMerge
+import nl.baskt.data.MergeDecision
 import nl.baskt.data.TidyPlan
 import nl.baskt.data.TidyRename
 import nl.baskt.data.AllDealsResponse
@@ -339,9 +339,11 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         _tidying.value = false
     }
 
-    fun applyTidy(renames: List<TidyRename>, merges: List<TidyMerge>) = viewModelScope.launch {
+    fun applyTidy(renames: List<TidyRename>, merges: List<MergeDecision>, deals: List<Deal>) = viewModelScope.launch {
         _tidy.value = null
-        basket.applyTidy(renames, merges)
+        basket.applyTidy(renames, merges, deals)
+        // The deals screen would otherwise keep offering promotions that are now the pick.
+        _deals.value = null
     }
 
     fun dismissTidy() { _tidy.value = null }

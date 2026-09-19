@@ -221,13 +221,15 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
         TidySheet(
             plan = tidyPlan,
             loading = tidying,
+            stores = stores,
             onDismiss = { viewModel.dismissTidy() },
-            onApply = { renames, merges ->
-                viewModel.applyTidy(renames, merges)
+            onApply = { renames, merges, deals ->
+                viewModel.applyTidy(renames, merges, deals)
                 val parts = buildList {
                     if (renames.isNotEmpty()) add(if (renames.size == 1) "renamed 1 item" else "renamed ${renames.size} items")
-                    val removed = merges.sumOf { it.items.size - 1 }
+                    val removed = merges.sumOf { it.merge.items.size - 1 }
                     if (removed > 0) add(if (removed == 1) "merged 1 duplicate" else "merged $removed duplicates")
+                    if (deals.isNotEmpty()) add(if (deals.size == 1) "took 1 deal" else "took ${deals.size} deals")
                 }
                 if (parts.isNotEmpty()) scope.launch { snackbar.showSnackbar("Tidied up: " + parts.joinToString(", ")) }
             },

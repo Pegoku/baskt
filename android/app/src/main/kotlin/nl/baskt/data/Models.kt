@@ -414,7 +414,21 @@ data class TidyRename(val id: String, val from: String, val to: String, val reas
 
 /** Duplicates nobody decided about: one entry survives with the summed quantity and the given wording. */
 @Serializable
-data class TidyMerge(val items: List<TidyItem>, val keepId: String, val text: String, val quantity: Int = 1, val reason: String = "")
+data class TidyMerge(
+    val items: List<TidyItem>,
+    val keepId: String,
+    val text: String,
+    /** Packs when the amounts are added up. */
+    val quantity: Int = 1,
+    /** Packs the surviving entry asks for on its own. */
+    val keepQuantity: Int = 1,
+    val reason: String = "",
+)
+
+/** The user's answer for one merge: keep a single entry as is, or add the amounts together. */
+data class MergeDecision(val merge: TidyMerge, val sumQuantities: Boolean) {
+    val quantity: Int get() = if (sumQuantities) merge.quantity else merge.keepQuantity
+}
 
 /** Look-alikes left alone because each has its own chosen product. */
 @Serializable
@@ -428,8 +442,10 @@ data class TidyPlan(
     val renames: List<TidyRename> = emptyList(),
     val merges: List<TidyMerge> = emptyList(),
     val distinct: List<TidyDistinct> = emptyList(),
+    /** Promotions for entries that stay, one per entry and store. */
+    val deals: List<Deal> = emptyList(),
 ) {
-    val isEmpty: Boolean get() = renames.isEmpty() && merges.isEmpty()
+    val isEmpty: Boolean get() = renames.isEmpty() && merges.isEmpty() && deals.isEmpty()
 }
 
 /** What to do with one duplicate group. */
