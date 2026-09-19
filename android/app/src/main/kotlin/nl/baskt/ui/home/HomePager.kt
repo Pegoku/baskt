@@ -8,7 +8,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.animation.core.spring
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,7 +41,7 @@ private const val UnderlayParallax = 0.25f
 /**
  * Basket → Review → Order as three pages of one pager, treated as a gesture-driven lateral transition:
  * the page follows the finger 1:1 once touch slop is cleared, deeper pages slide over the shallower one
- * like a stack (the one underneath recedes, lags and rounds off), release settles on the fast Expressive spatial
+ * like a stack (the one underneath recedes, lags and rounds off), release settles on a stiff spatial
  * spring that keeps the finger's velocity, and a single light tick marks the point where letting go would
  * navigate.
  */
@@ -63,8 +63,9 @@ fun HomePager(
 ) {
     val pager = rememberPagerState(initialPage = startPage) { 3 }
     val scope = rememberCoroutineScope()
-    // Fast spatial spring: snappy settle with a touch of bounce; the default one lingers.
-    val spring = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
+    // Stiff, well-damped spring: the Expressive fast spatial spec (0.6 damping, 800 stiffness) still
+    // bounces for a beat after release, which reads as sluggish for something the finger just threw.
+    val spring = remember { spring<Float>(dampingRatio = 0.8f, stiffness = 1400f) }
     fun go(page: Int) = scope.launch { pager.animateScrollToPage(page, animationSpec = spring) }
     BackHandler(enabled = pager.currentPage > 0) { go(pager.currentPage - 1) }
 
@@ -122,15 +123,15 @@ fun HomePager(
                 val away = position.absoluteValue.coerceIn(0f, 1f)
                 val transit = 4f * away * (1f - away) // 0 at rest, 1 halfway through a swipe
                 if (position > 0f) {
-                    val scale = lerp(1f, 0.92f, away)
+                    val scale = lerp(1f, 0.95f, away)
                     scaleX = scale
                     scaleY = scale
                     translationX = position * size.width * UnderlayParallax
-                    alpha = lerp(1f, 0.7f, away)
+                    alpha = lerp(1f, 0.85f, away)
                 } else {
-                    shadowElevation = 16.dp.toPx() * transit
+                    shadowElevation = 12.dp.toPx() * transit
                 }
-                shape = RoundedCornerShape(lerp(0f, 28.dp.toPx(), away))
+                shape = RoundedCornerShape(lerp(0f, 24.dp.toPx(), away))
                 clip = true
             },
         ) {
