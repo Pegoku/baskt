@@ -406,6 +406,26 @@ describe("api", () => {
     expect(after.deletedIds).toContain(a.id);
   });
 
+  test("reorder moves items and keeps unlisted siblings in place", async () => {
+    const basket = (await (await api("/baskets", { method: "POST", body: JSON.stringify({ name: "Order" }) })).json()) as any;
+    const add = async (text: string) => (await (await api("/basket/items", { method: "POST", body: JSON.stringify({ text, basketId: basket.id }) })).json()) as any;
+    const a = await add("appels");
+    const b = await add("bananen");
+    const c = await add("citroen");
+    const listed = async () => ((await (await api(`/basket?basketId=${basket.id}`)).json()) as any).items.map((i: any) => i.text);
+    expect(await listed()).toEqual(["appels", "bananen", "citroen"]);
+    const moved = await api("/basket/items/reorder", { method: "POST", body: JSON.stringify({ itemIds: [c.id, a.id, b.id] }) });
+    expect(moved.status).toBe(200);
+    expect(((await moved.json()) as any).updated).toBe(3);
+    expect(await listed()).toEqual(["citroen", "appels", "bananen"]);
+    // Reordering only two of them swaps those and leaves the third where it was.
+    await api("/basket/items/reorder", { method: "POST", body: JSON.stringify({ itemIds: [b.id, a.id] }) });
+    expect(await listed()).toEqual(["citroen", "bananen", "appels"]);
+    const empty = await api("/basket/items/reorder", { method: "POST", body: JSON.stringify({ itemIds: [] }) });
+    expect(empty.status).toBe(400);
+    expect((await api(`/baskets/${basket.id}`, { method: "DELETE" })).status).toBe(204);
+  });
+
   test("assistant: history, offline reply, and applying a validated proposal", async () => {
     const reply = (await (await api("/chat", { method: "POST", body: JSON.stringify({ text: "swap the milk" }) })).json()) as any;
     expect(reply.messages).toHaveLength(2);

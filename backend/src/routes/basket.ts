@@ -485,6 +485,26 @@ basket.post("/from-text", async (c) => {
   return c.json({ items: loadViews(items) }, 201);
 });
 
+/**
+ * Persists a new order for a list of sibling items. The items keep their existing sortOrder slots (made strictly
+ * increasing, since old rows may all sit at 0) and are dealt out in itemIds order, so unlisted siblings stay put.
+ */
+basket.post("/items/reorder", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { itemIds?: string[] };
+  const ids = Array.isArray(body.itemIds) ? body.itemIds.filter((id): id is string => typeof id === "string") : [];
+  if (!ids.length) return c.json({ error: { code: "BAD_REQUEST", message: "itemIds is required" } }, 400);
+  const rows = db().select({ id: basketItems.id, sortOrder: basketItems.sortOrder }).from(basketItems).where(inArray(basketItems.id, ids)).all();
+  const known = new Set(rows.map((row) => row.id));
+  const slots: number[] = [];
+  for (const slot of rows.map((row) => row.sortOrder).sort((a, b) => a - b)) slots.push(slots.length ? Math.max(slot, slots[slots.length - 1] + 1) : slot);
+  db().transaction((tx) => {
+    ids.filter((id) => known.has(id)).forEach((id, index) => {
+      tx.update(basketItems).set({ sortOrder: slots[index], updatedAt: now() }).where(eq(basketItems.id, id)).run();
+    });
+  });
+  return c.json({ updated: known.size });
+});
+
 basket.patch("/items/:id", async (c) => {
   const item = getItem(c.req.param("id"));
   if (!item) return c.json({ error: { code: "NOT_FOUND", message: "item not found" } }, 404);
