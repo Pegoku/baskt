@@ -263,6 +263,8 @@ data class Deal(
     val currentPriceCents: Int? = null,
     val savingCents: Int? = null,
     val equivalence: String = "EQUIVALENT",
+    /** How much the promotion looks like the entry itself; the plan lists deals most relevant first. */
+    val relevance: Double = 0.0,
 )
 
 @Serializable

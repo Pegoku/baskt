@@ -255,7 +255,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                     IconButton(onClick = onScan) { Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan barcodes") }
                     IconButton(onClick = onRecipes) { Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = "Recipes") }
                     if (items.any { !it.checked && !it.isGroup }) IconButton(onClick = onDeals) { Icon(Icons.Default.LocalOffer, contentDescription = "Find deals") }
-                    if (items.any { !it.checked && !it.isGroup }) IconButton(onClick = onTidy) { Icon(Icons.Default.AutoFixHigh, contentDescription = "Tidy up") }
+                    if (items.any { !it.checked && !it.isGroup }) IconButton(onClick = { viewModel.dismissTidy(); onTidy() }) { Icon(Icons.Default.AutoFixHigh, contentDescription = "Tidy up") }
                     var menu by remember { mutableStateOf(false) }
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }

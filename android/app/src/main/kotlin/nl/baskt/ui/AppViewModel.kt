@@ -339,9 +339,24 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     fun planTidy() = viewModelScope.launch {
         _tidying.value = true
+        tidyReview.value = TidyReview()
         _tidy.value = basket.planTidy() ?: TidyPlan()
         _tidying.value = false
     }
+
+    /**
+     * What the user decided on the tidy screen so far. Lives here, not in the composable, so a rotation
+     * neither forgets the ticks nor refetches the plan. Keys are "rename-id", "merge-keepId".
+     */
+    data class TidyReview(
+        val skipped: Set<String> = emptySet(),
+        val summed: Set<String>? = null,
+        val selected: Set<String> = emptySet(),
+        /** Chosen promotion per item id; nothing is chosen by default. */
+        val dealChoice: Map<String, String> = emptyMap(),
+    )
+    val tidyReview = MutableStateFlow(TidyReview())
+    fun updateTidyReview(transform: (TidyReview) -> TidyReview) { tidyReview.update(transform) }
 
     fun applyTidy(renames: List<TidyRename>, merges: List<MergeDecision>, deals: List<Deal>) = viewModelScope.launch {
         _tidy.value = null

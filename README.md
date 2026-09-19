@@ -121,9 +121,10 @@ one or add the amounts up. Look-alikes that each
 have their own chosen product (two different chocolate cookies, both picked at AH) are kept apart and
 only renamed so you can tell them apart. Finally every surviving entry is rewritten in the app language:
 translations ("melk" → "milk"), misspellings ("Yorkham" → "jamón york"), brands and sizes kept as
-written. Promotions already known for the surviving entries (one per entry and store, best saving
-first) are offered too; ticking one makes it the pick at that store, like **Use this deal** on the deals
-screen. Untick what you want to keep; renames go through `keepMatches`, so the picks survive the new
+written. Promotions already known for an entry show up under that entry as "3 deals available", most
+relevant first (the same product beats one that only shares a word); none is chosen until you pick one,
+and picking makes it the pick at that store, like **Use this deal** on the deals screen. Ticks, choices
+and the plan itself survive a rotation. Untick what you want to keep; renames go through `keepMatches`, so the picks survive the new
 wording. Without an AI provider only literal repeats are merged and nothing is renamed.
 
 ## Comment mode
