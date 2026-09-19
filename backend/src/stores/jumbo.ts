@@ -133,7 +133,7 @@ export function mapJumboPromotions(html: string): DealCard[] {
 }
 
 export class JumboAdapter implements StoreAdapter {
-  readonly info = { code: "JUMBO", name: "Jumbo", color: "#FDC500", coverage: "full" as const };
+  readonly info = { code: "JUMBO", name: "Jumbo", color: "#FDC500", coverage: "full" as const, logoUrl: "https://www.google.com/s2/favicons?domain=jumbo.com&sz=128" };
   private readonly throttle = new StoreThrottle("JUMBO");
   private promoCache: { at: number; cards: DealCard[] } | null = null;
 

@@ -30,7 +30,7 @@ beforeAll(() => {
 });
 
 function row(id: string, text: string, quantity = 1, createdAt = 0): BasketItemRow {
-  return { id, basketId: "default", kind: "item", parentId: null, recipeJson: null, assignedStore: null, skippedReason: null, text, quantity, checked: false, sortOrder: 0, status: "MATCHED", error: null, parsedJson: null, createdAt, updatedAt: createdAt };
+  return { id, basketId: "default", kind: "item", parentId: null, recipeJson: null, assignedStore: null, skippedReason: null, text, quantity, checked: false, boughtAt: null, sortOrder: 0, status: "MATCHED", error: null, parsedJson: null, createdAt, updatedAt: createdAt };
 }
 
 function match(itemId: string, store: string, productId: string | null, chosenBy: BasketMatchRow["chosenBy"]): BasketMatchRow {

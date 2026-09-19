@@ -27,7 +27,7 @@ beforeAll(() => {
 });
 
 function row(id: string, text: string, canonical: string | null = null): BasketItemRow {
-  return { id, basketId: "default", kind: "item", parentId: null, recipeJson: null, assignedStore: null, skippedReason: null, text, quantity: 1, checked: false, sortOrder: 0, status: "MATCHED", error: null, parsedJson: canonical ? { canonicalName: canonical, attributes: [], sizeHint: null, queries: {}, fallbackQuery: null, ambiguous: false } : null, createdAt: 0, updatedAt: 0 };
+  return { id, basketId: "default", kind: "item", parentId: null, recipeJson: null, assignedStore: null, skippedReason: null, text, quantity: 1, checked: false, boughtAt: null, sortOrder: 0, status: "MATCHED", error: null, parsedJson: canonical ? { canonicalName: canonical, attributes: [], sizeHint: null, queries: {}, fallbackQuery: null, ambiguous: false } : null, createdAt: 0, updatedAt: 0 };
 }
 
 describe("naming memory", () => {

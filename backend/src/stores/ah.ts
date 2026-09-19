@@ -133,7 +133,7 @@ export function mapAhDetails(body: Record<string, unknown>): { description: stri
 }
 
 export class AhAdapter implements StoreAdapter {
-  readonly info = { code: "AH", name: "Albert Heijn", color: "#00ADE6", coverage: "full" as const };
+  readonly info = { code: "AH", name: "Albert Heijn", color: "#00ADE6", coverage: "full" as const, logoUrl: "https://www.google.com/s2/favicons?domain=ah.nl&sz=128" };
   private token: Token | null = null;
   private readonly throttle = new StoreThrottle("AH");
 

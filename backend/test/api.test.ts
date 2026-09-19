@@ -363,6 +363,46 @@ describe("api", () => {
     expect((await api(`/purchases/${saved.purchase.id}`, { method: "DELETE" })).status).toBe(204);
   });
 
+  test("ticking an item in the store records a trip line, stocks it, and unbuy takes it back", async () => {
+    const created = await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "chocolademelk", quantity: 2 }) });
+    const id = ((await created.json()) as { id: string }).id;
+    await waitForMatched(id);
+    const bought = await api(`/basket/items/${id}/bought`, { method: "POST", body: JSON.stringify({ store: "AH", productId: "AH:9" }) });
+    expect(bought.status).toBe(200);
+    const body = (await bought.json()) as any;
+    expect(body.item.checked).toBe(true);
+    expect(body.item.boughtAt).toBeGreaterThan(0);
+    expect(body.purchase.source).toBe("shop");
+    expect(body.purchase.store).toBe("AH");
+    expect(body.line.itemId).toBe(id);
+    expect(body.line.productId).toBe("AH:9");
+    expect(body.line.totalPriceCents).toBe(398);
+    expect(body.purchase.totalCents).toBe(398);
+    const stock = (await (await api("/stock")).json()) as any;
+    expect(stock.items.some((row: any) => row.productId === "AH:9")).toBe(true);
+
+    // A second tick at the same store within the trip window joins the same purchase.
+    const scanned = await api("/purchases/scan-item", { method: "POST", body: JSON.stringify({ store: "AH", barcode: "8710400012345" }) });
+    expect(scanned.status).toBe(201);
+    const scan = (await scanned.json()) as any;
+    expect(scan.purchase.id).toBe(body.purchase.id);
+    expect(scan.line.barcode).toBe("8710400012345");
+    expect(scan.line.name).toBe("8710400012345");
+    expect(scan.product).toBeNull();
+    const history = (await (await api("/purchases/history")).json()) as any;
+    const trip = history.purchases.find((entry: any) => entry.purchase.id === body.purchase.id);
+    expect(trip.lines).toHaveLength(2);
+    expect(history.products["AH:9"].title).toBe("AH Chocolademelk");
+
+    const unbought = await api(`/basket/items/${id}/unbuy`, { method: "POST" });
+    expect(((await unbought.json()) as any).checked).toBe(false);
+    const after = (await (await api("/purchases/history")).json()) as any;
+    expect(after.purchases.find((entry: any) => entry.purchase.id === body.purchase.id).lines).toHaveLength(1);
+    expect((await api(`/purchases/${body.purchase.id}`, { method: "DELETE" })).status).toBe(204);
+    expect((await api(`/basket/items/${id}`, { method: "DELETE" })).status).toBe(204);
+    for (const row of ((await (await api("/stock")).json()) as any).items) expect((await api(`/stock/${row.id}`, { method: "DELETE" })).status).toBe(204);
+  });
+
   test("deals lists promoted candidates of the same kind", async () => {
     const created = await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "bio melk" }) });
     const id = ((await created.json()) as { id: string }).id;

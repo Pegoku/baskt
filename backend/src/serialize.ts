@@ -32,6 +32,7 @@ export type BasketItemView = {
   text: string;
   quantity: number;
   checked: boolean;
+  boughtAt: number | null;
   sortOrder: number;
   status: BasketItemRow["status"];
   error: string | null;
@@ -77,6 +78,7 @@ export function itemView(item: BasketItemRow, matches: BasketMatchRow[], product
     text: item.text,
     quantity: item.quantity,
     checked: item.checked,
+    boughtAt: item.boughtAt ?? null,
     sortOrder: item.sortOrder,
     status: item.status,
     error: item.error,

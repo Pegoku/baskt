@@ -9,6 +9,8 @@ export type StoreInfo = {
   color: string;
   /** "full" when the store publishes its shelf prices, "partial" for offers-only sources. */
   coverage: "full" | "partial";
+  /** Small square logo the app shows next to the store name. */
+  logoUrl?: string | null;
 };
 
 export type StoreProduct = {

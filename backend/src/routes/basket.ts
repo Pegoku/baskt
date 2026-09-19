@@ -1,10 +1,11 @@
-import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt } from "drizzle-orm";
 import { Hono } from "hono";
 import { db, newId, now } from "@/db";
 import { basketItems, basketMatches, tombstones, DEFAULT_BASKET_ID, type BasketItemRow } from "@/db/schema";
 import { basketExists, transferItem } from "@/routes/baskets";
 import { defaultServings, rankBy, skipInStock } from "@/db/settings";
-import { inStock, listStock } from "@/stock";
+import { addStock, inStock, listStock } from "@/stock";
+import { forgetBought, recordBought } from "@/orders";
 import { enabledStoreCodes } from "@/db/settings";
 import { compareBasket, type CompareMatch } from "@/matching/compare";
 import { chooseMatch, enqueue, feedback, getItem, getMatches, isRunning, rejectShown, resetRejections, rematchItem, searchMoreCandidates, unskipMatch } from "@/matching/pipeline";
@@ -81,6 +82,7 @@ export function createItem(text: string, quantity: number, parentId: string | nu
     text: text.trim(),
     quantity: Math.max(1, Math.floor(quantity || 1)),
     checked: Boolean(have),
+    boughtAt: null,
     sortOrder: (last?.sortOrder ?? -1) + 1,
     status: "NEW",
     error: null,
@@ -209,10 +211,18 @@ function requestedBasket(c: { req: { query: (name: string) => string | undefined
   return basketExists(id) ? id : null;
 }
 
+/** Bought items stay (ticked) for a while so the trip can be undone, then leave the list; the purchase keeps them. */
+const BOUGHT_KEEP_MS = 12 * 60 * 60 * 1000;
+function purgeBought(basketId: string) {
+  const stale = db().select({ id: basketItems.id }).from(basketItems).where(and(eq(basketItems.basketId, basketId), lt(basketItems.boughtAt, now() - BOUGHT_KEEP_MS))).all();
+  for (const row of stale) deleteItemWithChildren(row.id);
+}
+
 basket.get("/", (c) => {
   const since = Number(c.req.query("since") ?? 0);
   const basketId = requestedBasket(c);
   if (!basketId) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
+  purgeBought(basketId);
   const database = db();
   const items = database
     .select()
@@ -273,6 +283,7 @@ basket.post("/items/from-product", async (c) => {
     text,
     quantity: Math.max(1, Math.floor(body.quantity ?? 1)),
     checked: false,
+    boughtAt: null,
     sortOrder: (last?.sortOrder ?? -1) + 1,
     status: "NEW",
     error: null,
@@ -568,6 +579,45 @@ basket.patch("/items/:id", async (c) => {
     db().delete(basketMatches).where(eq(basketMatches.itemId, item.id)).run();
     enqueue(item.id);
   }
+  return c.json(viewOf(item.id));
+});
+
+/**
+ * Ticked off in the store: the item is recorded on today's trip at that store (with the product it was bought
+ * as, when known), put in stock, and leaves the open list. Unticking (`/unbuy`) takes all of that back.
+ */
+basket.post("/items/:id/bought", async (c) => {
+  const item = getItem(c.req.param("id"));
+  if (!item || item.kind !== "item") return c.json({ error: { code: "NOT_FOUND", message: "item not found" } }, 404);
+  const body = (await c.req.json().catch(() => ({}))) as { store?: string; productId?: string | null; purchasedAt?: number | null };
+  if (!body.store || !hasStore(body.store)) return c.json({ error: { code: "BAD_REQUEST", message: "store is required" } }, 400);
+  const view = viewOf(item.id)!;
+  const match = view.matches.find((entry) => entry.store === body.store);
+  const product = (body.productId ? productsByIds([body.productId])[0] : null) ?? match?.chosen ?? match?.provisional ?? null;
+  if (item.boughtAt) forgetBought(item.id);
+  const at = typeof body.purchasedAt === "number" && body.purchasedAt > 0 ? body.purchasedAt : now();
+  const { purchase, line } = recordBought({
+    store: body.store,
+    name: product?.title ?? item.text,
+    quantity: item.quantity,
+    unitPriceCents: product?.priceCents ?? null,
+    totalPriceCents: product ? product.priceCents * item.quantity : null,
+    productId: product?.id ?? null,
+    itemId: item.id,
+    barcode: null,
+    dealText: product?.dealText ?? null,
+    purchasedAt: at,
+  });
+  addStock({ text: item.parsedJson?.canonicalName ?? item.text, quantityText: product?.quantityText ?? null, productId: product?.id ?? null, imageUrl: product?.imageUrl ?? null });
+  db().update(basketItems).set({ checked: true, boughtAt: at, assignedStore: body.store, updatedAt: now() }).where(eq(basketItems.id, item.id)).run();
+  return c.json({ item: viewOf(item.id), purchase, line });
+});
+
+basket.post("/items/:id/unbuy", (c) => {
+  const item = getItem(c.req.param("id"));
+  if (!item) return c.json({ error: { code: "NOT_FOUND", message: "item not found" } }, 404);
+  forgetBought(item.id);
+  db().update(basketItems).set({ checked: false, boughtAt: null, updatedAt: now() }).where(eq(basketItems.id, item.id)).run();
   return c.json(viewOf(item.id));
 });
 

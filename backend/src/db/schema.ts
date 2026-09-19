@@ -109,6 +109,7 @@ export const purchases = sqliteTable("purchases", {
   store: text("store").notNull(),
   purchasedAt: integer("purchased_at").notNull(),
   totalCents: integer("total_cents").notNull(),
+  /** "receipt" (scanned), "manual", or "shop" (ticked off in shopping mode). */
   source: text("source").notNull().default("receipt"),
   createdAt: integer("created_at").notNull(),
 });
@@ -125,8 +126,12 @@ export const purchaseLines = sqliteTable(
     totalPriceCents: integer("total_price_cents").notNull(),
     dealText: text("deal_text"),
     sortOrder: integer("sort_order").notNull().default(0),
+    /** Basket item this line came from (shopping mode), so un-ticking can take it back. */
+    itemId: text("item_id"),
+    /** Scanned in store; the name is the bare number until a product is found for it. */
+    barcode: text("barcode"),
   },
-  (table) => [index("purchase_lines_purchase_idx").on(table.purchaseId)],
+  (table) => [index("purchase_lines_purchase_idx").on(table.purchaseId), index("purchase_lines_item_idx").on(table.itemId)],
 );
 
 export type ItemStatus = "NEW" | "PARSING" | "MATCHING" | "MATCHED" | "ERROR";
@@ -160,6 +165,8 @@ export const basketItems = sqliteTable("basket_items", {
   text: text("text").notNull(),
   quantity: integer("quantity").notNull().default(1),
   checked: integer("checked", { mode: "boolean" }).notNull().default(false),
+  /** Set when the item was bought in shopping mode; the purchase line keeps the history, the row is purged later. */
+  boughtAt: integer("bought_at"),
   sortOrder: integer("sort_order").notNull().default(0),
   status: text("status").$type<ItemStatus>().notNull().default("NEW"),
   error: text("error"),

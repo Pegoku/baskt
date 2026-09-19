@@ -1,7 +1,10 @@
 import { Hono } from "hono";
 import { deletePurchase, listPurchases, matchReceiptLine, purchaseWithLines, savePurchase, scanReceipt, spendSummary, type ReceiptLine } from "@/receipts";
 import { hasStore } from "@/stores/registry";
-import { productsByIds } from "@/stores/search";
+import { lookupBarcode, productsByIds } from "@/stores/search";
+import { enabledStoreCodes } from "@/db/settings";
+import { purchaseHistory, recordBought } from "@/orders";
+import { addStock } from "@/stock";
 
 export const purchasesRoute = new Hono();
 
@@ -46,6 +49,41 @@ purchasesRoute.post("/", async (c) => {
 });
 
 purchasesRoute.get("/", (c) => c.json({ purchases: listPurchases() }));
+
+/** Everything bought, with lines and product pictures, for the day-by-day orders view. */
+purchasesRoute.get("/history", (c) => c.json(purchaseHistory(Math.min(Number(c.req.query("limit") ?? 200) || 200, 1000))));
+
+/**
+ * Something picked up in the store that was not on the list: the barcode is looked up at that store (then the
+ * others); the line carries the product when found and just the number otherwise. Either way it goes into stock.
+ */
+purchasesRoute.post("/scan-item", async (c) => {
+  {
+    const body = (await c.req.json().catch(() => ({}))) as { store?: string; barcode?: string; purchasedAt?: number | null };
+    const gtin = (body.barcode ?? "").replace(/\D/g, "");
+    if (!body.store || !hasStore(body.store)) return c.json({ error: { code: "BAD_REQUEST", message: "store is required" } }, 400);
+    if (gtin.length < 8 || gtin.length > 14) return c.json({ error: { code: "BAD_REQUEST", message: "barcode must be 8-14 digits" } }, 400);
+    const store = body.store;
+    const stores = [store, ...enabledStoreCodes().filter((code) => code !== store)];
+    const results = await lookupBarcode(stores, gtin);
+    const product = results.find((entry) => entry.store === store)?.product ?? results.find((entry) => entry.product)?.product ?? null;
+    const at = typeof body.purchasedAt === "number" && body.purchasedAt > 0 ? body.purchasedAt : undefined;
+    const { purchase, line } = recordBought({
+      store,
+      name: product?.title ?? gtin,
+      quantity: 1,
+      unitPriceCents: product?.priceCents ?? null,
+      totalPriceCents: product?.priceCents ?? null,
+      productId: product?.id ?? null,
+      itemId: null,
+      barcode: gtin,
+      dealText: product?.dealText ?? null,
+      purchasedAt: at,
+    });
+    addStock({ text: product?.title ?? gtin, quantityText: product?.quantityText ?? null, productId: product?.id ?? null, imageUrl: product?.imageUrl ?? null, barcode: gtin });
+    return c.json({ purchase, line, product }, 201);
+  }
+});
 
 purchasesRoute.get("/summary", (c) => c.json(spendSummary(Math.min(Number(c.req.query("months") ?? 6) || 6, 24))));
 
