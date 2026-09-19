@@ -179,13 +179,15 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
             auth(); contentType(ContentType.Application.Json); setBody(FromTextRequest(text, basketId))
         }.expect<ItemsResponse>().items
 
-    suspend fun updateItem(id: String, text: String? = null, quantity: Int? = null, checked: Boolean? = null): BasketItem =
+    /** `keepMatches` relabels the entry without re-running the matching, so the picks survive a translation. */
+    suspend fun updateItem(id: String, text: String? = null, quantity: Int? = null, checked: Boolean? = null, keepMatches: Boolean = false): BasketItem =
         client.patch(url("/basket/items/$id")) {
             auth(); contentType(ContentType.Application.Json)
             setBody(buildMap<String, Any?> {
                 if (text != null) put("text", text)
                 if (quantity != null) put("quantity", quantity)
                 if (checked != null) put("checked", checked)
+                if (keepMatches) put("keepMatches", true)
             }.toJsonObject())
         }.expect()
 
@@ -329,6 +331,12 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
 
     suspend fun findDuplicates(basketId: String): DedupeResponse =
         client.post(url("/basket/dedupe")) { auth(); contentType(ContentType.Application.Json); setBody(BasketIdRequest(basketId)) }.expect()
+
+    suspend fun tidy(basketId: String): TidyPlan =
+        client.post(url("/basket/tidy")) {
+            auth(); contentType(ContentType.Application.Json); setBody(BasketIdRequest(basketId))
+            timeout { requestTimeoutMillis = 120_000; socketTimeoutMillis = 120_000 }
+        }.expect()
 
     suspend fun confirm(items: List<VoiceItem>, basketId: String): List<BasketItem> =
         client.post(url("/basket/confirm")) {

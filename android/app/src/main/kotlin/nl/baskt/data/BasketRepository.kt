@@ -132,7 +132,7 @@ class BasketRepository(
                         }
                         "checked" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, checked = op.checked) }
                         "quantity" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, quantity = op.quantity) }
-                        "rename" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, text = op.text) }
+                        "rename" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, text = op.text, keepMatches = op.keepMatches == true) }
                         "delete" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.deleteItem(it) }
                         "reorder" -> api.reorderItems((op.items ?: emptyList()).mapNotNull { real(it) }.filterNot { it.startsWith("local-") })
                         "deleteMany" -> api.deleteItems((op.items ?: emptyList()).mapNotNull { real(it) }.filterNot { it.startsWith("local-") })
@@ -570,8 +570,8 @@ class BasketRepository(
         queued(PendingOp(type = "quantity", itemId = item.id, quantity = quantity), optimistic = { patchLocal(item.id) { it.copy(quantity = quantity) } })
     }
 
-    suspend fun rename(item: BasketItem, text: String) {
-        queued(PendingOp(type = "rename", itemId = item.id, text = text), optimistic = { patchLocal(item.id) { it.copy(text = text) } })
+    suspend fun rename(item: BasketItem, text: String, keepMatches: Boolean = false) {
+        queued(PendingOp(type = "rename", itemId = item.id, text = text, keepMatches = keepMatches.takeIf { it }), optimistic = { patchLocal(item.id) { it.copy(text = text) } })
     }
 
     suspend fun delete(item: BasketItem) {
@@ -713,6 +713,30 @@ class BasketRepository(
                     toDelete += members.filter { it.id != keep.id }
                 }
             }
+        }
+        if (toDelete.isNotEmpty()) deleteMany(toDelete)
+    }
+
+    suspend fun planTidy(): TidyPlan? = guard { api.tidy(_currentBasketId.value) }
+
+    /**
+     * Applies the confirmed parts of a tidy plan through the normal item operations, so they queue offline
+     * like any edit. Renames keep the matches: the product is the same, only the wording changes.
+     */
+    suspend fun applyTidy(renames: List<TidyRename>, merges: List<TidyMerge>) {
+        val current = _items.value
+        val toDelete = mutableListOf<BasketItem>()
+        for (merge in merges) {
+            val members = merge.items.mapNotNull { member -> current.firstOrNull { it.id == member.id } }
+            val keep = members.firstOrNull { it.id == merge.keepId } ?: continue
+            if (members.size < 2) continue
+            if (merge.text.isNotBlank() && merge.text != keep.text) rename(keep, merge.text, keepMatches = true)
+            if (keep.quantity != merge.quantity) setQuantity(keep, merge.quantity)
+            toDelete += members.filter { it.id != keep.id }
+        }
+        for (change in renames) {
+            val item = current.firstOrNull { it.id == change.id } ?: continue
+            if (change.to.isNotBlank() && change.to != item.text) rename(item, change.to, keepMatches = true)
         }
         if (toDelete.isNotEmpty()) deleteMany(toDelete)
     }

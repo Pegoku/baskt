@@ -405,6 +405,33 @@ data class DuplicateGroup(
 @Serializable
 data class DedupeResponse(val groups: List<DuplicateGroup> = emptyList(), val scanned: Int = 0)
 
+@Serializable
+data class TidyItem(val id: String, val text: String, val quantity: Int = 1, val folder: String? = null, val product: String? = null)
+
+/** A new wording for one entry, in the app language; the matches and picks stay. */
+@Serializable
+data class TidyRename(val id: String, val from: String, val to: String, val reason: String? = null)
+
+/** Duplicates nobody decided about: one entry survives with the summed quantity and the given wording. */
+@Serializable
+data class TidyMerge(val items: List<TidyItem>, val keepId: String, val text: String, val quantity: Int = 1, val reason: String = "")
+
+/** Look-alikes left alone because each has its own chosen product. */
+@Serializable
+data class TidyDistinct(val items: List<TidyItem>, val reason: String = "")
+
+/** What the magic wand proposes; nothing is applied until the user confirms. */
+@Serializable
+data class TidyPlan(
+    val scanned: Int = 0,
+    val language: String = "",
+    val renames: List<TidyRename> = emptyList(),
+    val merges: List<TidyMerge> = emptyList(),
+    val distinct: List<TidyDistinct> = emptyList(),
+) {
+    val isEmpty: Boolean get() = renames.isEmpty() && merges.isEmpty()
+}
+
 /** What to do with one duplicate group. */
 sealed interface DuplicateResolution {
     /** Keep one entry with the summed quantity, remove the rest. */

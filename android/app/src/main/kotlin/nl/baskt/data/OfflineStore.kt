@@ -71,6 +71,8 @@ data class PendingOp(
     val emoji: String? = null,
     val childIds: List<String>? = null,
     val failure: String? = null,
+    /** Rename without re-matching (tidy relabels). */
+    val keepMatches: Boolean? = null,
     val at: Long = System.currentTimeMillis(),
 ) {
     val label: String

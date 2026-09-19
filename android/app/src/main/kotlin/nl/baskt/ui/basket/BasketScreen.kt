@@ -46,6 +46,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.CallMerge
@@ -214,7 +215,24 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
             },
         )
     }
-
+    val tidyPlan by viewModel.tidy.collectAsState()
+    val tidying by viewModel.tidying.collectAsState()
+    if (tidyPlan != null || tidying) {
+        TidySheet(
+            plan = tidyPlan,
+            loading = tidying,
+            onDismiss = { viewModel.dismissTidy() },
+            onApply = { renames, merges ->
+                viewModel.applyTidy(renames, merges)
+                val parts = buildList {
+                    if (renames.isNotEmpty()) add(if (renames.size == 1) "renamed 1 item" else "renamed ${renames.size} items")
+                    val removed = merges.sumOf { it.items.size - 1 }
+                    if (removed > 0) add(if (removed == 1) "merged 1 duplicate" else "merged $removed duplicates")
+                }
+                if (parts.isNotEmpty()) scope.launch { snackbar.showSnackbar("Tidied up: " + parts.joinToString(", ")) }
+            },
+        )
+    }
 
     androidx.activity.compose.BackHandler(enabled = selectionMode) { viewModel.clearSelection() }
     Scaffold(
@@ -252,6 +270,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                     IconButton(onClick = onScan) { Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan barcodes") }
                     IconButton(onClick = onRecipes) { Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = "Recipes") }
                     if (items.any { !it.checked && !it.isGroup }) IconButton(onClick = onDeals) { Icon(Icons.Default.LocalOffer, contentDescription = "Find deals") }
+                    if (items.any { !it.checked && !it.isGroup }) IconButton(onClick = { viewModel.planTidy() }) { Icon(Icons.Default.AutoFixHigh, contentDescription = "Tidy up") }
                     var menu by remember { mutableStateOf(false) }
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }

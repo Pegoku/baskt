@@ -13,6 +13,9 @@ import nl.baskt.data.BasketItem
 import nl.baskt.data.Comparison
 import nl.baskt.data.DuplicateGroup
 import nl.baskt.data.DuplicateResolution
+import nl.baskt.data.TidyMerge
+import nl.baskt.data.TidyPlan
+import nl.baskt.data.TidyRename
 import nl.baskt.data.AllDealsResponse
 import nl.baskt.data.ChatMessage
 import nl.baskt.data.Choice
@@ -323,6 +326,25 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun dismissDuplicates() { _duplicates.value = null }
+
+    /** The magic wand's proposal; null until asked, an empty plan when the list is already tidy. */
+    private val _tidy = MutableStateFlow<TidyPlan?>(null)
+    val tidy: StateFlow<TidyPlan?> = _tidy
+    private val _tidying = MutableStateFlow(false)
+    val tidying: StateFlow<Boolean> = _tidying
+
+    fun planTidy() = viewModelScope.launch {
+        _tidying.value = true
+        _tidy.value = basket.planTidy() ?: TidyPlan()
+        _tidying.value = false
+    }
+
+    fun applyTidy(renames: List<TidyRename>, merges: List<TidyMerge>) = viewModelScope.launch {
+        _tidy.value = null
+        basket.applyTidy(renames, merges)
+    }
+
+    fun dismissTidy() { _tidy.value = null }
 
     private val _scan = MutableStateFlow<ReceiptScan?>(null)
     val scan: StateFlow<ReceiptScan?> = _scan

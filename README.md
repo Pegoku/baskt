@@ -113,6 +113,17 @@ product in another language, singular/plural, or a generic entry next to a speci
 Nothing changes until you tap **Apply**; the edits go through the normal item operations, so they queue
 offline like any other change.
 
+## Tidy up
+
+The wand in the basket's top bar tidies the open items in one pass, and shows the plan before anything
+changes. Duplicates that nobody has decided about are merged: one entry survives (the one with your
+picks, else the furthest matched, else the oldest) and gets the summed quantity. Look-alikes that each
+have their own chosen product (two different chocolate cookies, both picked at AH) are kept apart and
+only renamed so you can tell them apart. Finally every surviving entry is rewritten in the app language:
+translations ("melk" → "milk"), misspellings ("Yorkham" → "jamón york"), brands and sizes kept as
+written. Untick what you want to keep; renames go through `keepMatches`, so the picks survive the new
+wording. Without an AI provider only literal repeats are merged and nothing is renamed.
+
 ## Find similar
 
 Open any product (from a basket item, a search, a scan or a deal) and tap **Find similar at other
