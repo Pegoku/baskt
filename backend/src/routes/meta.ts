@@ -10,6 +10,7 @@ import { aiCache, basketItems, basketMatches, priceHistory, products, searchCach
 import { appLanguage, defaultServings, enabledStoreCodes, rankBy, setSetting, skipInStock } from "@/db/settings";
 import { addStock, listStock, removeStock } from "@/stock";
 import { deleteChoice, listChoices } from "@/matching/memory";
+import { deleteName, listNames } from "@/matching/naming";
 import { allStores, hasStore, storeHealth } from "@/stores/registry";
 import { lookupBarcode, searchStore } from "@/stores/search";
 import { priceHistoryFor, recentPriceChanges, runPriceScan, scanStatus } from "@/prices";
@@ -142,7 +143,9 @@ meta.get("/products/:id/price-history", (c) => {
 /** Watched products whose price changed recently (drops first). */
 meta.get("/prices/changes", (c) => c.json({ changes: recentPriceChanges(Math.min(Number(c.req.query("days") ?? 7) || 7, 90)), scan: scanStatus() }));
 
-meta.get("/memory", (c) => c.json({ choices: listChoices(Number(c.req.query("limit") ?? 200) || 200) }));
+meta.get("/memory", (c) => c.json({ choices: listChoices(Number(c.req.query("limit") ?? 200) || 200), names: listNames() }));
+
+meta.delete("/memory/names/:id", (c) => (deleteName(c.req.param("id")) ? c.body(null, 204) : c.json({ error: { code: "NOT_FOUND", message: "name not found" } }, 404)));
 
 meta.delete("/memory/:id", (c) => (deleteChoice(c.req.param("id")) ? c.body(null, 204) : c.json({ error: { code: "NOT_FOUND", message: "choice not found" } }, 404)));
 

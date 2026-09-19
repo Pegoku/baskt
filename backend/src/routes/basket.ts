@@ -16,6 +16,7 @@ import { termRelevance } from "@/stores/promotions";
 import { interpretVoice } from "@/matching/voice";
 import { findDuplicates } from "@/matching/dedupe";
 import { planTidy, toCandidate } from "@/matching/tidy";
+import { interpretInstruction } from "@/matching/instruct";
 import { speechTranscript } from "@/routes/speech";
 import { fetchRecipe, getUserRecipe, userRecipeAsRecipe } from "@/routes/recipes";
 import { localizeRecipe } from "@/matching/localize";
@@ -479,6 +480,19 @@ basket.post("/tidy", async (c) => {
   const deals = await findDeals(basketId);
   const plan = await planTidy(open.map((row) => toCandidate(row, matches.filter((match) => match.itemId === row.id), products, row.parentId ? folders.get(row.parentId) ?? null : null)), deals);
   return c.json(plan);
+});
+
+/**
+ * Comment mode: a free-text instruction about selected items ("double the cookies", "call it bolsa de
+ * lechugas") becomes concrete edits. Wording corrections are remembered. The app applies the edits.
+ */
+basket.post("/instruct", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { itemIds?: string[]; instruction?: string };
+  const ids = Array.isArray(body.itemIds) ? body.itemIds.filter((id): id is string => typeof id === "string") : [];
+  if (!ids.length || typeof body.instruction !== "string" || !body.instruction.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "itemIds and instruction are required" } }, 400);
+  const rows = db().select().from(basketItems).where(inArray(basketItems.id, ids)).all().filter((row) => row.kind === "item");
+  const ordered = ids.map((id) => rows.find((row) => row.id === id)).filter((row): row is BasketItemRow => Boolean(row));
+  return c.json(await interpretInstruction(ordered, body.instruction));
 });
 
 /** Adds a confirmed proposal: plain items and recipe folders in one go. */

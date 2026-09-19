@@ -168,6 +168,22 @@ export const basketItems = sqliteTable("basket_items", {
   updatedAt: integer("updated_at").notNull(),
 });
 
+/** Wordings the user asked for ("krulsla melange" should read "bolsa de lechugas"); tidy and translations follow them. */
+export const namingMemory = sqliteTable(
+  "naming_memory",
+  {
+    id: text("id").primaryKey(),
+    /** What the entry said before, as written. */
+    source: text("source").notNull(),
+    /** Normalized lookups: the source text and its parsed generic name. */
+    keys: text("keys", { mode: "json" }).$type<string[]>().notNull(),
+    preferred: text("preferred").notNull(),
+    language: text("language").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [index("naming_memory_preferred_idx").on(table.preferred)],
+);
+
 export type MatchStatus = "PENDING" | "CHOSEN" | "NONE" | "EXHAUSTED";
 export type ChosenBy = "USER" | "MEMORY" | "AI";
 
@@ -293,6 +309,7 @@ export type ProductRow = typeof products.$inferSelect;
 export type BasketItemRow = typeof basketItems.$inferSelect;
 export type BasketMatchRow = typeof basketMatches.$inferSelect;
 export type ChoiceRow = typeof choices.$inferSelect;
+export type NamingMemoryRow = typeof namingMemory.$inferSelect;
 
 /** Shared upstream cache; safe to prune by expiry. */
 export const upstreamCache = sqliteTable("upstream_cache", {

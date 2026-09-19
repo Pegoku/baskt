@@ -4,6 +4,7 @@ import type { BasketItemRow, BasketMatchRow, ProductRow } from "@/db/schema";
 import { aiConfigured } from "@/env";
 import { normalizeText } from "@/lib/text";
 import { findDuplicates, type DuplicateGroup } from "@/matching/dedupe";
+import { listNames, preferredName } from "@/matching/naming";
 import type { Deal } from "@/matching/deals";
 
 /** An open item with what the user has already decided about it. */
@@ -64,6 +65,7 @@ For each numbered entry return the clean name it should have in LANGUAGE:
 - Keep the user's level of detail: do not make an entry more specific or more generic.
 - Entries marked "apart from" name a different product than the entries listed there, and each has its chosen product named. Give them names in LANGUAGE that tell them apart (use the chosen product's brand, flavour or size), while staying short.
 - Leave entries that are already correct LANGUAGE unchanged: do not return them.
+- When "preferred wordings" are given, they are corrections the user made before: follow them exactly for the same product and use their style for similar ones.
 Return ONLY {"entries":[{"i": entry number, "text": new wording}]} with one object per entry that changes. Return {"entries":[]} when nothing changes. Never invent entries.`;
 
 type AiEntry = { i?: unknown; text?: unknown };
@@ -183,10 +185,23 @@ export function pickDeals(deals: Deal[], removed: Set<string>) {
 
 type NameInput = { id: string; text: string; canonical: string | null; product: string | null; apartFrom: string[] | null };
 
-/** Asks the model for the app-language wording of each entry; returns only the ones that change. */
+/**
+ * The app-language wording of each entry; returns only the ones that change. Wordings the user corrected
+ * before are applied directly, and shown to the model as examples for the rest.
+ */
 async function unifyNames(entries: NameInput[], language: string): Promise<Map<string, string>> {
   const out = new Map<string, string>();
+  const remembered = listNames(500);
+  const pending: NameInput[] = [];
+  for (const entry of entries) {
+    const preferred = preferredName(entry.text, entry.canonical, remembered);
+    if (preferred && !entry.apartFrom?.length) {
+      if (preferred !== entry.text) out.set(entry.id, preferred);
+    } else pending.push(entry);
+  }
+  entries = pending;
   if (!aiConfigured() || !entries.length || entries.length > 150) return out;
+  const examples = remembered.slice(0, 30).map((row) => `"${row.source}" -> "${row.preferred}"`);
   const listing = entries
     .map((entry, index) => {
       const notes: string[] = [];
@@ -198,7 +213,7 @@ async function unifyNames(entries: NameInput[], language: string): Promise<Map<s
   const raw = await chatJson<{ entries?: AiEntry[] }>(
     [
       { role: "system", content: RENAME_SYSTEM.replaceAll("LANGUAGE", language) },
-      { role: "user", content: listing },
+      { role: "user", content: examples.length ? `Preferred wordings:\n${examples.join("\n")}\n\nEntries:\n${listing}` : listing },
     ],
     { maxTokens: 2000 },
   );
