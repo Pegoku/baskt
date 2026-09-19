@@ -29,6 +29,7 @@ import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.basket.BasketScreen
 import nl.baskt.ui.compare.CompareScreen
 import nl.baskt.ui.compare.OrderScreen
+import nl.baskt.ui.orders.OrdersScreen
 import kotlin.math.absoluteValue
 
 /** Fraction of a page the finger must travel before releasing navigates; a brisk fling commits sooner. */
@@ -38,8 +39,11 @@ private const val CommitHysteresis = 0.1f
 /** How much slower the receding page moves than the finger. */
 private const val UnderlayParallax = 0.25f
 
+/** The basket sits at this index; previous orders are the page to its left. */
+private const val BasketPage = 1
+
 /**
- * Basket → Review → Order as three pages of one pager, treated as a gesture-driven lateral transition:
+ * Orders ← Basket → Review → Order as four pages of one pager, treated as a gesture-driven lateral transition:
  * the page follows the finger 1:1 once touch slop is cleared, deeper pages slide over the shallower one
  * like a stack (the one underneath recedes, lags and rounds off), release settles on a stiff spatial
  * spring that keeps the finger's velocity, and a single light tick marks the point where letting go would
@@ -62,20 +66,21 @@ fun HomePager(
     onChat: () -> Unit = {},
     onTidy: () -> Unit = {},
 ) {
-    val pager = rememberPagerState(initialPage = startPage) { 3 }
+    // `startPage` counts from the basket (0 = basket, 1 = review); the orders page sits before it.
+    val pager = rememberPagerState(initialPage = startPage + BasketPage) { 4 }
     val scope = rememberCoroutineScope()
     // Stiff, well-damped spring: the Expressive fast spatial spec (0.6 damping, 800 stiffness) still
     // bounces for a beat after release, which reads as sluggish for something the finger just threw.
     val spring = remember { spring<Float>(dampingRatio = 0.8f, stiffness = 1400f) }
     fun go(page: Int) = scope.launch { pager.animateScrollToPage(page, animationSpec = spring) }
-    BackHandler(enabled = pager.currentPage > 0) { go(pager.currentPage - 1) }
+    BackHandler(enabled = pager.currentPage != BasketPage) { go(if (pager.currentPage < BasketPage) BasketPage else pager.currentPage - 1) }
 
     // Haptic at the commit threshold only: one tick when the drag crosses the point where releasing
     // would change page, one softer tick if it is pulled back below it, with hysteresis so wobbling
     // around the line stays quiet. Button-driven page changes never vibrate.
     val haptics = LocalHapticFeedback.current
     var dragging by remember { mutableStateOf(false) }
-    var dragStartPage by remember { mutableIntStateOf(startPage) }
+    var dragStartPage by remember { mutableIntStateOf(startPage + BasketPage) }
     var committed by remember { mutableStateOf(false) }
     LaunchedEffect(pager) {
         launch {
@@ -137,11 +142,13 @@ fun HomePager(
             },
         ) {
             when (page) {
-                0 -> BasketScreen(
+                0 -> OrdersScreen(viewModel, onBack = { go(BasketPage) })
+                BasketPage -> BasketScreen(
                     viewModel = viewModel,
+                    onOrders = { go(0) },
                     onOpenItem = onOpenItem,
                     onOpenGroup = onOpenGroup,
-                    onCompare = { go(1) },
+                    onCompare = { go(2) },
                     onSettings = onSettings,
                     onStock = onStock,
                     onSearch = onSearch,
@@ -153,8 +160,8 @@ fun HomePager(
                     onChat = onChat,
                     onTidy = onTidy,
                 )
-                1 -> CompareScreen(viewModel, onBack = { go(0) }, onOpenItem = onOpenItem, onOrder = { go(2) })
-                else -> OrderScreen(viewModel, onBack = { go(1) }, onShop = onShop)
+                2 -> CompareScreen(viewModel, onBack = { go(BasketPage) }, onOpenItem = onOpenItem, onOrder = { go(3) }, onPickStore = { viewModel.assign("store:$it"); go(3) })
+                else -> OrderScreen(viewModel, onBack = { go(2) }, onShop = onShop)
             }
         }
     }

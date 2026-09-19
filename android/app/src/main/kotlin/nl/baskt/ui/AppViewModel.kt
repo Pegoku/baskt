@@ -11,6 +11,8 @@ import nl.baskt.AppContainer
 import nl.baskt.data.AppSettings
 import nl.baskt.data.BasketItem
 import nl.baskt.data.Comparison
+import nl.baskt.data.PurchaseHistory
+import nl.baskt.data.TripScan
 import nl.baskt.data.DuplicateGroup
 import nl.baskt.data.DuplicateResolution
 import nl.baskt.data.MergeDecision
@@ -692,11 +694,35 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun stockEntryFor(product: Product, barcode: String?): StockItem? = basket.stock.value.firstOrNull { it.productId == product.id || (barcode != null && it.barcode == barcode) }
     fun addToStockFromItem(item: BasketItem) = viewModelScope.launch { basket.addItemToStock(item) }
 
-    /** Shopping mode: buying an item puts it in stock with the product you bought. */
-    fun markBought(item: BasketItem, product: Product) = viewModelScope.launch {
-        basket.setChecked(item, true)
-        basket.addItemToStock(item, product)
+    /** Shopping mode: buying an item records it on today's trip, puts it in stock and takes it off the open list. */
+    fun markBought(item: BasketItem, store: String, product: Product?) = viewModelScope.launch { basket.markBought(item, store, product) }
+    fun unbuy(item: BasketItem) = viewModelScope.launch { basket.unbuy(item) }
+    /** Picked up in the store without being on the list. */
+    fun scanItem(store: String, barcode: String) = viewModelScope.launch { basket.scanItem(store, barcode.filter { it.isDigit() }) }
+    val tripScans: StateFlow<List<TripScan>> = basket.tripScans
+
+    /** Day-by-day orders: purchases recorded in the store plus scanned receipts. */
+    private val _history = MutableStateFlow<PurchaseHistory?>(null)
+    val history: StateFlow<PurchaseHistory?> = _history
+    fun loadHistory() = viewModelScope.launch {
+        _history.value = container.offline.load<PurchaseHistory>("purchase-history") ?: _history.value
+        basket.purchaseHistory()?.let { _history.value = it }
     }
+
+    /** Main-list tick = leave this item out of the trip; the order step's Skip does the same. */
+    fun skip(item: BasketItem, skipped: Boolean) = viewModelScope.launch {
+        basket.setChecked(item, skipped)
+        if (skipped && item.assignedStore != null) basket.assignItem(item, null)
+        compare(force = true)
+    }
+    fun unskipAll() = viewModelScope.launch { basket.unskipAll(); compare(force = true) }
+    /** Order step: buying at a store also brings a skipped item back into the trip. */
+    fun buyAt(item: BasketItem, store: String) = viewModelScope.launch {
+        if (item.isSkipped) basket.setChecked(item, false)
+        basket.assignItem(item, store)
+        compare(force = true)
+    }
+    fun saveLoyaltyCard(store: String, number: String?) = viewModelScope.launch { container.settingsStore.saveLoyaltyCard(store, number) }
     val lastAdded get() = basket.lastAdded
     fun consumeLastAdded() { basket.lastAdded.value = null }
     fun removeStock(item: StockItem) = viewModelScope.launch { basket.removeStock(item) }

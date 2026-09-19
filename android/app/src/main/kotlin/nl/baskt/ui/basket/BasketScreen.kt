@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.CallMerge
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.LocalOffer
@@ -113,8 +114,10 @@ import nl.baskt.ui.common.StoreBadge
 import nl.baskt.ui.common.storeName
 
 @Composable
-fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit, onStock: () -> Unit, onSearch: () -> Unit, onDeals: () -> Unit, onRecipes: () -> Unit, onShop: (String) -> Unit, onPurchases: () -> Unit, onScan: () -> Unit = {}, onChat: () -> Unit = {}, onTidy: () -> Unit = {}) {
-    val items by viewModel.basket.items.collectAsState()
+fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit, onStock: () -> Unit, onSearch: () -> Unit, onDeals: () -> Unit, onRecipes: () -> Unit, onShop: (String) -> Unit, onPurchases: () -> Unit, onScan: () -> Unit = {}, onChat: () -> Unit = {}, onTidy: () -> Unit = {}, onOrders: () -> Unit = {}) {
+    // Items bought in the store live on the orders page now; the list only shows what is still to decide on.
+    val allItems by viewModel.basket.items.collectAsState()
+    val items = allItems.filter { !it.isBought }
     val stores by viewModel.basket.stores.collectAsState()
     val baskets by viewModel.basket.baskets.collectAsState()
     val currentBasketId by viewModel.basket.currentBasketId.collectAsState()
@@ -151,8 +154,8 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
         val added = lastAdded ?: return@LaunchedEffect
         viewModel.consumeLastAdded()
         if (added.inStock) {
-            val result = snackbar.showSnackbar("“${added.text}” is already in your stock — marked as done", actionLabel = "Buy anyway", withDismissAction = true)
-            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) viewModel.toggleChecked(added)
+            val result = snackbar.showSnackbar("“${added.text}” is already in your stock — skipped this trip", actionLabel = "Buy anyway", withDismissAction = true)
+            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) viewModel.skip(added, false)
         }
     }
     /** Opens the Google code scanner straight away; the result shows in the scan sheet below. */
@@ -226,7 +229,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                     actions = {
                         if (selectedItems.size == 1) IconButton(onClick = { renaming = selectedItems.first() }) { Icon(Icons.Default.Edit, contentDescription = "Rename") }
                         if (selectedItems.any { !it.isGroup }) IconButton(onClick = { naming = true }) { Icon(Icons.Default.CreateNewFolder, contentDescription = "Folder from selection") }
-                        IconButton(onClick = { viewModel.checkSelected(selectedItems.any { !it.checked }) }) { Icon(Icons.Default.CheckCircle, contentDescription = "Check / uncheck") }
+                        IconButton(onClick = { viewModel.checkSelected(selectedItems.any { !it.checked }) }) { Icon(Icons.Default.CheckCircle, contentDescription = "Skip / unskip") }
                         nl.baskt.ui.common.TransferMenu(baskets, currentBasketId) { basketId, copy -> viewModel.transferSelected(basketId, copy) }
                         IconButton(onClick = { viewModel.deleteSelected() }) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error) }
                     },
@@ -248,6 +251,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                     )
                 },
                 actions = {
+                    IconButton(onClick = onOrders) { Icon(Icons.Default.History, contentDescription = "Previous orders") }
                     IconButton(onClick = onScan) { Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan barcodes") }
                     IconButton(onClick = onRecipes) { Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = "Recipes") }
                     if (items.any { !it.checked && !it.isGroup }) IconButton(onClick = onDeals) { Icon(Icons.Default.LocalOffer, contentDescription = "Find deals") }
@@ -272,8 +276,9 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                                 DropdownMenuItem(text = { Text("Find duplicates") }, leadingIcon = { Icon(Icons.Default.CallMerge, contentDescription = null) }, onClick = { menu = false; viewModel.findDuplicates() })
                             }
                             DropdownMenuItem(text = { Text("Refresh") }, leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }, onClick = { menu = false; viewModel.reload() })
-                            if (items.any { it.checked }) {
-                                DropdownMenuItem(text = { Text("Clear checked") }, leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }, onClick = { menu = false; viewModel.clearChecked() })
+                            if (items.any { it.isSkipped }) {
+                                DropdownMenuItem(text = { Text("Unskip all") }, leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null) }, onClick = { menu = false; viewModel.unskipAll() })
+                                DropdownMenuItem(text = { Text("Delete skipped items") }, leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }, onClick = { menu = false; viewModel.clearChecked() })
                             }
                             DropdownMenuItem(text = { Text("Settings") }, leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) }, onClick = { menu = false; onSettings() })
                         }
@@ -308,6 +313,14 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
         nl.baskt.ui.common.OfflineBanner(viewModel, needsServer = "New ideas are matched once you're back online.")
+        val skippedCount = items.count { it.isSkipped && !it.isGroup }
+        if (skippedCount > 0 && !selectionMode) {
+            // Ticks mean "not this trip"; they stay until cleared here (or one by one), so nothing is forgotten.
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(if (skippedCount == 1) "1 item skipped this trip" else "$skippedCount items skipped this trip", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                androidx.compose.material3.AssistChip(onClick = { viewModel.unskipAll() }, label = { Text("Clear skipped") })
+            }
+        }
         Box(modifier = Modifier.fillMaxSize()) {
             // Assistant button: bottom-left, level with the Compare button.
             androidx.compose.material3.FloatingActionButton(
@@ -422,7 +435,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                             if (item.isGroup) {
                                 GroupCard(item, items.filter { it.parentId == item.id }, enabledStores, onClick = open, onLongClick = longPress, onToggle = { viewModel.toggleChecked(item) }, trailing = handle)
                             } else {
-                                BasketItemCard(item, enabledStores, onClick = open, onLongClick = longPress, onToggle = { viewModel.toggleChecked(item) }, trailing = handle)
+                                BasketItemCard(item, enabledStores, onClick = open, onLongClick = longPress, onToggle = { viewModel.skip(item, !item.checked) }, trailing = handle)
                             }
                         }
                         // No swipe-to-dismiss on rows: horizontal swipes belong to screen navigation (delete via menu or selection).
@@ -459,8 +472,9 @@ fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Uni
                 when {
                     item.inStock -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(Icons.Default.Kitchen, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Already in stock", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Already in stock · skipped", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    item.isSkipped -> Text("Skipped this trip", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     item.isQueued -> Text("Waiting for connection — will be matched later", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
                     item.isProcessing -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         LoadingIndicator(modifier = Modifier.size(20.dp))

@@ -75,5 +75,6 @@ dependencies {
     implementation(libs.camera.view)
     implementation(libs.glance.appwidget)
     implementation(libs.glance.material3)
+    implementation(libs.zxing.core)
     debugImplementation(libs.compose.ui.tooling)
 }

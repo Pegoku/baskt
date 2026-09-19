@@ -229,6 +229,25 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
                 }
             }
             HorizontalDivider()
+            Text("Loyalty cards", style = MaterialTheme.typography.titleMedium)
+            Text("Shown as a barcode from the in-store checklist for the checkout scanner. Cards stay on this phone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            var editingCard by remember { mutableStateOf<String?>(null) }
+            for (store in stores.filter { it.enabled }) {
+                val number = settings?.loyaltyCards?.get(store.code)
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    nl.baskt.ui.common.StoreLogo(store.code, stores)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(store.name)
+                        Text(number?.chunked(4)?.joinToString(" ") ?: "No card yet", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    OutlinedButton(onClick = { editingCard = store.code }) { Text(if (number == null) "Add" else "Edit") }
+                }
+            }
+            editingCard?.let { code ->
+                nl.baskt.ui.shop.LoyaltyCardEditor(code, stores, settings?.loyaltyCards?.get(code), onDismiss = { editingCard = null }) { number -> viewModel.saveLoyaltyCard(code, number); editingCard = null }
+            }
+
+            HorizontalDivider()
             Text(
                 "baskt keeps the products you pick and the ones you reject, and uses them to rank future suggestions. Matching runs on your own server; the app never talks to the supermarkets directly.",
                 style = MaterialTheme.typography.bodySmall,

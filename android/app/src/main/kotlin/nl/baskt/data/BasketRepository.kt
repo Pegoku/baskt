@@ -131,6 +131,13 @@ class BasketRepository(
                             op.childIds?.zip(created.items)?.forEach { (local, remote) -> idMap[local] = remote.id }
                         }
                         "checked" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, checked = op.checked) }
+                        "bought" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.markBought(it, op.store!!, op.productId, op.at) }
+                        "unbuy" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.unbuy(it) }
+                        "scanItem" -> {
+                            val result = api.scanItem(op.store!!, op.text!!, op.at)
+                            tripScans.update { list -> list.map { if (it.id == op.itemId) it.copy(product = result.product ?: it.product, synced = true) else it } }
+                            offline?.save("trip-scans", tripScans.value)
+                        }
                         "quantity" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, quantity = op.quantity) }
                         "rename" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, text = op.text, keepMatches = op.keepMatches == true) }
                         "delete" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.deleteItem(it) }
@@ -567,6 +574,37 @@ class BasketRepository(
         queued(PendingOp(type = "checked", itemId = item.id, checked = checked), optimistic = optimistic)
     }
 
+    /** Ticked in shopping mode: recorded on today's trip and stocked by the server; locally it just leaves the open list. */
+    suspend fun markBought(item: BasketItem, store: String, product: Product?) {
+        val at = System.currentTimeMillis()
+        queued(PendingOp(type = "bought", itemId = item.id, store = store, productId = product?.id, at = at), optimistic = {
+            patchLocal(item.id) { it.copy(checked = true, boughtAt = at, assignedStore = store) }
+            if (product != null) _stock.update { list ->
+                if (list.any { it.productId == product.id }) list
+                else list + StockItem(id = localId(), text = item.parsed?.canonicalName ?: item.text, quantityText = product.quantityText, productId = product.id, imageUrl = product.imageUrl)
+            }
+        })
+    }
+
+    suspend fun unbuy(item: BasketItem) = queued(PendingOp(type = "unbuy", itemId = item.id), optimistic = {
+        patchLocal(item.id) { it.copy(checked = false, boughtAt = null) }
+    })
+
+    /** Scanned in the store while shopping: kept here (offline too) until the server has resolved and recorded it. */
+    val tripScans = MutableStateFlow<List<TripScan>>(offline?.load<List<TripScan>>("trip-scans") ?: emptyList())
+
+    suspend fun scanItem(store: String, barcode: String) {
+        val scan = TripScan(id = localId(), store = store, barcode = barcode, at = System.currentTimeMillis())
+        queued(PendingOp(type = "scanItem", itemId = scan.id, store = store, text = barcode, at = scan.at), optimistic = {
+            tripScans.update { list -> list.filter { System.currentTimeMillis() - it.at < 24 * 60 * 60 * 1000 } + scan }
+            offline?.save("trip-scans", tripScans.value)
+        })
+    }
+
+    suspend fun purchaseHistory(): PurchaseHistory? = cachedRead("purchase-history") { api.purchaseHistory() }
+
+    suspend fun unskipAll() { for (item in _items.value.filter { it.isSkipped && !it.isGroup }) setChecked(item, false) }
+
     suspend fun setQuantity(item: BasketItem, quantity: Int) {
         queued(PendingOp(type = "quantity", itemId = item.id, quantity = quantity), optimistic = { patchLocal(item.id) { it.copy(quantity = quantity) } })
     }
@@ -595,7 +633,7 @@ class BasketRepository(
         queued(PendingOp(type = "reorder", items = orderedIds), optimistic = optimistic)
     }
 
-    suspend fun clearChecked() = deleteMany(_items.value.filter { it.checked })
+    suspend fun clearChecked() = deleteMany(_items.value.filter { it.isSkipped })
 
     suspend fun choose(item: BasketItem, store: String, productId: String?) {
         queued(PendingOp(type = "choose", itemId = item.id, store = store, productId = productId), optimistic = {

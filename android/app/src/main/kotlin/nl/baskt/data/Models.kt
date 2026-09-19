@@ -111,6 +111,8 @@ data class BasketItem(
     val text: String,
     val quantity: Int = 1,
     val checked: Boolean = false,
+    /** Set once the item was ticked off in shopping mode; it then lives in the orders history. */
+    val boughtAt: Long? = null,
     val sortOrder: Int = 0,
     val status: String, // NEW | PARSING | MATCHING | MATCHED | ERROR
     val error: String? = null,
@@ -126,6 +128,12 @@ data class BasketItem(
     val isGroup: Boolean get() = kind == "group"
     /** Checked automatically because the idea was already in stock. */
     val inStock: Boolean get() = checked && skippedReason != null
+    /** Bought in the store: leaves the list and shows up under previous orders. */
+    val isBought: Boolean get() = boughtAt != null
+    /** The main-list tick: left out of this trip (compare, order and shopping mode ignore it) but still on the list. */
+    val isSkipped: Boolean get() = checked && !isBought
+    /** Still to be bought. */
+    val isOpen: Boolean get() = !checked
     /** The product picked (or suggested) at any store, preferring confirmed picks. */
     val anyProduct: Product? get() = matches.firstOrNull { it.status == "CHOSEN" }?.chosen ?: matches.firstOrNull { it.effective != null }?.effective
     fun match(store: String) = matches.firstOrNull { it.store == store }
@@ -154,6 +162,7 @@ data class StoreInfo(
     val color: String,
     val coverage: String = "full",
     val enabled: Boolean = true,
+    val logoUrl: String? = null,
 )
 
 @Serializable
@@ -492,7 +501,24 @@ data class Purchase(val id: String, val store: String, val purchasedAt: Long, va
 data class PurchasesResponse(val purchases: List<Purchase> = emptyList())
 
 @Serializable
-data class PurchaseLine(val id: String, val purchaseId: String, val name: String, val productId: String? = null, val quantity: Double = 1.0, val unitPriceCents: Int? = null, val totalPriceCents: Int, val dealText: String? = null, val sortOrder: Int = 0)
+data class PurchaseLine(val id: String, val purchaseId: String, val name: String, val productId: String? = null, val quantity: Double = 1.0, val unitPriceCents: Int? = null, val totalPriceCents: Int, val dealText: String? = null, val sortOrder: Int = 0, val itemId: String? = null, val barcode: String? = null)
+
+@Serializable
+data class PurchaseWithLines(val purchase: Purchase, val lines: List<PurchaseLine> = emptyList())
+
+/** Every purchase with its lines and the products they point at; the orders page groups it by day. */
+@Serializable
+data class PurchaseHistory(val purchases: List<PurchaseWithLines> = emptyList(), val products: Map<String, Product> = emptyMap())
+
+@Serializable
+data class BoughtResponse(val item: BasketItem, val purchase: Purchase, val line: PurchaseLine)
+
+@Serializable
+data class ScanItemResponse(val purchase: Purchase, val line: PurchaseLine, val product: Product? = null)
+
+/** Something scanned in the store during this trip; kept locally until the server has recorded it. */
+@Serializable
+data class TripScan(val id: String, val store: String, val barcode: String, val at: Long, val product: Product? = null, val synced: Boolean = false)
 
 @Serializable
 data class PurchaseDetail(val purchase: Purchase, val lines: List<PurchaseLine> = emptyList(), val products: Map<String, Product> = emptyMap())

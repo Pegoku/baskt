@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "baskt-settings")
 
-data class AppSettings(val baseUrl: String, val token: String, val language: String = "system", val currentBasketId: String = "default", val speakReplies: Boolean = false, val ttsModel: String = "inworld/realtime-tts-1.5-mini", val ttsVoice: String = "Ashley") {
+data class AppSettings(val baseUrl: String, val token: String, val language: String = "system", val currentBasketId: String = "default", val speakReplies: Boolean = false, val ttsModel: String = "inworld/realtime-tts-1.5-mini", val ttsVoice: String = "Ashley", val loyaltyCards: Map<String, String> = emptyMap()) {
     val configured: Boolean get() = baseUrl.isNotBlank()
 
     /** Language code sent to the server: the chosen one, or the device language when set to "system". */
@@ -39,6 +39,20 @@ class SettingsStore(private val context: Context) {
     private val speakKey = booleanPreferencesKey("speakReplies")
     private val ttsModelKey = stringPreferencesKey("ttsModel")
     private val ttsVoiceKey = stringPreferencesKey("ttsVoice")
+    /** Store code → card number, as JSON; the cards are only ever shown on this phone. */
+    private val loyaltyKey = stringPreferencesKey("loyaltyCards")
+
+    private fun decodeCards(raw: String?): Map<String, String> =
+        raw?.let { runCatching { kotlinx.serialization.json.Json.decodeFromString<Map<String, String>>(it) }.getOrNull() } ?: emptyMap()
+
+    suspend fun saveLoyaltyCard(store: String, number: String?) {
+        context.dataStore.edit { prefs ->
+            val cards = decodeCards(prefs[loyaltyKey]).toMutableMap()
+            val cleaned = number?.filter { !it.isWhitespace() }.orEmpty()
+            if (cleaned.isBlank()) cards.remove(store) else cards[store] = cleaned
+            prefs[loyaltyKey] = kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.serializer<Map<String, String>>(), cards)
+        }
+    }
 
     suspend fun saveSpeakReplies(enabled: Boolean) { context.dataStore.edit { it[speakKey] = enabled } }
     suspend fun saveVoice(model: String, voice: String) {
@@ -46,7 +60,7 @@ class SettingsStore(private val context: Context) {
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
-        AppSettings(baseUrl = prefs[baseUrlKey] ?: DEFAULT_BASE_URL, token = prefs[tokenKey] ?: "", language = prefs[languageKey] ?: "system", currentBasketId = prefs[basketKey] ?: "default", speakReplies = prefs[speakKey] ?: false, ttsModel = prefs[ttsModelKey] ?: "inworld/realtime-tts-1.5-mini", ttsVoice = prefs[ttsVoiceKey] ?: "Ashley")
+        AppSettings(baseUrl = prefs[baseUrlKey] ?: DEFAULT_BASE_URL, token = prefs[tokenKey] ?: "", language = prefs[languageKey] ?: "system", currentBasketId = prefs[basketKey] ?: "default", speakReplies = prefs[speakKey] ?: false, ttsModel = prefs[ttsModelKey] ?: "inworld/realtime-tts-1.5-mini", ttsVoice = prefs[ttsVoiceKey] ?: "Ashley", loyaltyCards = decodeCards(prefs[loyaltyKey]))
     }
 
     suspend fun saveCurrentBasket(id: String) {

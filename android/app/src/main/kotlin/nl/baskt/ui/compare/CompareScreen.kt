@@ -50,7 +50,7 @@ import nl.baskt.ui.common.StoreBadge
 import nl.baskt.ui.common.storeName
 
 @Composable
-fun CompareScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String) -> Unit, onOrder: () -> Unit = {}) {
+fun CompareScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String) -> Unit, onOrder: () -> Unit = {}, onPickStore: (String) -> Unit = {}) {
     val comparison by viewModel.comparison.collectAsState()
     val comparing by viewModel.comparing.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
@@ -97,7 +97,7 @@ fun CompareScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (Stri
             when {
                 data == null && comparing -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
                 data == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No comparison available") }
-                tab == 0 -> StoreTab(data, stores)
+                tab == 0 -> StoreTab(data, stores, onPickStore)
                 else -> ItemTab(data, stores, onOpenItem)
             }
         }
@@ -105,12 +105,14 @@ fun CompareScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (Stri
 }
 
 @Composable
-private fun StoreTab(data: Comparison, stores: List<StoreInfo>) {
+private fun StoreTab(data: Comparison, stores: List<StoreInfo>, onPickStore: (String) -> Unit) {
     val itemCount = data.items.size
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         for (summary in data.stores) {
             item(summary.store) {
+                // Tapping a store is the shortcut for "Order → everything at this store".
                 Card(
+                    onClick = { onPickStore(summary.store) },
                     colors = CardDefaults.cardColors(
                         containerColor = if (summary.rank == 1) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
                     ),
@@ -118,6 +120,7 @@ private fun StoreTab(data: Comparison, stores: List<StoreInfo>) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("#${summary.rank}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            nl.baskt.ui.common.StoreLogo(summary.store, stores, size = 28)
                             StoreBadge(summary.store, stores)
                             Spacer(Modifier.weight(1f))
                             Text(summary.fullTotalCents.euros(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -136,6 +139,7 @@ private fun StoreTab(data: Comparison, stores: List<StoreInfo>) {
                         if (summary.unconfirmedCount > 0) {
                             Text("${summary.unconfirmedCount} item(s) still use the suggested product", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
                         }
+                        Text("Tap to order everything here →", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
