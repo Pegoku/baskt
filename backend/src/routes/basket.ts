@@ -475,7 +475,9 @@ basket.post("/tidy", async (c) => {
   const open = rows.filter((row) => row.kind === "item" && !row.checked);
   const matches = open.length ? db().select().from(basketMatches).where(inArray(basketMatches.itemId, open.map((row) => row.id))).all() : [];
   const products = new Map(productsByIds(matches.map((match) => match.chosenProductId).filter((id): id is string => Boolean(id))).map((product) => [product.id, product]));
-  const plan = await planTidy(open.map((row) => toCandidate(row, matches.filter((match) => match.itemId === row.id), products, row.parentId ? folders.get(row.parentId) ?? null : null)));
+  // Promotions come from the candidates already known for each item; no live store search, so the wand stays quick.
+  const deals = await findDeals(basketId);
+  const plan = await planTidy(open.map((row) => toCandidate(row, matches.filter((match) => match.itemId === row.id), products, row.parentId ? folders.get(row.parentId) ?? null : null)), deals);
   return c.json(plan);
 });
 

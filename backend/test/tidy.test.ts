@@ -3,7 +3,9 @@ import { eq } from "drizzle-orm";
 import { db, newId, resetDbForTests } from "@/db";
 import { basketMatches, type BasketItemRow, type BasketMatchRow } from "@/db/schema";
 import { createApp } from "@/app";
-import { planTidy, splitGroups, toCandidate, type TidyCandidate } from "@/matching/tidy";
+import { pickDeals, planTidy, splitGroups, toCandidate, type TidyCandidate } from "@/matching/tidy";
+import type { Deal } from "@/matching/deals";
+import type { ProductRow } from "@/db/schema";
 import type { DuplicateGroup } from "@/matching/dedupe";
 import { setAdaptersForTests } from "@/stores/registry";
 import { StoreThrottle } from "@/stores/throttle";
@@ -52,6 +54,7 @@ describe("tidy plan", () => {
     expect(merges).toHaveLength(1);
     expect(merges[0].keepId).toBe("b");
     expect(merges[0].quantity).toBe(3);
+    expect(merges[0].keepQuantity).toBe(2);
     expect(merges[0].text).toBe("milk");
   });
 
@@ -96,6 +99,16 @@ describe("tidy plan", () => {
     expect(plan.merges[0].quantity).toBe(3);
   });
 
+  test("deals keep one per entry and store, skipping current picks and merged-away entries", () => {
+    const product = (id: string) => ({ id, priceCents: 100 }) as ProductRow;
+    const deal = (itemId: string, store: string, productId: string, currentProductId: string | null, savingCents: number): Deal => ({ itemId, itemText: itemId, store, product: product(productId), currentProductId, currentPriceCents: null, savingCents, equivalence: "EQUIVALENT" });
+    const picked = pickDeals(
+      [deal("a", "AH", "AH:1", null, 50), deal("a", "AH", "AH:2", null, 20), deal("a", "JUMBO", "J:1", null, 10), deal("b", "AH", "AH:3", "AH:3", 90), deal("c", "AH", "AH:4", null, 30)],
+      new Set(["c"]),
+    );
+    expect(picked.map((entry) => `${entry.itemId}:${entry.product.id}`)).toEqual(["a:AH:1", "a:J:1"]);
+  });
+
   test("route scans open items and reads picks from the matches table", async () => {
     for (const text of ["melk", "Melk", "brood"]) await api("/basket/items", { method: "POST", body: JSON.stringify({ text }) });
     const before = (await (await api("/basket")).json()) as { items: Array<{ id: string; text: string }> };
@@ -106,8 +119,9 @@ describe("tidy plan", () => {
     db().insert(basketMatches).values(match(second.id, "AH", "AH:2", "USER")).run();
     const response = await api("/basket/tidy", { method: "POST", body: JSON.stringify({}) });
     expect(response.status).toBe(200);
-    const plan = (await response.json()) as { scanned: number; merges: unknown[]; distinct: Array<{ items: Array<{ id: string }> }> };
+    const plan = (await response.json()) as { scanned: number; merges: unknown[]; deals: unknown[]; distinct: Array<{ items: Array<{ id: string }> }> };
     expect(plan.scanned).toBe(2);
+    expect(plan.deals).toEqual([]);
     expect(plan.merges).toEqual([]);
     expect(plan.distinct).toHaveLength(1);
     expect(plan.distinct[0].items.map((item) => item.id).sort()).toEqual([first.id, second.id].sort());

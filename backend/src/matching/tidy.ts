@@ -4,6 +4,7 @@ import type { BasketItemRow, BasketMatchRow, ProductRow } from "@/db/schema";
 import { aiConfigured } from "@/env";
 import { normalizeText } from "@/lib/text";
 import { findDuplicates, type DuplicateGroup } from "@/matching/dedupe";
+import type { Deal } from "@/matching/deals";
 
 /** An open item with what the user has already decided about it. */
 export type TidyCandidate = {
@@ -32,7 +33,10 @@ export type TidyMerge = {
   keepId: string;
   /** Final wording for the surviving entry, already in the app language. */
   text: string;
+  /** Packs wanted when the quantities are added up ("merge the amounts"). */
   quantity: number;
+  /** Packs the surviving entry asks for on its own ("only keep one"). */
+  keepQuantity: number;
   reason: string;
 };
 
@@ -48,6 +52,8 @@ export type TidyPlan = {
   merges: TidyMerge[];
   /** Look-alikes left alone because each has its own chosen product. */
   distinct: TidyDistinct[];
+  /** Promotions for entries that stay on the list, best saving first; one per entry and store. */
+  deals: Deal[];
 };
 
 const RENAME_SYSTEM = `You tidy the wording of a grocery list for someone living in the Netherlands who wants every entry written in LANGUAGE.
@@ -107,6 +113,7 @@ export function splitGroups(groups: DuplicateGroup[], byId: Map<string, TidyCand
       keepId: keep.row.id,
       text: group.mergedText,
       quantity: members.reduce((sum, member) => sum + Math.max(1, member.row.quantity), 0),
+      keepQuantity: Math.max(1, keep.row.quantity),
       reason: group.reason,
     });
   }
@@ -118,7 +125,7 @@ export function splitGroups(groups: DuplicateGroup[], byId: Map<string, TidyCand
  * own picks apart, and rewrites every surviving entry in the app language. Nothing is changed here; the app
  * shows the plan and applies what the user confirms.
  */
-export async function planTidy(candidates: TidyCandidate[]): Promise<TidyPlan> {
+export async function planTidy(candidates: TidyCandidate[], deals: Deal[] = []): Promise<TidyPlan> {
   const language = appLanguageName();
   const byId = new Map(candidates.map((candidate) => [candidate.row.id, candidate]));
   const groups = await findDuplicates(candidates.map((candidate) => ({ id: candidate.row.id, text: candidate.row.text, quantity: candidate.row.quantity, canonical: candidate.row.parsedJson?.canonicalName ?? null, folder: candidate.folder })));
@@ -157,7 +164,21 @@ export async function planTidy(candidates: TidyCandidate[]): Promise<TidyPlan> {
     renames,
     merges: merges.map(({ members: _members, ...merge }) => ({ ...merge, text: mergedText.get(merge.keepId) ?? merge.text })),
     distinct: distinct.map(({ members: _members, ...entry }) => entry),
+    deals: pickDeals(deals, removed),
   };
+}
+
+/** One promotion per surviving entry and store, skipping products that are already the pick. Exported for tests. */
+export function pickDeals(deals: Deal[], removed: Set<string>) {
+  const seen = new Set<string>();
+  const out: Deal[] = [];
+  for (const deal of deals) {
+    const key = `${deal.itemId}:${deal.store}`;
+    if (removed.has(deal.itemId) || deal.currentProductId === deal.product.id || seen.has(key)) continue;
+    seen.add(key);
+    out.push(deal);
+  }
+  return out;
 }
 
 type NameInput = { id: string; text: string; canonical: string | null; product: string | null; apartFrom: string[] | null };
