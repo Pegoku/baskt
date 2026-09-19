@@ -55,7 +55,7 @@ export type TidyPlan = {
   merges: TidyMerge[];
   /** Look-alikes left alone because each has its own chosen product. */
   distinct: TidyDistinct[];
-  /** Promotions for entries that stay on the list, best saving first; one per entry and store. */
+  /** Promotions for entries that stay on the list, grouped by entry, most relevant first (at most a few per entry). */
   deals: Deal[];
   /** What the model said back to the last comment, if anything. */
   reply?: string | null;
@@ -177,15 +177,22 @@ export async function planTidy(candidates: TidyCandidate[], deals: Deal[] = []):
   };
 }
 
-/** One promotion per surviving entry and store, skipping products that are already the pick. Exported for tests. */
+export const DEALS_PER_ENTRY = 5;
+
+/**
+ * Promotions for the surviving entries, grouped by entry and ordered most relevant first (a promotion for
+ * the very same product beats one that only shares a word), then by saving. Products that are already the
+ * pick are skipped. Exported for tests.
+ */
 export function pickDeals(deals: Deal[], removed: Set<string>) {
-  const seen = new Set<string>();
-  const out: Deal[] = [];
+  const byItem = new Map<string, Deal[]>();
   for (const deal of deals) {
-    const key = `${deal.itemId}:${deal.store}`;
-    if (removed.has(deal.itemId) || deal.currentProductId === deal.product.id || seen.has(key)) continue;
-    seen.add(key);
-    out.push(deal);
+    if (removed.has(deal.itemId) || deal.currentProductId === deal.product.id) continue;
+    byItem.set(deal.itemId, [...(byItem.get(deal.itemId) ?? []), deal]);
+  }
+  const out: Deal[] = [];
+  for (const group of byItem.values()) {
+    out.push(...group.sort((a, b) => b.relevance - a.relevance || (b.savingCents ?? -1) - (a.savingCents ?? -1)).slice(0, DEALS_PER_ENTRY));
   }
   return out;
 }

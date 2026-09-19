@@ -37,6 +37,8 @@ export type Deal = {
   currentPriceCents: number | null;
   savingCents: number | null;
   equivalence: string;
+  /** How much the promotion looks like the entry itself (word overlap plus the matcher's verdict); higher first. */
+  relevance: number;
 };
 
 /**
@@ -77,8 +79,10 @@ export async function findDeals(basketId: string, options: { live?: boolean } = 
       for (const product of pool) {
         if (!product.isDeal || seenIds.has(product.id) || !product.available) continue;
         // Must still be the same kind of product as the idea.
-        if (lexicalScore(item.text, parsed, product) < 2) continue;
+        const lexical = lexicalScore(item.text, parsed, product);
+        if (lexical < 2) continue;
         seenIds.add(product.id);
+        const equivalence = match?.equivalences[product.id] ?? "EQUIVALENT";
         const currentLine = current ? current.priceCents * item.quantity : null;
         const dealLine = product.priceCents * item.quantity;
         deals.push({
@@ -89,7 +93,8 @@ export async function findDeals(basketId: string, options: { live?: boolean } = 
           currentProductId: current?.id ?? null,
           currentPriceCents: current?.priceCents ?? null,
           savingCents: currentLine !== null ? currentLine - dealLine : null,
-          equivalence: match?.equivalences[product.id] ?? "EQUIVALENT",
+          equivalence,
+          relevance: lexical + (equivalence === "EXACT" ? 2 : equivalence === "EQUIVALENT" ? 1 : 0),
         });
       }
     }

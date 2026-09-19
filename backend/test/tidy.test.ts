@@ -99,14 +99,14 @@ describe("tidy plan", () => {
     expect(plan.merges[0].quantity).toBe(3);
   });
 
-  test("deals keep one per entry and store, skipping current picks and merged-away entries", () => {
+  test("deals are grouped per entry, most relevant first, skipping current picks and merged-away entries", () => {
     const product = (id: string) => ({ id, priceCents: 100 }) as ProductRow;
-    const deal = (itemId: string, store: string, productId: string, currentProductId: string | null, savingCents: number): Deal => ({ itemId, itemText: itemId, store, product: product(productId), currentProductId, currentPriceCents: null, savingCents, equivalence: "EQUIVALENT" });
+    const deal = (itemId: string, productId: string, currentProductId: string | null, savingCents: number, relevance: number): Deal => ({ itemId, itemText: itemId, store: "AH", product: product(productId), currentProductId, currentPriceCents: null, savingCents, equivalence: "EQUIVALENT", relevance });
     const picked = pickDeals(
-      [deal("a", "AH", "AH:1", null, 50), deal("a", "AH", "AH:2", null, 20), deal("a", "JUMBO", "J:1", null, 10), deal("b", "AH", "AH:3", "AH:3", 90), deal("c", "AH", "AH:4", null, 30)],
+      [deal("a", "AH:1", null, 50, 3), deal("b", "AH:3", "AH:3", 90, 9), deal("a", "AH:2", null, 20, 6), deal("c", "AH:4", null, 30, 5), deal("a", "AH:5", null, 80, 3)],
       new Set(["c"]),
     );
-    expect(picked.map((entry) => `${entry.itemId}:${entry.product.id}`)).toEqual(["a:AH:1", "a:J:1"]);
+    expect(picked.map((entry) => `${entry.itemId}:${entry.product.id}`)).toEqual(["a:AH:2", "a:AH:5", "a:AH:1"]);
   });
 
   test("route scans open items and reads picks from the matches table", async () => {
