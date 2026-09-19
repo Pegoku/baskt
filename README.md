@@ -127,6 +127,17 @@ first) are offered too; ticking one makes it the pick at that store, like **Use 
 screen. Untick what you want to keep; renames go through `keepMatches`, so the picks survive the new
 wording. Without an AI provider only literal repeats are merged and nothing is renamed.
 
+## Comment mode
+
+Hold an item to select it; the selection bar gets a **select all / unselect all** button and, at its
+right edge, a toggle for comment mode (on by default). With comment mode on, the add bar becomes a
+comment box: type or dictate what should change for the selected items ("double the cookies amount",
+"quita la leche", "it should be bolsa de lechugas") and the assistant turns it into edits: amounts,
+ticks, removals or new wording, applied through the normal item operations. Wording corrections that
+keep the same product are remembered: **Tidy up** and later translations use your words instead of
+asking the model again, and the learned wordings can be forgotten from the memory screen. Turn comment
+mode off to get the plain selection bar.
+
 ## Find similar
 
 Open any product (from a basket item, a search, a scan or a deal) and tap **Find similar at other

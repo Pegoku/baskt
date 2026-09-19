@@ -47,6 +47,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.automirrored.filled.Comment
+import androidx.compose.material.icons.filled.CommentsDisabled
+import androidx.compose.material.icons.filled.Deselect
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.CallMerge
@@ -236,6 +240,27 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
         )
     }
 
+    val commentMode by viewModel.commentMode.collectAsState()
+    val instructing by viewModel.instructing.collectAsState()
+    val instructOutcome by viewModel.instructOutcome.collectAsState()
+    LaunchedEffect(instructOutcome) {
+        val outcome = instructOutcome ?: return@LaunchedEffect
+        viewModel.consumeInstructOutcome()
+        val summary = buildList {
+            val renamed = outcome.changes.count { it.text != null }
+            val amounts = outcome.changes.count { it.quantity != null }
+            val ticked = outcome.changes.count { it.checked != null }
+            val removed = outcome.changes.count { it.remove }
+            if (renamed > 0) add(if (renamed == 1) "renamed 1" else "renamed $renamed")
+            if (amounts > 0) add(if (amounts == 1) "changed 1 amount" else "changed $amounts amounts")
+            if (ticked > 0) add(if (ticked == 1) "ticked 1" else "ticked $ticked")
+            if (removed > 0) add(if (removed == 1) "removed 1" else "removed $removed")
+            if (outcome.remembered.isNotEmpty()) add("remembered " + outcome.remembered.joinToString("; "))
+        }
+        val message = listOfNotNull(summary.takeIf { it.isNotEmpty() }?.joinToString(", ")?.replaceFirstChar { it.uppercase() }, outcome.reply).joinToString(". ")
+        if (message.isNotBlank()) snackbar.showSnackbar(message)
+    }
+
     androidx.activity.compose.BackHandler(enabled = selectionMode) { viewModel.clearSelection() }
     Scaffold(
         topBar = {
@@ -245,11 +270,21 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                     title = { Text("${selection.size} selected") },
                     navigationIcon = { IconButton(onClick = { viewModel.clearSelection() }) { Icon(Icons.Default.Close, contentDescription = "Cancel") } },
                     actions = {
+                        val allIds = items.filter { it.parentId == null }.map { it.id }
+                        val allSelected = allIds.isNotEmpty() && allIds.all { it in selection }
+                        IconButton(onClick = { viewModel.selectAllOrNone(allIds) }) { Icon(if (allSelected) Icons.Default.Deselect else Icons.Default.SelectAll, contentDescription = if (allSelected) "Unselect all" else "Select all") }
                         if (selectedItems.size == 1) IconButton(onClick = { renaming = selectedItems.first() }) { Icon(Icons.Default.Edit, contentDescription = "Rename") }
                         if (selectedItems.any { !it.isGroup }) IconButton(onClick = { naming = true }) { Icon(Icons.Default.CreateNewFolder, contentDescription = "Folder from selection") }
                         IconButton(onClick = { viewModel.checkSelected(selectedItems.any { !it.checked }) }) { Icon(Icons.Default.CheckCircle, contentDescription = "Check / uncheck") }
                         nl.baskt.ui.common.TransferMenu(baskets, currentBasketId) { basketId, copy -> viewModel.transferSelected(basketId, copy) }
                         IconButton(onClick = { viewModel.deleteSelected() }) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error) }
+                        IconButton(onClick = { viewModel.toggleCommentMode() }) {
+                            Icon(
+                                if (commentMode) Icons.AutoMirrored.Filled.Comment else Icons.Default.CommentsDisabled,
+                                contentDescription = if (commentMode) "Turn comment mode off" else "Turn comment mode on",
+                                tint = if (commentMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     },
                 )
             } else TopAppBar(
@@ -314,7 +349,10 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
         bottomBar = {
             val suggestions by viewModel.suggestions.collectAsState()
             val recipe by viewModel.recipeSuggestion.collectAsState()
-            AddIdeaBar(
+            if (selectionMode && commentMode) {
+                val startCommentDictation = nl.baskt.ui.common.rememberVoiceInput(viewModel, "What should change?") { viewModel.instructSelected(it) }
+                CommentBar(selectedCount = selection.size, busy = instructing, onSend = { viewModel.instructSelected(it) }, onVoice = { startCommentDictation() })
+            } else AddIdeaBar(
                 suggestions = suggestions,
                 recipe = recipe,
                 onTextChanged = { viewModel.onIdeaTextChanged(it) },

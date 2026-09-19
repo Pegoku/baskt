@@ -13,7 +13,9 @@ import nl.baskt.data.BasketItem
 import nl.baskt.data.Comparison
 import nl.baskt.data.DuplicateGroup
 import nl.baskt.data.DuplicateResolution
+import nl.baskt.data.InstructResponse
 import nl.baskt.data.MergeDecision
+import nl.baskt.data.NamePreference
 import nl.baskt.data.TidyPlan
 import nl.baskt.data.TidyRename
 import nl.baskt.data.AllDealsResponse
@@ -600,7 +602,18 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     private val _memory = MutableStateFlow<List<Choice>>(emptyList())
     val memory: StateFlow<List<Choice>> = _memory
-    fun loadMemory() = viewModelScope.launch { _memory.value = container.offline.load("memory") ?: emptyList(); _memory.value = cachedLoad("memory", emptyList()) { container.api.memory() } }
+    private val _memoryNames = MutableStateFlow<List<NamePreference>>(emptyList())
+    val memoryNames: StateFlow<List<NamePreference>> = _memoryNames
+    fun loadMemory() = viewModelScope.launch {
+        _memory.value = container.offline.load("memory") ?: emptyList()
+        _memoryNames.value = container.offline.load("memory-names") ?: emptyList()
+        val response = cachedLoad<nl.baskt.data.ChoicesResponse?>("memory-response", null) { container.api.memory() } ?: return@launch
+        _memory.value = response.choices; container.offline.save("memory", _memory.value)
+        _memoryNames.value = response.names; container.offline.save("memory-names", _memoryNames.value)
+    }
+    fun deleteNameMemory(id: String) = viewModelScope.launch { basket.queued(nl.baskt.data.PendingOp(type = "nameDelete", itemId = id), {
+        _memoryNames.update { list -> list.filterNot { it.id == id } }; container.offline.save("memory-names", _memoryNames.value)
+    }) }
     fun deleteMemory(id: String) = viewModelScope.launch { basket.queued(nl.baskt.data.PendingOp(type = "memoryDelete", itemId = id), {
         _memory.update { list -> list.filterNot { it.id == id } }; container.offline.save("memory", _memory.value)
     }) }
@@ -692,6 +705,26 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun clearSelection() { selection.value = emptySet() }
     private fun selectedItems() = basket.items.value.filter { it.id in selection.value }
     fun deleteSelected() = viewModelScope.launch { basket.deleteMany(selectedItems()); clearSelection() }
+    /** Selects every given row, or clears the selection when they are all selected already. */
+    fun selectAllOrNone(ids: List<String>) { selection.value = if (ids.all { it in selection.value }) emptySet() else ids.toSet() }
+
+    /** Comment mode: a long press selects items to comment on; the toggle in the selection bar turns it off (plain selection) or on. */
+    val commentMode = MutableStateFlow(true)
+    fun toggleCommentMode() { commentMode.value = !commentMode.value }
+    private val _instructing = MutableStateFlow(false)
+    val instructing: StateFlow<Boolean> = _instructing
+    /** Outcome of the last comment, for a snackbar; cleared once shown. */
+    private val _instructOutcome = MutableStateFlow<InstructResponse?>(null)
+    val instructOutcome: StateFlow<InstructResponse?> = _instructOutcome
+    fun instructSelected(instruction: String) = viewModelScope.launch {
+        val items = selectedItems().flatMap { item -> if (item.isGroup) basket.items.value.filter { it.parentId == item.id } else listOf(item) }.distinctBy { it.id }
+        if (items.isEmpty()) return@launch
+        _instructing.value = true
+        val outcome = basket.instruct(items, instruction)
+        _instructing.value = false
+        if (outcome != null) { _instructOutcome.value = outcome; if (outcome.changes.isNotEmpty()) clearSelection() }
+    }
+    fun consumeInstructOutcome() { _instructOutcome.value = null }
     fun groupSelected(name: String) = viewModelScope.launch { basket.groupFromItems(name, selectedItems().filter { !it.isGroup }); clearSelection() }
     fun transferSelected(basketId: String, copy: Boolean) = viewModelScope.launch { basket.transferMany(selectedItems(), basketId, copy); clearSelection() }
     fun checkSelected(checked: Boolean) = viewModelScope.launch { basket.setCheckedMany(selectedItems(), checked); clearSelection() }

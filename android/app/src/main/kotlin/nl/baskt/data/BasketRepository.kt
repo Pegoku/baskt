@@ -186,6 +186,7 @@ class BasketRepository(
                         }
                         "purchaseDelete" -> api.deletePurchase(real(op.itemId)!!)
                         "memoryDelete" -> api.deleteMemory(op.itemId!!)
+                        "nameDelete" -> api.deleteNameMemory(op.itemId!!)
                         "chatClear" -> api.chatClear(real(op.basketId)!!)
                         else -> error("Unknown queued action: ${op.type}")
                     }
@@ -193,7 +194,7 @@ class BasketRepository(
                     if (e is kotlinx.coroutines.CancellationException) throw e
                     if (isConnectivityError(e)) { online.value = false; return }
                     // Deleting an already absent object is successful; every other failure stays reviewable.
-                    if (!(e is ApiException && e.status == 404 && op.type in setOf("delete", "stockRemove", "basketDelete", "recipeDelete", "favouriteDelete", "purchaseDelete", "memoryDelete"))) {
+                    if (!(e is ApiException && e.status == 404 && op.type in setOf("delete", "stockRemove", "basketDelete", "recipeDelete", "favouriteDelete", "purchaseDelete", "memoryDelete", "nameDelete"))) {
                         pending.update { list -> list.map { if (it.id == op.id) it.copy(failure = e.message ?: "Sync failed") else it } }
                         offline?.saveOps(pending.value)
                         _error.value = "Could not sync ${op.label}: ${e.message}"
@@ -718,6 +719,26 @@ class BasketRepository(
     }
 
     suspend fun planTidy(): TidyPlan? = guard { api.tidy(_currentBasketId.value) }
+
+    /**
+     * Comment mode: asks the server what a free-text instruction means for the selected items, then applies
+     * the edits through the normal item operations. Wording-only renames keep their matches.
+     */
+    suspend fun instruct(items: List<BasketItem>, instruction: String): InstructResponse? {
+        val response = guard { api.instruct(items.map { it.id }, instruction) } ?: return null
+        val current = _items.value
+        val toDelete = mutableListOf<BasketItem>()
+        for (change in response.changes) {
+            val item = current.firstOrNull { it.id == change.id } ?: continue
+            if (change.remove) { toDelete += item; continue }
+            val text = change.text?.trim()
+            if (!text.isNullOrEmpty() && text != item.text) rename(item, text, keepMatches = change.wordingOnly)
+            if (change.quantity != null && change.quantity >= 1 && change.quantity != item.quantity) setQuantity(item, change.quantity)
+            if (change.checked != null && change.checked != item.checked) setChecked(item, change.checked)
+        }
+        if (toDelete.isNotEmpty()) deleteMany(toDelete)
+        return response
+    }
 
     /**
      * Applies the confirmed parts of a tidy plan through the normal item operations, so they queue offline

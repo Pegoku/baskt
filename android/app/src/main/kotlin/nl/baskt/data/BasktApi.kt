@@ -408,7 +408,17 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
             auth(); contentType(ContentType.Application.Json); setBody(JsonObject(mapOf("indices" to kotlinx.serialization.json.JsonArray(indices.map { JsonPrimitive(it) }))))
         }.expect()
 
-    suspend fun memory(): List<Choice> = client.get(url("/memory")) { auth() }.expect<ChoicesResponse>().choices
+    suspend fun memory(): ChoicesResponse = client.get(url("/memory")) { auth() }.expect()
+
+    suspend fun deleteNameMemory(id: String) {
+        client.delete(url("/memory/names/$id")) { auth() }.expect<Unit>()
+    }
+
+    suspend fun instruct(itemIds: List<String>, instruction: String): InstructResponse =
+        client.post(url("/basket/instruct")) {
+            auth(); contentType(ContentType.Application.Json); setBody(InstructRequest(itemIds, instruction))
+            timeout { requestTimeoutMillis = 90_000; socketTimeoutMillis = 90_000 }
+        }.expect()
 
     suspend fun deleteMemory(id: String) {
         client.delete(url("/memory/$id")) { auth() }.expect<Unit>()
@@ -460,6 +470,7 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
 @Serializable private data class GroupFromItemsRequest(val text: String, val itemIds: List<String>)
 @Serializable private data class ItemIdsRequest(val itemIds: List<String>)
 @Serializable private data class BasketIdRequest(val basketId: String)
+@Serializable private data class InstructRequest(val itemIds: List<String>, val instruction: String)
 @Serializable private data class QueryRequest(val query: String)
 @Serializable private data class ItemsResponse(val items: List<BasketItem>)
 @Serializable private data class DeletedResponse(val deleted: Int)

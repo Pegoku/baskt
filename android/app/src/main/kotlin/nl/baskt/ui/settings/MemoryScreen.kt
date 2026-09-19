@@ -35,6 +35,7 @@ import java.util.Locale
 @Composable
 fun MemoryScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val memory by viewModel.memory.collectAsState()
+    val names by viewModel.memoryNames.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
     val format = SimpleDateFormat("d MMM HH:mm", Locale.getDefault())
     LaunchedEffect(Unit) { viewModel.loadMemory() }
@@ -46,11 +47,26 @@ fun MemoryScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             )
         },
     ) { padding ->
-        if (memory.isEmpty()) {
-            Text("Nothing learned yet. Picks, thumbs and \"none of these fit\" end up here.", modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (memory.isEmpty() && names.isEmpty()) {
+            Text("Nothing learned yet. Picks, thumbs, \"none of these fit\" and wording corrections from comment mode end up here.", modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             return@Scaffold
         }
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (names.isNotEmpty()) {
+                item { Text("Wordings", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
+                items(names, key = { "name-" + it.id }) { name ->
+                    Card {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(name.preferred, style = MaterialTheme.typography.titleSmall)
+                                Text("instead of “${name.source}” · ${format.format(Date(name.createdAt))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = { viewModel.deleteNameMemory(name.id) }) { Icon(Icons.Default.Delete, contentDescription = "Forget") }
+                        }
+                    }
+                }
+                if (memory.isNotEmpty()) item { Text("Picks and thumbs", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
+            }
             items(memory, key = { it.id }) { choice ->
                 Card {
                     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {

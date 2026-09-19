@@ -284,8 +284,28 @@ data class AllDealsResponse(val query: String = "", val terms: List<String> = em
 @Serializable
 data class Choice(val id: String, val itemText: String, val canonical: String = "", val store: String, val chosenProductId: String? = null, val chosenTitle: String? = null, val rejectedTitles: List<String> = emptyList(), val createdAt: Long = 0)
 
+/** A wording the user asked for; tidy and translations follow it. */
 @Serializable
-data class ChoicesResponse(val choices: List<Choice> = emptyList())
+data class NamePreference(val id: String, val source: String, val preferred: String, val language: String = "", val createdAt: Long = 0)
+
+@Serializable
+data class ChoicesResponse(val choices: List<Choice> = emptyList(), val names: List<NamePreference> = emptyList())
+
+/** One edit the assistant derived from a comment about selected items. */
+@Serializable
+data class InstructChange(
+    val id: String,
+    val from: String = "",
+    val text: String? = null,
+    /** The new text is just other words for the same product, so its matches and picks stay. */
+    val wordingOnly: Boolean = false,
+    val quantity: Int? = null,
+    val checked: Boolean? = null,
+    val remove: Boolean = false,
+)
+
+@Serializable
+data class InstructResponse(val changes: List<InstructChange> = emptyList(), val remembered: List<String> = emptyList(), val reply: String? = null)
 
 @Serializable
 data class RecipeSummary(val title: String, val url: String, val imageUrl: String? = null, val slug: String = "", val titleLocalized: String? = null, val source: String? = null, val language: String? = null) {
