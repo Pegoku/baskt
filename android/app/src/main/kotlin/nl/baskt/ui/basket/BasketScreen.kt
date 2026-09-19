@@ -113,7 +113,7 @@ import nl.baskt.ui.common.StoreBadge
 import nl.baskt.ui.common.storeName
 
 @Composable
-fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit, onStock: () -> Unit, onSearch: () -> Unit, onDeals: () -> Unit, onRecipes: () -> Unit, onShop: (String) -> Unit, onPurchases: () -> Unit, onScan: () -> Unit = {}, onChat: () -> Unit = {}) {
+fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit, onStock: () -> Unit, onSearch: () -> Unit, onDeals: () -> Unit, onRecipes: () -> Unit, onShop: (String) -> Unit, onPurchases: () -> Unit, onScan: () -> Unit = {}, onChat: () -> Unit = {}, onTidy: () -> Unit = {}) {
     val items by viewModel.basket.items.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
     val baskets by viewModel.basket.baskets.collectAsState()
@@ -215,33 +215,6 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
             },
         )
     }
-    val tidyPlan by viewModel.tidy.collectAsState()
-    val tidying by viewModel.tidying.collectAsState()
-    val revising by viewModel.revising.collectAsState()
-    val tidyCommentMode by viewModel.tidyCommentMode.collectAsState()
-    if (tidyPlan != null || tidying) {
-        TidySheet(
-            plan = tidyPlan,
-            loading = tidying,
-            revising = revising,
-            commentMode = tidyCommentMode,
-            stores = stores,
-            onToggleCommentMode = { viewModel.toggleTidyCommentMode() },
-            onComment = { selected, comment -> viewModel.reviseTidy(selected, comment) },
-            onDismiss = { viewModel.dismissTidy() },
-            onApply = { renames, merges, deals ->
-                viewModel.applyTidy(renames, merges, deals)
-                val parts = buildList {
-                    if (renames.isNotEmpty()) add(if (renames.size == 1) "renamed 1 item" else "renamed ${renames.size} items")
-                    val removed = merges.sumOf { it.merge.items.size - 1 }
-                    if (removed > 0) add(if (removed == 1) "merged 1 duplicate" else "merged $removed duplicates")
-                    if (deals.isNotEmpty()) add(if (deals.size == 1) "took 1 deal" else "took ${deals.size} deals")
-                }
-                if (parts.isNotEmpty()) scope.launch { snackbar.showSnackbar("Tidied up: " + parts.joinToString(", ")) }
-            },
-        )
-    }
-
     androidx.activity.compose.BackHandler(enabled = selectionMode) { viewModel.clearSelection() }
     Scaffold(
         topBar = {
@@ -278,7 +251,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                     IconButton(onClick = onScan) { Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan barcodes") }
                     IconButton(onClick = onRecipes) { Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = "Recipes") }
                     if (items.any { !it.checked && !it.isGroup }) IconButton(onClick = onDeals) { Icon(Icons.Default.LocalOffer, contentDescription = "Find deals") }
-                    if (items.any { !it.checked && !it.isGroup }) IconButton(onClick = { viewModel.planTidy() }) { Icon(Icons.Default.AutoFixHigh, contentDescription = "Tidy up") }
+                    if (items.any { !it.checked && !it.isGroup }) IconButton(onClick = onTidy) { Icon(Icons.Default.AutoFixHigh, contentDescription = "Tidy up") }
                     var menu by remember { mutableStateOf(false) }
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }

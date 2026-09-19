@@ -22,6 +22,7 @@ import androidx.compose.ui.zIndex
 import nl.baskt.ui.home.HomePager
 import nl.baskt.ui.chat.ChatScreen
 import nl.baskt.ui.basket.GroupScreen
+import nl.baskt.ui.basket.TidyScreen
 import nl.baskt.ui.item.ItemDetailScreen
 import nl.baskt.ui.settings.SettingsScreen
 import nl.baskt.ui.settings.MemoryScreen
@@ -50,6 +51,7 @@ import nl.baskt.ui.recipes.RecipeEditorScreen
 @Serializable data object ChatRoute : NavKey
 @Serializable data object OrderRoute : NavKey
 @Serializable data object ScannerRoute : NavKey
+@Serializable data object TidyRoute : NavKey
 
 @Composable
 fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
@@ -94,6 +96,7 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
                     onPurchases = { backStack.add(PurchasesRoute) },
                     onScan = { backStack.add(ScannerRoute) },
                     onChat = { backStack.add(ChatRoute) },
+                    onTidy = { backStack.add(TidyRoute) },
                 )
             }
             entry<ChatRoute> { ChatScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onFolderAdded = { backStack.removeLastOrNull() }) }
@@ -104,6 +107,7 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
             entry<CompareRoute> {
                 HomePager(viewModel, startPage = 1, onOpenItem = { backStack.add(ItemRoute(it)) }, onOpenGroup = { backStack.add(GroupRoute(it)) }, onSettings = { backStack.add(SettingsRoute) }, onStock = { backStack.add(StockRoute) }, onSearch = { backStack.add(SearchRoute) }, onDeals = { backStack.add(DealsRoute) }, onRecipes = { backStack.add(RecipesRoute) }, onShop = { backStack.add(ShopRoute(it)) }, onPurchases = { backStack.add(PurchasesRoute) }, onScan = { backStack.add(ScannerRoute) })
             }
+            entry<TidyRoute> { TidyScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
             entry<ScannerRoute> { ScannerScreen(viewModel, onClose = { backStack.removeLastOrNull() }) }
             entry<PurchasesRoute> { PurchasesScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
             entry<ShopRoute> { route -> ShopModeScreen(viewModel, route.store, onBack = { backStack.removeLastOrNull() }) }

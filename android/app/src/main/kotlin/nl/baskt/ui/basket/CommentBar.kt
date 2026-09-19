@@ -17,7 +17,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,8 +41,8 @@ fun CommentBar(selectedCount: Int, busy: Boolean, onSend: (String) -> Unit, onVo
         onSend(instruction)
         text = ""
     }
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.medium) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        run {
             Text(
                 when (selectedCount) {
                     0 -> "Hold a proposal to select it, then tell me what should change."
@@ -59,6 +58,7 @@ fun CommentBar(selectedCount: Int, busy: Boolean, onSend: (String) -> Unit, onVo
                     onValueChange = { text = it },
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("e.g. double the amount, or “call it bolsa de lechugas”") },
+                    shape = MaterialTheme.shapes.extraLarge,
                     singleLine = true,
                     enabled = !busy && selectedCount > 0,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),

@@ -115,8 +115,7 @@ offline like any other change.
 
 ## Tidy up
 
-The wand in the basket's top bar tidies the open items in one pass, and shows the plan before anything
-changes. Duplicates that nobody has decided about are merged: one entry survives (the one with your
+The wand in the basket's top bar opens a full-screen review of the open items before anything changes. Duplicates that nobody has decided about are merged: one entry survives (the one with your
 picks, else the furthest matched, else the oldest) and you choose per merge whether to keep just that
 one or add the amounts up. Look-alikes that each
 have their own chosen product (two different chocolate cookies, both picked at AH) are kept apart and
@@ -129,12 +128,12 @@ wording. Without an AI provider only literal repeats are merged and nothing is r
 
 ## Comment mode
 
-Inside **Tidy up**, hold a proposal to select it (or tap once comment mode is on; the header gets a
-select all / unselect all button). The toggle in the sheet's top-right corner turns comment mode off
-or on; it is on by default. Then write what should change about the selected proposals: "double the
+Inside **Tidy up**, hold a proposal to select it (or tap once comment mode is on; the top bar gets a
+select all / unselect all button). The comment toggle in the top bar turns comment mode off or on; it
+is on by default. Then write what should change about the selected proposals: "double the
 cookies amount" sets the amount on that rename, "it should be bolsa de lechugas" replaces the proposed
 wording, "no uses la oferta" drops a deal, "quiero 3 de leche" fixes a merge's amount. The assistant
-revises only the selected proposals and answers in the sheet when something cannot be done. Wording
+revises only the selected proposals and answers on the screen when something cannot be done. Wording
 corrections are remembered: the next tidy pass and later translations use your words straight away, and
 the learned wordings can be forgotten from the memory screen.
 
