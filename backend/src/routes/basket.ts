@@ -15,6 +15,7 @@ import { expandDealQuery, findDeals } from "@/matching/deals";
 import { termRelevance } from "@/stores/promotions";
 import { interpretVoice } from "@/matching/voice";
 import { findDuplicates } from "@/matching/dedupe";
+import { planTidy, toCandidate } from "@/matching/tidy";
 import { speechTranscript } from "@/routes/speech";
 import { fetchRecipe, getUserRecipe, userRecipeAsRecipe } from "@/routes/recipes";
 import { localizeRecipe } from "@/matching/localize";
@@ -460,6 +461,24 @@ basket.post("/dedupe", async (c) => {
   return c.json({ groups, scanned: open.length });
 });
 
+/**
+ * The magic wand: a plan that merges duplicates nobody has decided about, keeps look-alikes with their own
+ * picks apart, and rewrites every open entry in the app language. Nothing changes here; the app applies the
+ * confirmed parts through the normal item endpoints (renames with keepMatches so no pick is lost).
+ */
+basket.post("/tidy", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { basketId?: string };
+  const basketId = body.basketId ?? DEFAULT_BASKET_ID;
+  if (!basketExists(basketId)) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
+  const rows = childrenAndItems(basketId);
+  const folders = new Map(rows.filter((row) => row.kind === "group").map((row) => [row.id, row.text]));
+  const open = rows.filter((row) => row.kind === "item" && !row.checked);
+  const matches = open.length ? db().select().from(basketMatches).where(inArray(basketMatches.itemId, open.map((row) => row.id))).all() : [];
+  const products = new Map(productsByIds(matches.map((match) => match.chosenProductId).filter((id): id is string => Boolean(id))).map((product) => [product.id, product]));
+  const plan = await planTidy(open.map((row) => toCandidate(row, matches.filter((match) => match.itemId === row.id), products, row.parentId ? folders.get(row.parentId) ?? null : null)));
+  return c.json(plan);
+});
+
 /** Adds a confirmed proposal: plain items and recipe folders in one go. */
 basket.post("/confirm", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { items?: Array<{ text?: string; quantity?: number; kind?: string }>; basketId?: string };
@@ -508,7 +527,7 @@ basket.post("/items/reorder", async (c) => {
 basket.patch("/items/:id", async (c) => {
   const item = getItem(c.req.param("id"));
   if (!item) return c.json({ error: { code: "NOT_FOUND", message: "item not found" } }, 404);
-  const body = (await c.req.json().catch(() => ({}))) as { text?: string; quantity?: number; checked?: boolean; sortOrder?: number; parentId?: string | null; assignedStore?: string | null };
+  const body = (await c.req.json().catch(() => ({}))) as { text?: string; quantity?: number; checked?: boolean; sortOrder?: number; parentId?: string | null; assignedStore?: string | null; keepMatches?: boolean };
   const patch: Partial<BasketItemRow> = { updatedAt: now() };
   if (body.assignedStore === null || (typeof body.assignedStore === "string" && hasStore(body.assignedStore))) patch.assignedStore = body.assignedStore;
   if (typeof body.text === "string" && body.text.trim()) patch.text = body.text.trim();
@@ -526,7 +545,8 @@ basket.patch("/items/:id", async (c) => {
   if (item.kind === "group" && typeof body.checked === "boolean") {
     db().update(basketItems).set({ checked: body.checked, updatedAt: now() }).where(eq(basketItems.parentId, item.id)).run();
   }
-  if (item.kind === "item" && patch.text && patch.text !== item.text) {
+  // A relabel (same product, new wording, e.g. translated by the tidy pass) keeps the matches and picks.
+  if (item.kind === "item" && patch.text && patch.text !== item.text && body.keepMatches !== true) {
     db().delete(basketMatches).where(eq(basketMatches.itemId, item.id)).run();
     enqueue(item.id);
   }
