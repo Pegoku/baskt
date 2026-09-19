@@ -13,10 +13,10 @@ import nl.baskt.data.BasketItem
 import nl.baskt.data.Comparison
 import nl.baskt.data.DuplicateGroup
 import nl.baskt.data.DuplicateResolution
-import nl.baskt.data.InstructResponse
 import nl.baskt.data.MergeDecision
 import nl.baskt.data.NamePreference
 import nl.baskt.data.TidyPlan
+import nl.baskt.data.TidySelection
 import nl.baskt.data.TidyRename
 import nl.baskt.data.AllDealsResponse
 import nl.baskt.data.ChatMessage
@@ -349,6 +349,20 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun dismissTidy() { _tidy.value = null }
+
+    /** Comment mode inside the wand: on by default; the toggle in the sheet's corner turns it off for the session. */
+    val tidyCommentMode = MutableStateFlow(true)
+    fun toggleTidyCommentMode() { tidyCommentMode.value = !tidyCommentMode.value }
+    private val _revising = MutableStateFlow(false)
+    val revising: StateFlow<Boolean> = _revising
+
+    /** Sends a comment about the selected proposals; the revised plan replaces the current one. */
+    fun reviseTidy(selected: TidySelection, comment: String) = viewModelScope.launch {
+        val plan = _tidy.value ?: return@launch
+        _revising.value = true
+        basket.reviseTidy(plan, selected, comment)?.let { _tidy.value = it }
+        _revising.value = false
+    }
 
     private val _scan = MutableStateFlow<ReceiptScan?>(null)
     val scan: StateFlow<ReceiptScan?> = _scan
@@ -705,26 +719,6 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun clearSelection() { selection.value = emptySet() }
     private fun selectedItems() = basket.items.value.filter { it.id in selection.value }
     fun deleteSelected() = viewModelScope.launch { basket.deleteMany(selectedItems()); clearSelection() }
-    /** Selects every given row, or clears the selection when they are all selected already. */
-    fun selectAllOrNone(ids: List<String>) { selection.value = if (ids.all { it in selection.value }) emptySet() else ids.toSet() }
-
-    /** Comment mode: a long press selects items to comment on; the toggle in the selection bar turns it off (plain selection) or on. */
-    val commentMode = MutableStateFlow(true)
-    fun toggleCommentMode() { commentMode.value = !commentMode.value }
-    private val _instructing = MutableStateFlow(false)
-    val instructing: StateFlow<Boolean> = _instructing
-    /** Outcome of the last comment, for a snackbar; cleared once shown. */
-    private val _instructOutcome = MutableStateFlow<InstructResponse?>(null)
-    val instructOutcome: StateFlow<InstructResponse?> = _instructOutcome
-    fun instructSelected(instruction: String) = viewModelScope.launch {
-        val items = selectedItems().flatMap { item -> if (item.isGroup) basket.items.value.filter { it.parentId == item.id } else listOf(item) }.distinctBy { it.id }
-        if (items.isEmpty()) return@launch
-        _instructing.value = true
-        val outcome = basket.instruct(items, instruction)
-        _instructing.value = false
-        if (outcome != null) { _instructOutcome.value = outcome; if (outcome.changes.isNotEmpty()) clearSelection() }
-    }
-    fun consumeInstructOutcome() { _instructOutcome.value = null }
     fun groupSelected(name: String) = viewModelScope.launch { basket.groupFromItems(name, selectedItems().filter { !it.isGroup }); clearSelection() }
     fun transferSelected(basketId: String, copy: Boolean) = viewModelScope.launch { basket.transferMany(selectedItems(), basketId, copy); clearSelection() }
     fun checkSelected(checked: Boolean) = viewModelScope.launch { basket.setCheckedMany(selectedItems(), checked); clearSelection() }

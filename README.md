@@ -129,14 +129,14 @@ wording. Without an AI provider only literal repeats are merged and nothing is r
 
 ## Comment mode
 
-Hold an item to select it; the selection bar gets a **select all / unselect all** button and, at its
-right edge, a toggle for comment mode (on by default). With comment mode on, the add bar becomes a
-comment box: type or dictate what should change for the selected items ("double the cookies amount",
-"quita la leche", "it should be bolsa de lechugas") and the assistant turns it into edits: amounts,
-ticks, removals or new wording, applied through the normal item operations. Wording corrections that
-keep the same product are remembered: **Tidy up** and later translations use your words instead of
-asking the model again, and the learned wordings can be forgotten from the memory screen. Turn comment
-mode off to get the plain selection bar.
+Inside **Tidy up**, hold a proposal to select it (or tap once comment mode is on; the header gets a
+select all / unselect all button). The toggle in the sheet's top-right corner turns comment mode off
+or on; it is on by default. Then write what should change about the selected proposals: "double the
+cookies amount" sets the amount on that rename, "it should be bolsa de lechugas" replaces the proposed
+wording, "no uses la oferta" drops a deal, "quiero 3 de leche" fixes a merge's amount. The assistant
+revises only the selected proposals and answers in the sheet when something cannot be done. Wording
+corrections are remembered: the next tidy pass and later translations use your words straight away, and
+the learned wordings can be forgotten from the memory screen.
 
 ## Find similar
 

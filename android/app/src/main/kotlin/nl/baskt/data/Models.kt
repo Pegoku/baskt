@@ -291,21 +291,6 @@ data class NamePreference(val id: String, val source: String, val preferred: Str
 @Serializable
 data class ChoicesResponse(val choices: List<Choice> = emptyList(), val names: List<NamePreference> = emptyList())
 
-/** One edit the assistant derived from a comment about selected items. */
-@Serializable
-data class InstructChange(
-    val id: String,
-    val from: String = "",
-    val text: String? = null,
-    /** The new text is just other words for the same product, so its matches and picks stay. */
-    val wordingOnly: Boolean = false,
-    val quantity: Int? = null,
-    val checked: Boolean? = null,
-    val remove: Boolean = false,
-)
-
-@Serializable
-data class InstructResponse(val changes: List<InstructChange> = emptyList(), val remembered: List<String> = emptyList(), val reply: String? = null)
 
 @Serializable
 data class RecipeSummary(val title: String, val url: String, val imageUrl: String? = null, val slug: String = "", val titleLocalized: String? = null, val source: String? = null, val language: String? = null) {
@@ -430,7 +415,7 @@ data class TidyItem(val id: String, val text: String, val quantity: Int = 1, val
 
 /** A new wording for one entry, in the app language; the matches and picks stay. */
 @Serializable
-data class TidyRename(val id: String, val from: String, val to: String, val reason: String? = null)
+data class TidyRename(val id: String, val from: String, val to: String, val reason: String? = null, /** New packs when a comment asked for another amount. */ val quantity: Int? = null)
 
 /** Duplicates nobody decided about: one entry survives with the summed quantity and the given wording. */
 @Serializable
@@ -455,6 +440,12 @@ data class MergeDecision(val merge: TidyMerge, val sumQuantities: Boolean) {
 data class TidyDistinct(val items: List<TidyItem>, val reason: String = "")
 
 /** What the magic wand proposes; nothing is applied until the user confirms. */
+/** Which proposals a comment is about: rename item ids, merge keep ids and deal keys ("itemId:store"). */
+@Serializable
+data class TidySelection(val renames: List<String> = emptyList(), val merges: List<String> = emptyList(), val deals: List<String> = emptyList()) {
+    val size: Int get() = renames.size + merges.size + deals.size
+}
+
 @Serializable
 data class TidyPlan(
     val scanned: Int = 0,
@@ -464,6 +455,8 @@ data class TidyPlan(
     val distinct: List<TidyDistinct> = emptyList(),
     /** Promotions for entries that stay, one per entry and store. */
     val deals: List<Deal> = emptyList(),
+    /** What the assistant said back to the last comment. */
+    val reply: String? = null,
 ) {
     val isEmpty: Boolean get() = renames.isEmpty() && merges.isEmpty() && deals.isEmpty()
 }

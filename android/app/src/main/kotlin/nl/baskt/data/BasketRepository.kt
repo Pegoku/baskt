@@ -720,25 +720,7 @@ class BasketRepository(
 
     suspend fun planTidy(): TidyPlan? = guard { api.tidy(_currentBasketId.value) }
 
-    /**
-     * Comment mode: asks the server what a free-text instruction means for the selected items, then applies
-     * the edits through the normal item operations. Wording-only renames keep their matches.
-     */
-    suspend fun instruct(items: List<BasketItem>, instruction: String): InstructResponse? {
-        val response = guard { api.instruct(items.map { it.id }, instruction) } ?: return null
-        val current = _items.value
-        val toDelete = mutableListOf<BasketItem>()
-        for (change in response.changes) {
-            val item = current.firstOrNull { it.id == change.id } ?: continue
-            if (change.remove) { toDelete += item; continue }
-            val text = change.text?.trim()
-            if (!text.isNullOrEmpty() && text != item.text) rename(item, text, keepMatches = change.wordingOnly)
-            if (change.quantity != null && change.quantity >= 1 && change.quantity != item.quantity) setQuantity(item, change.quantity)
-            if (change.checked != null && change.checked != item.checked) setChecked(item, change.checked)
-        }
-        if (toDelete.isNotEmpty()) deleteMany(toDelete)
-        return response
-    }
+    suspend fun reviseTidy(plan: TidyPlan, selected: TidySelection, comment: String): TidyPlan? = guard { api.reviseTidy(plan, selected, comment) }
 
     /**
      * Applies the confirmed parts of a tidy plan through the normal item operations, so they queue offline
@@ -759,6 +741,7 @@ class BasketRepository(
         for (change in renames) {
             val item = current.firstOrNull { it.id == change.id } ?: continue
             if (change.to.isNotBlank() && change.to != item.text) rename(item, change.to, keepMatches = true)
+            if (change.quantity != null && change.quantity >= 1 && change.quantity != item.quantity) setQuantity(item, change.quantity)
         }
         // Same path as "Use this deal" on the deals screen: the promotion becomes the pick at that store.
         for (deal in deals) {

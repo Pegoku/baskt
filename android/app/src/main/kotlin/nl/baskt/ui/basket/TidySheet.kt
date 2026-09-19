@@ -1,6 +1,9 @@
 package nl.baskt.ui.basket
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,7 +15,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.CommentsDisabled
+import androidx.compose.material.icons.filled.Deselect
+import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -39,6 +47,7 @@ import nl.baskt.data.MergeDecision
 import nl.baskt.data.StoreInfo
 import nl.baskt.data.TidyPlan
 import nl.baskt.data.TidyRename
+import nl.baskt.data.TidySelection
 import nl.baskt.data.euros
 import nl.baskt.ui.common.ProductRow
 import nl.baskt.ui.common.StoreBadge
@@ -48,9 +57,24 @@ import nl.baskt.ui.common.StoreBadge
  * has decided about (keeping one, or adding the amounts up) and take promotions. Every change starts
  * ticked and can be unticked; look-alikes that stay apart are shown for information. Nothing changes
  * until "Apply".
+ *
+ * Comment mode (toggle in the top-right corner, on by default): hold a proposal to select it, select all
+ * from the header, then write what should change ("double the cookies amount", "it should be bolsa de
+ * lechugas"). The assistant revises the selected proposals and remembers wording corrections.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun TidySheet(plan: TidyPlan?, loading: Boolean, stores: List<StoreInfo>, onDismiss: () -> Unit, onApply: (List<TidyRename>, List<MergeDecision>, List<Deal>) -> Unit) {
+fun TidySheet(
+    plan: TidyPlan?,
+    loading: Boolean,
+    revising: Boolean,
+    commentMode: Boolean,
+    stores: List<StoreInfo>,
+    onToggleCommentMode: () -> Unit,
+    onComment: (TidySelection, String) -> Unit,
+    onDismiss: () -> Unit,
+    onApply: (List<TidyRename>, List<MergeDecision>, List<Deal>) -> Unit,
+) {
     val renames = plan?.renames ?: emptyList()
     val merges = plan?.merges ?: emptyList()
     val deals = plan?.deals ?: emptyList()
@@ -59,17 +83,55 @@ fun TidySheet(plan: TidyPlan?, loading: Boolean, stores: List<StoreInfo>, onDism
     // Adding the amounts up is the default only when the entries actually differ in quantity; otherwise it doubles by accident.
     var summed by remember(plan) { mutableStateOf(merges.filter { it.quantity > it.keepQuantity && it.items.any { item -> item.quantity > 1 } }.map { it.keepId }.toSet()) }
     var skippedDeals by remember(plan) { mutableStateOf(emptySet<String>()) }
-    val dealKey = { deal: Deal -> "${deal.itemId}-${deal.store}" }
+    val dealKey = { deal: Deal -> "${deal.itemId}:${deal.store}" }
     val chosenRenames = renames.filter { it.id !in skippedRenames }
     val chosenMerges = merges.filter { it.keepId !in skippedMerges }.map { MergeDecision(it, sumQuantities = it.keepId in summed) }
     val chosenDeals = deals.filter { dealKey(it) !in skippedDeals }
     val changes = chosenRenames.size + chosenMerges.size + chosenDeals.size
+
+    // Comment mode selection: proposal keys ("rename-id", "merge-keepId", "deal-item:store"). Survives a revision, since keys are stable.
+    var selectedKeys by remember { mutableStateOf(emptySet<String>()) }
+    val allKeys = renames.map { "rename-${it.id}" } + merges.map { "merge-${it.keepId}" } + deals.map { "deal-" + dealKey(it) }
+    val selection = selectedKeys.intersect(allKeys.toSet())
+    val allSelected = allKeys.isNotEmpty() && selection.size == allKeys.size
+    fun toggleKey(key: String) { selectedKeys = if (key in selectedKeys) selectedKeys - key else selectedKeys + key }
+    val commenting = commentMode && !loading && plan != null && allKeys.isNotEmpty()
+    // In comment mode a tap selects; a long press selects in either mode (and turns comment mode on when it was off).
+    fun cardPress(key: String, onTick: () -> Unit) { if (commenting) toggleKey(key) else onTick() }
+    fun cardHold(key: String) { if (!commentMode) onToggleCommentMode(); selectedKeys = selectedKeys + key }
+    fun sendComment(comment: String) {
+        onComment(
+            TidySelection(
+                renames = renames.map { it.id }.filter { "rename-$it" in selection },
+                merges = merges.map { it.keepId }.filter { "merge-$it" in selection },
+                deals = deals.map { dealKey(it) }.filter { "deal-$it" in selection },
+            ),
+            comment,
+        )
+    }
+
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Default.AutoFixHigh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text("Tidy up", style = MaterialTheme.typography.titleLarge)
+                Text("Tidy up", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                if (commenting) {
+                    IconButton(onClick = { selectedKeys = if (allSelected) emptySet() else allKeys.toSet() }) {
+                        Icon(if (allSelected) Icons.Default.Deselect else Icons.Default.SelectAll, contentDescription = if (allSelected) "Unselect all" else "Select all")
+                    }
+                }
+                if (!loading && plan != null && allKeys.isNotEmpty()) {
+                    IconButton(onClick = onToggleCommentMode) {
+                        Icon(
+                            if (commentMode) Icons.AutoMirrored.Filled.Comment else Icons.Default.CommentsDisabled,
+                            contentDescription = if (commentMode) "Turn comment mode off" else "Turn comment mode on",
+                            tint = if (commentMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
+            val reply = plan?.reply
+            if (!reply.isNullOrBlank()) Text(reply, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.tertiary)
             when {
                 loading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { LoadingIndicator(); Text("Waving the wand over your list…") }
                 plan == null || plan.isEmpty -> Text(
@@ -78,7 +140,7 @@ fun TidySheet(plan: TidyPlan?, loading: Boolean, stores: List<StoreInfo>, onDism
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 else -> Text(
-                    "Untick anything you want to keep as it is.",
+                    if (commenting) "Tap proposals to select them, then say what should change. Untick what you want to keep as it is." else "Untick anything you want to keep as it is.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -89,7 +151,9 @@ fun TidySheet(plan: TidyPlan?, loading: Boolean, stores: List<StoreInfo>, onDism
                         item { SectionLabel(if (merges.size == 1) "Merge duplicates" else "Merge ${merges.size} sets of duplicates") }
                         items(merges, key = { "merge-${it.keepId}" }) { merge ->
                             val active = merge.keepId !in skippedMerges
-                            ChangeCard(checked = active, onToggle = { skippedMerges = if (active) skippedMerges + merge.keepId else skippedMerges - merge.keepId }) {
+                            val key = "merge-${merge.keepId}"
+                            val tick = { skippedMerges = if (active) skippedMerges + merge.keepId else skippedMerges - merge.keepId }
+                            ChangeCard(checked = active, selected = key in selection, onToggle = tick, onPress = { cardPress(key, tick) }, onHold = { cardHold(key) }) {
                                 Text(merge.items.joinToString(" · ") { it.text + if (it.quantity > 1) " ×${it.quantity}" else "" }, style = MaterialTheme.typography.bodyMedium, textDecoration = TextDecoration.LineThrough, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(merge.text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                 if (merge.reason.isNotBlank()) Text(merge.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -104,10 +168,12 @@ fun TidySheet(plan: TidyPlan?, loading: Boolean, stores: List<StoreInfo>, onDism
                     if (renames.isNotEmpty()) {
                         item { SectionLabel(if (renames.size == 1) "Rename" else "Rename ${renames.size} entries") }
                         items(renames, key = { "rename-${it.id}" }) { change ->
-                            ChangeCard(checked = change.id !in skippedRenames, onToggle = { skippedRenames = if (change.id in skippedRenames) skippedRenames - change.id else skippedRenames + change.id }) {
+                            val key = "rename-${change.id}"
+                            val tick = { skippedRenames = if (change.id in skippedRenames) skippedRenames - change.id else skippedRenames + change.id }
+                            ChangeCard(checked = change.id !in skippedRenames, selected = key in selection, onToggle = tick, onPress = { cardPress(key, tick) }, onHold = { cardHold(key) }) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(change.from, style = MaterialTheme.typography.bodyMedium, textDecoration = TextDecoration.LineThrough, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(change.to, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                    if (change.from != change.to) Text(change.from, style = MaterialTheme.typography.bodyMedium, textDecoration = TextDecoration.LineThrough, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(change.to + (change.quantity?.let { "  ×$it" } ?: ""), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                 }
                                 if (!change.reason.isNullOrBlank()) Text(change.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -117,7 +183,8 @@ fun TidySheet(plan: TidyPlan?, loading: Boolean, stores: List<StoreInfo>, onDism
                         item { SectionLabel(if (deals.size == 1) "Use a deal" else "Use ${deals.size} deals") }
                         items(deals, key = { "deal-" + dealKey(it) }) { deal ->
                             val key = dealKey(deal)
-                            ChangeCard(checked = key !in skippedDeals, onToggle = { skippedDeals = if (key in skippedDeals) skippedDeals - key else skippedDeals + key }) {
+                            val tick = { skippedDeals = if (key in skippedDeals) skippedDeals - key else skippedDeals + key }
+                            ChangeCard(checked = key !in skippedDeals, selected = "deal-$key" in selection, onToggle = tick, onPress = { cardPress("deal-$key", tick) }, onHold = { cardHold("deal-$key") }) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     StoreBadge(deal.store, stores)
                                     Text(deal.itemText, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
@@ -145,10 +212,11 @@ fun TidySheet(plan: TidyPlan?, loading: Boolean, stores: List<StoreInfo>, onDism
                     }
                 }
             }
+            if (commenting) CommentBar(selectedCount = selection.size, busy = revising, onSend = { sendComment(it) })
             Spacer(Modifier.height(4.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!loading && plan != null && !plan.isEmpty) {
-                    Button(onClick = { onApply(chosenRenames, chosenMerges, chosenDeals) }, enabled = changes > 0) {
+                    Button(onClick = { onApply(chosenRenames, chosenMerges, chosenDeals) }, enabled = changes > 0 && !revising) {
                         Text(if (changes == 0) "Nothing ticked" else if (changes == 1) "Apply 1 change" else "Apply $changes changes")
                     }
                 }
@@ -171,9 +239,16 @@ private fun SectionLabel(text: String) {
     Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp))
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChangeCard(checked: Boolean, onToggle: () -> Unit, content: @Composable () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle)) {
+private fun ChangeCard(checked: Boolean, selected: Boolean, onToggle: () -> Unit, onPress: () -> Unit, onHold: () -> Unit, content: @Composable () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium) else Modifier)
+            .combinedClickable(onClick = onPress, onLongClick = onHold),
+    ) {
         Row(modifier = Modifier.padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = checked, onCheckedChange = { onToggle() }, modifier = Modifier.size(40.dp))
             Column(modifier = Modifier.padding(start = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { content() }
