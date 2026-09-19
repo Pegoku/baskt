@@ -31,6 +31,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -331,22 +340,85 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                 }
             } else {
                 val topLevel = items.filter { it.parentId == null }
-                LazyColumn(contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(topLevel, key = { it.id }) { item ->
+                // Drag-to-reorder: the handle drags a row along the finger; it swaps with neighbours as it passes their midpoint.
+                // The order is kept locally while dragging and sent to the repository on drop.
+                val listState = rememberLazyListState()
+                var dragOrder by remember { mutableStateOf<List<BasketItem>?>(null) }
+                var draggingId by remember { mutableStateOf<String?>(null) }
+                var dragOffset by remember { mutableFloatStateOf(0f) }
+                val rowHeights = remember { mutableMapOf<String, Int>() }
+                val rowGap = with(LocalDensity.current) { 8.dp.roundToPx() }
+                val shown = dragOrder ?: topLevel
+                fun finishDrag() {
+                    val order = dragOrder
+                    draggingId = null
+                    dragOffset = 0f
+                    if (order != null) viewModel.reorder(order.map { it.id })
+                    dragOrder = null
+                }
+                LazyColumn(state = listState, contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(shown, key = { it.id }) { item ->
                         val selected = item.id in selection
+                        val isDragged = draggingId == item.id
                         val open: () -> Unit = { if (selectionMode) viewModel.toggleSelected(item.id) else if (item.isGroup) onOpenGroup(item.id) else onOpenItem(item.id) }
                         val longPress: () -> Unit = { viewModel.toggleSelected(item.id) }
-                        val content: @Composable () -> Unit = {
-                            Box(modifier = if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium) else Modifier) {
-                                if (item.isGroup) {
-                                    GroupCard(item, items.filter { it.parentId == item.id }, enabledStores, onClick = open, onLongClick = longPress, onToggle = { viewModel.toggleChecked(item) })
-                                } else {
-                                    BasketItemCard(item, enabledStores, onClick = open, onLongClick = longPress, onToggle = { viewModel.toggleChecked(item) })
-                                }
+                        val handle: (@Composable () -> Unit)? = if (selectionMode || topLevel.size < 2) null else {
+                            {
+                                Icon(
+                                    Icons.Default.DragHandle,
+                                    contentDescription = "Drag to reorder",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 8.dp).pointerInput(item.id) {
+                                        detectDragGestures(
+                                            onDragStart = { dragOrder = topLevel; draggingId = item.id; dragOffset = 0f },
+                                            onDragEnd = { finishDrag() },
+                                            onDragCancel = { finishDrag() },
+                                        ) { change, amount ->
+                                            change.consume()
+                                            val order = dragOrder ?: return@detectDragGestures
+                                            val current = order.indexOfFirst { it.id == draggingId }
+                                            if (current < 0) return@detectDragGestures
+                                            dragOffset += amount.y
+                                            val below = order.getOrNull(current + 1)?.let { rowHeights[it.id] }?.plus(rowGap)
+                                            val above = order.getOrNull(current - 1)?.let { rowHeights[it.id] }?.plus(rowGap)
+                                            if (below != null && dragOffset > below / 2f) {
+                                                dragOrder = order.toMutableList().also { java.util.Collections.swap(it, current, current + 1) }
+                                                dragOffset -= below
+                                            } else if (above != null && dragOffset < -above / 2f) {
+                                                dragOrder = order.toMutableList().also { java.util.Collections.swap(it, current, current - 1) }
+                                                dragOffset += above
+                                            }
+                                            // Keep the list moving when the row is dragged past the visible edge.
+                                            val info = listState.layoutInfo
+                                            val row = info.visibleItemsInfo.firstOrNull { it.key == item.id } ?: return@detectDragGestures
+                                            val top = row.offset + dragOffset
+                                            val bottom = top + row.size
+                                            val overshoot = when {
+                                                top < info.viewportStartOffset -> top - info.viewportStartOffset
+                                                bottom > info.viewportEndOffset -> bottom - info.viewportEndOffset
+                                                else -> 0f
+                                            }
+                                            if (overshoot != 0f) scope.launch { dragOffset += listState.scrollBy(overshoot * 0.3f) }
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                        val cardShape = MaterialTheme.shapes.medium
+                        Box(
+                            modifier = (if (isDragged) Modifier else Modifier.animateItem())
+                                .onSizeChanged { rowHeights[item.id] = it.height }
+                                .graphicsLayer { translationY = if (isDragged) dragOffset else 0f; shadowElevation = if (isDragged) 12f else 0f; shape = cardShape; clip = false }
+                                .zIndex(if (isDragged) 1f else 0f)
+                                .then(if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium) else Modifier),
+                        ) {
+                            if (item.isGroup) {
+                                GroupCard(item, items.filter { it.parentId == item.id }, enabledStores, onClick = open, onLongClick = longPress, onToggle = { viewModel.toggleChecked(item) }, trailing = handle)
+                            } else {
+                                BasketItemCard(item, enabledStores, onClick = open, onLongClick = longPress, onToggle = { viewModel.toggleChecked(item) }, trailing = handle)
                             }
                         }
                         // No swipe-to-dismiss on rows: horizontal swipes belong to screen navigation (delete via menu or selection).
-                        content()
                     }
                 }
             }
@@ -357,7 +429,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
 
 
 @Composable
-fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, onToggle: () -> Unit) {
+fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, onToggle: () -> Unit, trailing: (@Composable () -> Unit)? = null) {
     Card(
         modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),
         colors = CardDefaults.cardColors(containerColor = if (item.checked) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceContainer),
@@ -414,13 +486,14 @@ fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Uni
                     Text("Tap to choose products", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
                 }
             }
+            trailing?.invoke()
         }
     }
 }
 
 /** A folder row: title, child count and per-store totals summed over the children. */
 @Composable
-fun GroupCard(group: BasketItem, children: List<BasketItem>, stores: List<StoreInfo>, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, onToggle: () -> Unit) {
+fun GroupCard(group: BasketItem, children: List<BasketItem>, stores: List<StoreInfo>, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, onToggle: () -> Unit, trailing: (@Composable () -> Unit)? = null) {
     val allChecked = children.isNotEmpty() && children.all { it.checked }
     Card(
         modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),
@@ -471,6 +544,7 @@ fun GroupCard(group: BasketItem, children: List<BasketItem>, stores: List<StoreI
                     }
                 }
             }
+            trailing?.invoke()
         }
     }
 }

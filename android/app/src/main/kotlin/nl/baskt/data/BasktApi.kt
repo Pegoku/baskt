@@ -152,6 +152,12 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
             auth(); contentType(ContentType.Application.Json); setBody(ItemIdsRequest(itemIds))
         }.expect<DeletedResponse>().deleted
 
+    /** Saves a new order for the given sibling items; position in the list becomes the sort order. */
+    suspend fun reorderItems(itemIds: List<String>): Int =
+        client.post(url("/basket/items/reorder")) {
+            auth(); contentType(ContentType.Application.Json); setBody(ItemIdsRequest(itemIds))
+        }.expect<UpdatedResponse>().updated
+
     suspend fun transferItem(id: String, basketId: String, copy: Boolean): TransferResult =
         client.post(url("/basket/items/$id/transfer")) {
             auth(); contentType(ContentType.Application.Json); setBody(TransferRequest(basketId, copy))
@@ -449,5 +455,6 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
 @Serializable private data class QueryRequest(val query: String)
 @Serializable private data class ItemsResponse(val items: List<BasketItem>)
 @Serializable private data class DeletedResponse(val deleted: Int)
+@Serializable private data class UpdatedResponse(val updated: Int)
 
 @Serializable private data class GroupServingsRequest(val servings: Int, val children: List<ScaledIngredient>? = null, val recipe: RecipeInfo? = null)

@@ -99,6 +99,7 @@ data class PendingOp(
             "rename" -> "Rename to “$text”"
             "delete" -> "Delete item"
             "deleteMany" -> "Delete ${items?.size ?: 0} items"
+            "reorder" -> "Reorder items"
             "clearChecked" -> "Clear checked items"
             "choose" -> if (productId == null) "Skip store $store" else "Pick product at $store"
             "assign" -> "Assign store"

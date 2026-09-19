@@ -134,6 +134,7 @@ class BasketRepository(
                         "quantity" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, quantity = op.quantity) }
                         "rename" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, text = op.text) }
                         "delete" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.deleteItem(it) }
+                        "reorder" -> api.reorderItems((op.items ?: emptyList()).mapNotNull { real(it) }.filterNot { it.startsWith("local-") })
                         "deleteMany" -> api.deleteItems((op.items ?: emptyList()).mapNotNull { real(it) }.filterNot { it.startsWith("local-") })
                         "clearChecked" -> api.clearChecked(real(op.basketId) ?: _currentBasketId.value)
                         "choose" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.choose(it, op.store ?: return@let, op.productId) }
@@ -576,6 +577,21 @@ class BasketRepository(
     suspend fun delete(item: BasketItem) {
         val remove = { _items.update { list -> list.filterNot { it.id == item.id || it.parentId == item.id } } }
         queued(PendingOp(type = "delete", itemId = item.id), optimistic = remove)
+    }
+
+    /** Reorders siblings (top level or one folder) so they appear in [orderedIds] order; the server is told the same order. */
+    suspend fun reorder(orderedIds: List<String>) {
+        val ids = orderedIds.toSet()
+        val current = _items.value.filter { it.id in ids }
+        if (current.size < 2 || current.map { it.id } == orderedIds) return
+        // Reuse the siblings' existing sortOrder slots (made strictly increasing) so the rest of the basket stays put.
+        val slots = current.map { it.sortOrder }.sorted().runningReduceIndexed { index, previous, slot -> if (index == 0) slot else maxOf(slot, previous + 1) }
+        val byId = current.associateBy { it.id }
+        val reordered = orderedIds.mapIndexedNotNull { index, id -> byId[id]?.copy(sortOrder = slots.getOrElse(index) { (slots.lastOrNull() ?: -1) + 1 + index }) }.associateBy { it.id }
+        val optimistic = {
+            _items.update { list -> list.map { reordered[it.id] ?: it }.sortedWith(compareBy({ it.sortOrder }, { it.createdAt })) }
+        }
+        queued(PendingOp(type = "reorder", items = orderedIds), optimistic = optimistic)
     }
 
     suspend fun clearChecked() = deleteMany(_items.value.filter { it.checked })

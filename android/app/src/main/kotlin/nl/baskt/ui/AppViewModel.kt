@@ -682,6 +682,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun setQuantity(item: BasketItem, quantity: Int) = viewModelScope.launch { basket.setQuantity(item, quantity.coerceAtLeast(1)) }
     fun rename(item: BasketItem, text: String) = viewModelScope.launch { basket.rename(item, text) }
     fun delete(item: BasketItem) = viewModelScope.launch { basket.delete(item) }
+    fun reorder(orderedIds: List<String>) = viewModelScope.launch { basket.reorder(orderedIds) }
     fun clearChecked() = viewModelScope.launch { basket.clearChecked() }
     /** Store cards that are waiting for the server (alternatives search, manual search, choose). */
     val busyMatches = MutableStateFlow<Set<String>>(emptySet())
