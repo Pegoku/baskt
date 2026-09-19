@@ -15,8 +15,7 @@ import { expandDealQuery, findDeals } from "@/matching/deals";
 import { termRelevance } from "@/stores/promotions";
 import { interpretVoice } from "@/matching/voice";
 import { findDuplicates } from "@/matching/dedupe";
-import { planTidy, toCandidate } from "@/matching/tidy";
-import { interpretInstruction } from "@/matching/instruct";
+import { planTidy, reviseTidy, toCandidate, type TidyPlan, type TidySelection } from "@/matching/tidy";
 import { speechTranscript } from "@/routes/speech";
 import { fetchRecipe, getUserRecipe, userRecipeAsRecipe } from "@/routes/recipes";
 import { localizeRecipe } from "@/matching/localize";
@@ -483,16 +482,19 @@ basket.post("/tidy", async (c) => {
 });
 
 /**
- * Comment mode: a free-text instruction about selected items ("double the cookies", "call it bolsa de
- * lechugas") becomes concrete edits. Wording corrections are remembered. The app applies the edits.
+ * Comment mode of the wand: a free-text remark about the selected proposals ("double the cookies",
+ * "it should be bolsa de lechugas") revises them; unselected proposals stay as they were. Wording
+ * corrections are remembered for later passes.
  */
-basket.post("/instruct", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { itemIds?: string[]; instruction?: string };
-  const ids = Array.isArray(body.itemIds) ? body.itemIds.filter((id): id is string => typeof id === "string") : [];
-  if (!ids.length || typeof body.instruction !== "string" || !body.instruction.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "itemIds and instruction are required" } }, 400);
-  const rows = db().select().from(basketItems).where(inArray(basketItems.id, ids)).all().filter((row) => row.kind === "item");
-  const ordered = ids.map((id) => rows.find((row) => row.id === id)).filter((row): row is BasketItemRow => Boolean(row));
-  return c.json(await interpretInstruction(ordered, body.instruction));
+basket.post("/tidy/revise", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { plan?: TidyPlan; selected?: Partial<TidySelection>; comment?: string };
+  if (!body.plan || !Array.isArray(body.plan.renames) || !Array.isArray(body.plan.merges) || !Array.isArray(body.plan.deals)) return c.json({ error: { code: "BAD_REQUEST", message: "plan is required" } }, 400);
+  if (typeof body.comment !== "string" || !body.comment.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "comment is required" } }, 400);
+  const strings = (value: unknown) => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : []);
+  const selected: TidySelection = { renames: strings(body.selected?.renames), merges: strings(body.selected?.merges), deals: strings(body.selected?.deals) };
+  const ids = new Set([...body.plan.renames.map((entry) => entry.id), ...body.plan.merges.map((entry) => entry.keepId)]);
+  const rows = ids.size ? db().select().from(basketItems).where(inArray(basketItems.id, Array.from(ids))).all() : [];
+  return c.json(await reviseTidy(body.plan, selected, body.comment, new Map(rows.map((row) => [row.id, row]))));
 });
 
 /** Adds a confirmed proposal: plain items and recipe folders in one go. */

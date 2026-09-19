@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { resetDbForTests } from "@/db";
 import { createApp } from "@/app";
 import { listNames, preferredName, rememberName } from "@/matching/naming";
-import { planTidy, toCandidate } from "@/matching/tidy";
+import { planTidy, reviseTidy, toCandidate } from "@/matching/tidy";
 import type { BasketItemRow } from "@/db/schema";
 import { setAdaptersForTests } from "@/stores/registry";
 import { StoreThrottle } from "@/stores/throttle";
@@ -59,13 +59,19 @@ describe("naming memory", () => {
     expect(listNames()).toEqual([]);
   });
 
-  test("instruct route validates input and answers without AI", async () => {
-    expect((await api("/basket/instruct", { method: "POST", body: JSON.stringify({ itemIds: [], instruction: "double it" }) })).status).toBe(400);
-    const created = (await (await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "koekjes" }) })).json()) as { id: string };
-    const response = await api("/basket/instruct", { method: "POST", body: JSON.stringify({ itemIds: [created.id], instruction: "double it" }) });
+  test("revise route validates input and keeps the plan without AI", async () => {
+    const plan = { scanned: 1, language: "Spanish", renames: [{ id: "x", from: "krulsla melange", to: "mezcla de lechugas", reason: null }], merges: [], distinct: [], deals: [] };
+    expect((await api("/basket/tidy/revise", { method: "POST", body: JSON.stringify({ plan, comment: "" }) })).status).toBe(400);
+    expect((await api("/basket/tidy/revise", { method: "POST", body: JSON.stringify({ comment: "x" }) })).status).toBe(400);
+    const response = await api("/basket/tidy/revise", { method: "POST", body: JSON.stringify({ plan, selected: { renames: ["x"] }, comment: "it should be bolsa de lechugas" }) });
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { changes: unknown[]; reply: string | null };
-    expect(body.changes).toEqual([]);
-    expect(body.reply).toContain("not configured");
+    const revised = (await response.json()) as typeof plan & { reply: string | null };
+    expect(revised.renames).toEqual(plan.renames);
+    expect(revised.reply).toContain("not configured");
+  });
+
+  test("a comment about nothing selected leaves the plan alone", async () => {
+    const plan = { scanned: 0, language: "Spanish", renames: [], merges: [], distinct: [], deals: [] };
+    expect(await reviseTidy(plan, { renames: [], merges: [], deals: [] }, "double it", new Map())).toEqual({ ...plan, reply: null });
   });
 });

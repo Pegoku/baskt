@@ -4,7 +4,7 @@ import type { BasketItemRow, BasketMatchRow, ProductRow } from "@/db/schema";
 import { aiConfigured } from "@/env";
 import { normalizeText } from "@/lib/text";
 import { findDuplicates, type DuplicateGroup } from "@/matching/dedupe";
-import { listNames, preferredName } from "@/matching/naming";
+import { listNames, preferredName, rememberName } from "@/matching/naming";
 import type { Deal } from "@/matching/deals";
 
 /** An open item with what the user has already decided about it. */
@@ -26,6 +26,8 @@ export type TidyRename = {
   to: string;
   /** Set when the new wording exists to tell the item apart from a look-alike that stays. */
   reason: string | null;
+  /** New packs wanted when a comment asked for a different amount; null leaves the quantity alone. */
+  quantity?: number | null;
 };
 
 export type TidyMerge = {
@@ -55,7 +57,12 @@ export type TidyPlan = {
   distinct: TidyDistinct[];
   /** Promotions for entries that stay on the list, best saving first; one per entry and store. */
   deals: Deal[];
+  /** What the model said back to the last comment, if anything. */
+  reply?: string | null;
 };
+
+/** Which proposals a comment is about: rename item ids, merge keep ids and deal keys ("itemId:store"). */
+export type TidySelection = { renames: string[]; merges: string[]; deals: string[] };
 
 const RENAME_SYSTEM = `You tidy the wording of a grocery list for someone living in the Netherlands who wants every entry written in LANGUAGE.
 For each numbered entry return the clean name it should have in LANGUAGE:
@@ -227,4 +234,93 @@ async function unifyNames(entries: NameInput[], language: string): Promise<Map<s
     out.set(source.id, text);
   }
   return out;
+}
+
+const REVISE_SYSTEM = `You adjust proposed changes to a grocery list written in LANGUAGE, following the user's comment. The user may write in any language.
+Each proposal has a code: R = rename an entry (old wording -> proposed wording, current packs), M = merge duplicate entries into one wording, D = use a promotion.
+Return ONLY {"renames":[{"code":"R1","to": corrected wording or null to keep the proposed one, "quantity": new integer packs or null, "drop": true to cancel this rename}], "merges":[{"code":"M1","text": corrected wording or null, "quantity": new integer packs or null, "drop": true to cancel the merge}], "deals":[{"code":"D1","drop": true to skip this promotion}], "reply": short sentence in LANGUAGE when the comment cannot be carried out or deserves a remark, else null}.
+Only touch proposals the comment applies to; leave the others out. "double" means twice the current packs. Wording corrections must stay in LANGUAGE unless the user writes the wording out. Keep brand names, sizes and units unless told otherwise. Never invent proposals.`;
+
+type AiRevision = { code?: unknown; to?: unknown; text?: unknown; quantity?: unknown; drop?: unknown };
+
+function cleanText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.replace(/\s+/g, " ").trim() : null;
+}
+
+function cleanQuantity(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 999 ? value : null;
+}
+
+/**
+ * Revises the selected proposals of a plan on the user's comment. Unselected proposals are untouched.
+ * Wording corrections are remembered, so the next tidy pass uses the user's words straight away.
+ */
+export async function reviseTidy(plan: TidyPlan, selected: TidySelection, comment: string, rows: Map<string, BasketItemRow>): Promise<TidyPlan> {
+  const language = appLanguageName();
+  const renames = plan.renames.filter((entry) => selected.renames.includes(entry.id));
+  const merges = plan.merges.filter((entry) => selected.merges.includes(entry.keepId));
+  const deals = plan.deals.filter((entry) => selected.deals.includes(`${entry.itemId}:${entry.store}`));
+  if (!comment.trim() || (!renames.length && !merges.length && !deals.length)) return { ...plan, reply: null };
+  if (!aiConfigured()) return { ...plan, reply: "The assistant is not configured on this server." };
+  const listing = [
+    ...renames.map((entry, index) => {
+      const row = rows.get(entry.id);
+      const canonical = row?.parsedJson?.canonicalName;
+      return `R${index + 1}. rename "${entry.from}" -> "${entry.to}", x${entry.quantity ?? row?.quantity ?? 1}${canonical && normalizeText(canonical) !== normalizeText(entry.from) ? ` (means: ${canonical})` : ""}`;
+    }),
+    ...merges.map((entry, index) => `M${index + 1}. merge ${entry.items.map((item) => `"${item.text}" x${item.quantity}`).join(" + ")} -> "${entry.text}" (keep one x${entry.keepQuantity} or add up x${entry.quantity})`),
+    ...deals.map((entry, index) => `D${index + 1}. promotion for "${entry.itemText}" at ${entry.store}: ${entry.product.title}${entry.product.dealText ? ` (${entry.product.dealText})` : ""}`),
+  ].join("\n");
+  const raw = await chatJson<{ renames?: AiRevision[]; merges?: AiRevision[]; deals?: AiRevision[]; reply?: unknown }>(
+    [
+      { role: "system", content: REVISE_SYSTEM.replaceAll("LANGUAGE", language) },
+      { role: "user", content: `Proposals:\n${listing}\n\nComment: ${comment.trim()}` },
+    ],
+    { maxTokens: 1500 },
+  );
+  const at = <T,>(list: T[], code: unknown, prefix: string) => {
+    const index = typeof code === "string" && code.toUpperCase().startsWith(prefix) ? Number(code.slice(1)) - 1 : -1;
+    return list[index];
+  };
+
+  const dropRenames = new Set<string>();
+  const nextRenames = new Map<string, TidyRename>();
+  for (const change of Array.isArray(raw?.renames) ? raw!.renames : []) {
+    const entry = at(renames, change.code, "R");
+    if (!entry) continue;
+    if (change.drop === true) {
+      dropRenames.add(entry.id);
+      continue;
+    }
+    const to = cleanText(change.to) ?? entry.to;
+    if (to !== entry.to) rememberName({ source: entry.from, canonical: rows.get(entry.id)?.parsedJson?.canonicalName ?? null, preferred: to });
+    nextRenames.set(entry.id, { ...entry, to, quantity: cleanQuantity(change.quantity) ?? entry.quantity ?? null });
+  }
+  const dropMerges = new Set<string>();
+  const nextMerges = new Map<string, TidyMerge>();
+  for (const change of Array.isArray(raw?.merges) ? raw!.merges : []) {
+    const entry = at(merges, change.code, "M");
+    if (!entry) continue;
+    if (change.drop === true) {
+      dropMerges.add(entry.keepId);
+      continue;
+    }
+    const text = cleanText(change.text) ?? entry.text;
+    if (text !== entry.text) rememberName({ source: entry.text, canonical: rows.get(entry.keepId)?.parsedJson?.canonicalName ?? null, preferred: text });
+    const quantity = cleanQuantity(change.quantity);
+    // A stated amount wins over both "keep one" and "add up".
+    nextMerges.set(entry.keepId, quantity ? { ...entry, text, quantity, keepQuantity: quantity } : { ...entry, text });
+  }
+  const dropDeals = new Set<string>();
+  for (const change of Array.isArray(raw?.deals) ? raw!.deals : []) {
+    const entry = at(deals, change.code, "D");
+    if (entry && change.drop === true) dropDeals.add(`${entry.itemId}:${entry.store}`);
+  }
+  return {
+    ...plan,
+    renames: plan.renames.filter((entry) => !dropRenames.has(entry.id)).map((entry) => nextRenames.get(entry.id) ?? entry),
+    merges: plan.merges.filter((entry) => !dropMerges.has(entry.keepId)).map((entry) => nextMerges.get(entry.keepId) ?? entry),
+    deals: plan.deals.filter((entry) => !dropDeals.has(`${entry.itemId}:${entry.store}`)),
+    reply: cleanText(raw?.reply),
+  };
 }
