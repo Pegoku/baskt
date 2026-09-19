@@ -41,7 +41,7 @@ private const val UnderlayParallax = 0.25f
 /**
  * Basket → Review → Order as three pages of one pager, treated as a gesture-driven lateral transition:
  * the page follows the finger 1:1 once touch slop is cleared, deeper pages slide over the shallower one
- * like a stack (the one underneath recedes, lags and rounds off), release settles on an Expressive spatial
+ * like a stack (the one underneath recedes, lags and rounds off), release settles on the fast Expressive spatial
  * spring that keeps the finger's velocity, and a single light tick marks the point where letting go would
  * navigate.
  */
@@ -63,7 +63,9 @@ fun HomePager(
 ) {
     val pager = rememberPagerState(initialPage = startPage) { 3 }
     val scope = rememberCoroutineScope()
-    fun go(page: Int) = scope.launch { pager.animateScrollToPage(page) }
+    // Fast spatial spring: snappy settle with a touch of bounce; the default one lingers.
+    val spring = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
+    fun go(page: Int) = scope.launch { pager.animateScrollToPage(page, animationSpec = spring) }
     BackHandler(enabled = pager.currentPage > 0) { go(pager.currentPage - 1) }
 
     // Haptic at the commit threshold only: one tick when the drag crosses the point where releasing
@@ -102,7 +104,7 @@ fun HomePager(
     val fling = PagerDefaults.flingBehavior(
         state = pager,
         snapPositionalThreshold = CommitFraction,
-        snapAnimationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+        snapAnimationSpec = spring,
     )
 
     HorizontalPager(
