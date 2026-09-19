@@ -157,11 +157,17 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     private val _recipeMessage = MutableStateFlow<String?>(null)
     val recipeMessage: StateFlow<String?> = _recipeMessage
 
-    fun searchRecipes(query: String) = viewModelScope.launch {
+    /**
+     * Searches the recipe sites. [pinned] is a recipe the user already chose (a Discover photo): it is shown
+     * at once as the first result and kept on top when the other sites answer.
+     */
+    fun searchRecipes(query: String, pinned: RecipeSummary? = null) = viewModelScope.launch {
         _recipesBusy.value = true
         _recipeMessage.value = null
+        _recipeResults.value = listOfNotNull(pinned)
         val response = attempt("Recipe search") { container.api.searchRecipes(query) }
-        _recipeResults.value = response?.results ?: emptyList()
+        val found = response?.results ?: emptyList()
+        _recipeResults.value = if (pinned == null) found else listOf(pinned) + found.filter { it.url != pinned.url }
         _recipeMessage.value = response?.message ?: if (response == null) "The search could not be completed." else null
         if (response != null && response.errors.isNotEmpty() && response.results.isNotEmpty()) notify("Some sites did not answer: ${response.errors.joinToString { it.source }}")
         _recipesBusy.value = false

@@ -35,7 +35,7 @@ import nl.baskt.data.RecipeDetail
 
 /** Recipe viewer: photo, ingredients and numbered steps (with step images when the site has them), translated by the server. */
 @Composable
-fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, actions: @Composable () -> Unit) {
+fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, expanded: Boolean = false, actions: @Composable () -> Unit) {
     val container = (androidx.compose.ui.platform.LocalContext.current.applicationContext as nl.baskt.BasktApp).container
     val stock by container.basket.stock.collectAsState()
     val basketItems by container.basket.items.collectAsState()
@@ -55,8 +55,10 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, act
             servings = translation.texts[index++].ifBlank { null }, totalTime = translation.texts[index++].ifBlank { null }, description = translation.texts[index].ifBlank { null })
     } else source
     var tab by remember { mutableIntStateOf(0) }
-    // Fixed sheet height: it opens half-way and can be dragged up; content changes animate instead of jumping.
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    // Fixed sheet height: it opens half-way and can be dragged up (or straight to full height when [expanded]);
+    // content changes animate instead of jumping.
+    val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = expanded)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(modifier = Modifier.fillMaxHeight(0.92f).padding(horizontal = 20.dp).padding(bottom = 32.dp).verticalScroll(rememberScrollState()).animateContentSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Text("Recipe", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))

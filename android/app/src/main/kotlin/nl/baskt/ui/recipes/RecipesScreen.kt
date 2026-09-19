@@ -95,6 +95,7 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
     var query by remember { mutableStateOf("") }
     var tab by remember { mutableIntStateOf(0) }
     var selected by remember { mutableStateOf<RecipeSummary?>(null) }
+    var openExpanded by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { viewModel.loadRecipeFavourites(); viewModel.loadMyRecipes() }
     LaunchedEffect(tab, discoverParams) { if (tab == 2) viewModel.loadDiscover() }
 
@@ -154,11 +155,11 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
                     empty = searchMessage ?: "Type a dish, e.g. \"arroz cubano\" or \"iets met kip\". baskt understands it, searches Allerhande, Leuke Recepten, BBC Good Food, RecetasGratis, Cookpad and TheMealDB, and shows results in your language.",
                     busy = busy,
                     isFavourite = ::isFavourite,
-                    onOpen = { selected = it; viewModel.openRecipe(it) },
+                    onOpen = { selected = it; openExpanded = false; viewModel.openRecipe(it) },
                     onFavourite = { viewModel.toggleRecipeFavourite(it) },
                     onFolder = { viewModel.addRecipeFolder(it.url); onFolderAdded() },
                 )
-                1 -> MineList(mine, favourites.map { RecipeSummary(it.title, it.url, it.imageUrl, source = "Favourite") }, recent, viewModel, isFavourite = ::isFavourite, onEdit = { onCreate(it.id) }, onOpen = { selected = it; viewModel.openRecipe(it) }, onFolder = { viewModel.addRecipeFolder(it); onFolderAdded() })
+                1 -> MineList(mine, favourites.map { RecipeSummary(it.title, it.url, it.imageUrl, source = "Favourite") }, recent, viewModel, isFavourite = ::isFavourite, onEdit = { onCreate(it.id) }, onOpen = { selected = it; openExpanded = false; viewModel.openRecipe(it) }, onFolder = { viewModel.addRecipeFolder(it); onFolderAdded() })
                 else -> DiscoverPane(
                     params = discoverParams,
                     dishes = discoverDishes,
@@ -167,6 +168,12 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
                     onParams = { viewModel.setDiscoverParams(it) },
                     onByTime = { viewModel.setDiscoverByTime(it) },
                     onSearch = { query = it; tab = 0; viewModel.searchRecipes(it) },
+                    onOpenDish = { dish ->
+                        // The photo's recipe opens right away, full height; the other sites load behind it with this one on top.
+                        val recipe = RecipeSummary(dish.title, dish.recipeUrl!!, dish.imageUrl, source = dish.source)
+                        selected = recipe; openExpanded = true; viewModel.openRecipe(recipe)
+                        query = dish.searchQuery; tab = 0; viewModel.searchRecipes(dish.searchQuery, pinned = recipe)
+                    },
                     onRefresh = { viewModel.loadDiscover(force = true) },
                 )
             }
@@ -175,7 +182,7 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
 
     val current = selected
     if (current != null) {
-        RecipeSheet(title = current.displayTitle, detail = detail, onDismiss = { selected = null; viewModel.closeRecipe() }) {
+        RecipeSheet(title = current.displayTitle, detail = detail, expanded = openExpanded, onDismiss = { selected = null; viewModel.closeRecipe() }) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { viewModel.addRecipeFolder(current.url); selected = null; viewModel.closeRecipe(); onFolderAdded() }) {
                     Icon(Icons.Default.CreateNewFolder, contentDescription = null)
@@ -292,6 +299,7 @@ private fun DiscoverPane(
     onParams: (nl.baskt.data.DiscoverParams) -> Unit,
     onByTime: (Boolean) -> Unit,
     onSearch: (String) -> Unit,
+    onOpenDish: (nl.baskt.data.DiscoverDish) -> Unit,
     onRefresh: () -> Unit,
 ) {
     val shown = remember(dishes, byTime) {
@@ -344,7 +352,7 @@ private fun DiscoverPane(
                 TextButton(onClick = onRefresh) { Text("Try again") }
             }
         }
-        items(shown, key = { it.title }) { dish -> DishCard(dish, onSearch) }
+        items(shown, key = { it.title }) { dish -> DishCard(dish, onSearch, onOpenDish) }
         if (!busy && shown.isNotEmpty()) item("refresh") {
             TextButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp)); Text("  Other ideas") }
         }
@@ -401,8 +409,9 @@ private fun CuisinePicker(cuisine: String?, onCuisine: (String?) -> Unit) {
 }
 
 @Composable
-private fun DishCard(dish: nl.baskt.data.DiscoverDish, onSearch: (String) -> Unit) {
-    Card(onClick = { onSearch(dish.searchQuery) }) {
+private fun DishCard(dish: nl.baskt.data.DiscoverDish, onSearch: (String) -> Unit, onOpen: (nl.baskt.data.DiscoverDish) -> Unit) {
+    // Tapping the card opens the pictured recipe itself when there is one; otherwise it just searches the dish.
+    Card(onClick = { if (dish.recipeUrl != null) onOpen(dish) else onSearch(dish.searchQuery) }) {
         if (dish.imageUrl != null) {
             AsyncImage(model = dish.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(140.dp))
         }
