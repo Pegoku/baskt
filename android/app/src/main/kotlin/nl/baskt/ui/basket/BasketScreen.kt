@@ -381,11 +381,18 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                                             dragOffset += amount.y
                                             val below = order.getOrNull(current + 1)?.let { rowHeights[it.id] }?.plus(rowGap)
                                             val above = order.getOrNull(current - 1)?.let { rowHeights[it.id] }?.plus(rowGap)
+                                            fun swapWith(other: Int) {
+                                                // The list anchors its scroll position to the first visible row's key; when a swap moves that row
+                                                // the list would scroll along with it. Pin the current position while the swap is laid out.
+                                                val first = listState.firstVisibleItemIndex
+                                                if (current == first || other == first) listState.requestScrollToItem(first, listState.firstVisibleItemScrollOffset)
+                                                dragOrder = order.toMutableList().also { java.util.Collections.swap(it, current, other) }
+                                            }
                                             if (below != null && dragOffset > below / 2f) {
-                                                dragOrder = order.toMutableList().also { java.util.Collections.swap(it, current, current + 1) }
+                                                swapWith(current + 1)
                                                 dragOffset -= below
                                             } else if (above != null && dragOffset < -above / 2f) {
-                                                dragOrder = order.toMutableList().also { java.util.Collections.swap(it, current, current - 1) }
+                                                swapWith(current - 1)
                                                 dragOffset += above
                                             }
                                             // Keep the list moving when the row is dragged past the visible edge.
