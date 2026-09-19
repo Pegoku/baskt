@@ -109,7 +109,7 @@ fun OrderScreen(viewModel: AppViewModel, onBack: () -> Unit, onShop: (String) ->
             if (notes.isNotEmpty()) Text(notes.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.padding(horizontal = 16.dp))
             LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(listed, key = { it.id }) { item ->
-                    OrderItemCard(item, enabled, stores, onPick = { viewModel.buyAt(item, it) }, onSkip = { viewModel.skip(item, true) })
+                    OrderItemCard(item, enabled, stores, onPick = { viewModel.buyAt(item, it) }, onSkip = { viewModel.skip(item, !item.isSkipped) })
                 }
             }
         }

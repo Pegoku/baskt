@@ -65,7 +65,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
     }
     // When the order step assigned stores, shop only those items; otherwise everything matched here. Skipped items
     // stay home; items bought this trip stay visible (ticked) so a wrong tap can be undone.
-    val assigned = items.any { !it.isGroup && it.assignedStore != null && !it.isBought }
+    val assigned = items.any { !it.isGroup && it.assignedStore != null }
     val candidates = items.filter { !it.isGroup && !it.isSkipped && (it.isBought || !assigned || it.assignedStore == store) }
     val shopping = candidates.filter { !it.isBought || it.assignedStore == store }.mapNotNull { item -> item.match(store)?.effective?.let { item to it } }
     val remaining = shopping.filter { !it.first.isBought }
