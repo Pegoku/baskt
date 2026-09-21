@@ -60,7 +60,7 @@ export async function chatJson<T>(
   const attempts = Math.max(retries, order.length);
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const target = order[(attempt - 1) % order.length];
-    const vendor = aiVendor(target.baseUrl);
+    const vendor = aiVendor(target);
     calls += 1;
     noteCall(target.id);
     const started = performance.now();

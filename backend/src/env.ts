@@ -10,6 +10,9 @@ function list(value: string | undefined) {
     .filter(Boolean);
 }
 
+/** Which dialect of the OpenAI-compatible API an endpoint speaks; "" means "guess from the URL". */
+export type AiVendor = "groq" | "openrouter" | "other";
+
 /** One OpenAI-compatible endpoint + model. */
 export type AiTarget = {
   baseUrl: string;
@@ -18,6 +21,8 @@ export type AiTarget = {
   reasoning: "off" | "low" | "medium" | "high" | "none";
   providerOrder: string[];
   providerQuantizations: string[];
+  /** Empty means the dialect is guessed from `baseUrl`; set it for a proxy in front of another vendor. */
+  vendor: AiVendor | "";
 };
 
 /** A target inside a pool: `priority` 1 is tried first, equal priorities are round-robined. */
@@ -41,6 +46,7 @@ const NAMED_FIELDS: Record<string, keyof AiSlot> = {
   reasoning: "reasoning",
   order: "providerOrder",
   quant: "providerQuantizations",
+  vendor: "vendor",
 };
 
 /**
@@ -48,7 +54,8 @@ const NAMED_FIELDS: Record<string, keyof AiSlot> = {
  * may come in any order — the endpoint is the one with "://", a bare number is the priority, and the
  * remaining bare values are the API key and then the model — so a second key for the provider above is
  * just `AI_2=sk-other`. Anything left out is inherited from `inherit`. Fields can also be named
- * (`key=…`, `model=…`, `priority=2`, `reasoning=low`, `order=coreweave|together`, `quant=fp4`), which is
+ * (`key=…`, `model=…`, `priority=2`, `reasoning=low`, `vendor=openrouter`, `order=coreweave|together`,
+ * `quant=fp4`), which is
  * the only way to set the OpenRouter-only routing hints; those lists are separated by "|", not commas.
  * Returns null for a line that said nothing this side understood, so a typo drops the provider (with a
  * warning) instead of quietly adding a second copy of the one above it.
@@ -96,6 +103,7 @@ function assign(slot: AiSlot, name: keyof AiSlot, value: string) {
   if (name === "priority") slot.priority = num(value, 1);
   else if (name === "providerOrder" || name === "providerQuantizations") slot[name] = value.split("|").map((entry) => entry.trim()).filter(Boolean);
   else if (name === "reasoning") slot.reasoning = value as AiTarget["reasoning"];
+  else if (name === "vendor") slot.vendor = readVendor(value);
   else if (name === "baseUrl") slot.baseUrl = value.replace(/\/$/, "");
   else slot[name] = value;
 }
@@ -120,12 +128,13 @@ export function readPool(
     reasoning: (own("REASONING") ?? base.reasoning) as AiTarget["reasoning"],
     providerOrder: list(own("PROVIDER_ORDER")),
     providerQuantizations: list(own("PROVIDER_QUANTIZATIONS")),
+    vendor: own("VENDOR") ? readVendor(own("VENDOR")!) : base.vendor,
     priority: num(own("PRIORITY"), 1),
   };
   const line = own("1");
   const first = (line && parseProvider(line, classic, `${prefix}_1`)) || classic;
-  const configured = (options.activatedBy ?? ["1", "BASE_URL", "API_KEY", "MODEL", "REASONING", "PRIORITY", "PROVIDER_ORDER", "PROVIDER_QUANTIZATIONS"]).some(own);
-  const usable = (target: AiSlot | null) => Boolean(target?.apiKey && (target.model || options.requireModel === false));
+  const configured = (options.activatedBy ?? ["1", "BASE_URL", "API_KEY", "MODEL", "REASONING", "VENDOR", "PRIORITY", "PROVIDER_ORDER", "PROVIDER_QUANTIZATIONS"]).some(own);
+  const usable = (target: AiSlot | null) => Boolean(target?.baseUrl && target.apiKey && (target.model || options.requireModel === false));
   const pool: AiProvider[] = [];
   if ((configured || !options.requireOwnVars) && usable(first)) pool.push({ ...first, id: `${prefix}_1` });
   for (let slot = 2; slot <= MAX_SLOTS; slot += 1) {
@@ -137,18 +146,22 @@ export function readPool(
   return pool;
 }
 
+/**
+ * The chat endpoint. There is no built-in provider: `AI_BASE_URL` (plus `AI_API_KEY` and `AI_MODEL`)
+ * names whichever OpenAI-compatible service you point baskt at, and without it no pool is configured
+ * and the AI features stay off.
+ */
 const chatBase = {
-  baseUrl:
-    process.env.AI_BASE_URL ??
-    process.env.HACKCLUB_AI_BASE_URL ??
-    "https://ai.hackclub.com/proxy/v1",
-  apiKey: process.env.AI_API_KEY ?? process.env.HACKCLUB_AI_API_KEY ?? "",
-  model: process.env.AI_MODEL ?? process.env.HACKCLUB_AI_MODEL ?? "",
+  baseUrl: (process.env.AI_BASE_URL ?? "").trim().replace(/\/$/, ""),
+  apiKey: process.env.AI_API_KEY ?? "",
+  model: process.env.AI_MODEL ?? "",
   /**
    * How to steer thinking models (OpenRouter-style `reasoning` field):
    * "off" sends {enabled:false} (Qwen3), "low"/"medium"/"high" sends {effort} (gpt-oss), "none" sends nothing.
    */
   reasoning: (process.env.AI_REASONING ?? "off") as AiTarget["reasoning"],
+  /** `AI_VENDOR` overrides the guess for an endpoint whose URL does not name its dialect (a proxy). */
+  vendor: readVendor(process.env.AI_VENDOR),
 };
 
 const chat = readPool("AI", chatBase);
@@ -179,17 +192,18 @@ export const env = {
      */
     stt: sttPool(),
     /**
-     * Speech synthesis through Replicate (Hack Club's proxy by default). Each account has its own daily
-     * spending cap, so a second token is a second budget: `REPLICATE_2=...`. The model is part of every
-     * request, not of the provider.
+     * Speech synthesis through Replicate's API, or any proxy in front of it (`REPLICATE_BASE_URL`). Each
+     * account has its own daily spending cap, so a second token is a second budget: `REPLICATE_2=...`.
+     * The model is part of every request, not of the provider.
      */
     replicate: readPool(
       "REPLICATE",
       {
-        baseUrl: process.env.REPLICATE_BASE_URL ?? "https://ai.hackclub.com/proxy/v1/replicate",
+        baseUrl: (process.env.REPLICATE_BASE_URL ?? "https://api.replicate.com/v1").trim().replace(/\/$/, ""),
         apiKey: process.env.REPLICATE_API_TOKEN ?? "",
         model: "",
         reasoning: "none",
+        vendor: "other",
       },
       { requireModel: false },
     ),
@@ -219,7 +233,7 @@ function sttPool(): AiProvider[] {
   const dedicated = readPool("AI_STT", { ...chatBase, model }, { requireOwnVars: true, activatedBy: ["1", "BASE_URL", "API_KEY"] });
   if (dedicated.length) return dedicated;
   return chat
-    .filter((provider) => aiVendor(provider.baseUrl) === "groq")
+    .filter((provider) => aiVendor(provider) === "groq")
     .map((provider) => ({ ...provider, id: `${provider.id}_STT`, model }));
 }
 
@@ -241,11 +255,23 @@ export function aiPool(profile: AiProfile = "default"): AiProvider[] {
   return env.ai.chat;
 }
 
-/** Which dialect of the OpenAI-compatible API a provider speaks (they differ in reasoning/provider fields). */
-export function aiVendor(
-  baseUrl: string = firstChat?.baseUrl ?? chatBase.baseUrl,
-): "groq" | "openrouter" | "other" {
-  if (/groq\.com/.test(baseUrl)) return "groq";
-  if (/openrouter\.ai|hackclub\.com/.test(baseUrl)) return "openrouter";
+function readVendor(value: string | undefined): AiVendor | "" {
+  const vendor = value?.trim().toLowerCase() ?? "";
+  if (!vendor) return "";
+  if (vendor === "groq" || vendor === "openrouter" || vendor === "other") return vendor;
+  console.warn(`[ai] ignoring unknown vendor "${value}" (groq, openrouter or other)`);
+  return "";
+}
+
+/**
+ * Which dialect of the OpenAI-compatible API a provider speaks (they differ in reasoning/provider
+ * fields). Guessed from the endpoint, unless the provider names it — the URL of a proxy says nothing
+ * about the service behind it, so `AI_VENDOR=openrouter` (or `vendor=openrouter` on a provider line)
+ * is what makes OpenRouter's routing hints reach an OpenRouter-compatible gateway.
+ */
+export function aiVendor(target: Pick<AiTarget, "baseUrl"> & Partial<Pick<AiTarget, "vendor">> = firstChat ?? chatBase): AiVendor {
+  if (target.vendor) return target.vendor;
+  if (/groq\.com/.test(target.baseUrl)) return "groq";
+  if (/openrouter\.ai/.test(target.baseUrl)) return "openrouter";
   return "other";
 }

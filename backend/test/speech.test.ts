@@ -8,7 +8,7 @@ import { tts } from "@/routes/tts";
 const originalFetch = globalThis.fetch;
 const originalPool = env.ai.replicate;
 function token(id: string, apiKey: string): AiProvider {
-  return { id, apiKey, baseUrl: "https://ai.hackclub.com/proxy/v1/replicate", model: "", reasoning: "none", providerOrder: [], providerQuantizations: [], priority: 1 };
+  return { id, apiKey, baseUrl: "https://api.replicate.com/v1", model: "", reasoning: "none", providerOrder: [], providerQuantizations: [], vendor: "", priority: 1 };
 }
 beforeEach(() => { resetDbForTests(":memory:"); env.ai.replicate = [token("REPLICATE_1", "test-token")]; });
 afterEach(() => {
@@ -71,6 +71,12 @@ describe("multilingual speech", () => {
     for (const url of ["http://127.0.0.1/a", "https://example.com/a", "https://replicate.delivery.evil.test/a", "https://u:p@replicate.delivery/a"]) {
       expect(speechOutput(url)).toBeNull();
     }
+    // A proxy in front of Replicate serves the clip itself, so its own base path is allowed too.
+    const proxy = "https://proxy.test/ai/v1/replicate";
+    expect(speechOutput("https://proxy.test/ai/v1/files/audio.mp3", proxy)).not.toBeNull();
+    expect(speechOutput("https://proxy.test/other/audio.mp3", proxy)).toBeNull();
+    expect(speechOutput("https://proxy.test/ai/v1/files/audio.mp3")).toBeNull();
+    expect(speechOutput("https://elsewhere.test/ai/v1/files/audio.mp3", proxy)).toBeNull();
   });
   test("voice listing generates no audio", async () => {
     globalThis.fetch = (async () => { throw new Error("Unexpected generation"); }) as unknown as typeof fetch;

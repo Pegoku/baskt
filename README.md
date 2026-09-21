@@ -12,7 +12,7 @@ android/   Kotlin + Jetpack Compose (Material 3 Expressive) client
 1. Backend (on your home server or laptop):
    ```bash
    cd backend
-   cp .env.example .env      # set APP_API_TOKEN, AI_API_KEY, AI_MODEL (Hack Club AI works)
+   cp .env.example .env      # set APP_API_TOKEN and the AI endpoint: AI_BASE_URL, AI_API_KEY, AI_MODEL
    bun install && bun run dev
    ```
    or `docker compose up -d --build`.
@@ -83,12 +83,17 @@ AI_4=model=qwen/qwen3.8-27b, reasoning=high               # or name the fields y
 Fields are recognised by shape: the endpoint is the one with `://`, a bare number is the priority, and
 the remaining values are the key and then the model. Leave out whatever stays the same as the provider
 above — a second account really is one word. `key=`, `model=`, `url=`, `priority=`, `reasoning=`,
-`order=` and `quant=` name a field explicitly (the last two carry OpenRouter's routing and use `|`
-between values, since commas separate fields).
+`vendor=`, `order=` and `quant=` name a field explicitly (the last two carry OpenRouter's routing and
+use `|` between values, since commas separate fields).
 
-Speech synthesis has the same pools under `REPLICATE_API_TOKEN` / `REPLICATE_2` … — one Replicate (or
-Hack Club proxy) account per line, each with its own daily spending cap, so a cap that is reached moves
-the next clip to the next token instead of failing.
+There is no built-in endpoint: `AI_BASE_URL` points at whichever OpenAI-compatible service you use, and
+the AI features stay off until it, a key and a model are set. The request dialect is guessed from the
+URL (`groq.com`, `openrouter.ai`, otherwise plain OpenAI); behind a gateway that tells you nothing,
+`AI_VENDOR` (or `vendor=` on a line) names it, which is what lets the routing hints through.
+
+Speech synthesis has the same pools under `REPLICATE_API_TOKEN` / `REPLICATE_2` … — one Replicate
+account per line (`REPLICATE_BASE_URL` moves them to a gateway), each with its own daily spending cap,
+so a cap that is reached moves the next clip to the next token instead of failing.
 
 Priority (default 1) decides the order: the lowest number is tried first and providers sharing a number
 are used round-robin, which spreads the load over both keys and doubles a per-minute quota. A paid

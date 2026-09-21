@@ -105,7 +105,8 @@ IDs. Serving changes can include explicit `children` (`id`, `text`, `quantity`) 
 
 ### Speech previews and logs
 
-TTS uses the Hack Club Replicate proxy. Set `REPLICATE_API_TOKEN` in the backend's ignored `.env`, and
+TTS uses Replicate's predictions API (`REPLICATE_BASE_URL`, Replicate itself by default; a gateway that
+speaks the same API works too). Set `REPLICATE_API_TOKEN` in the backend's ignored `.env`, and
 `REPLICATE_2` … for further accounts: the pool round-robins between them, and a token that reports its
 daily spending cap is parked for half an hour while the others keep answering.
 The app selects models and voices from the server catalogue. Qwen3 TTS uses its nine preset

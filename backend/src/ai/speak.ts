@@ -74,16 +74,30 @@ async function prediction(target: AiProvider, path: string, body?: unknown): Pro
   }
   return response.json() as Promise<Prediction>;
 }
-export function speechOutput(value: unknown): string | null {
+/**
+ * Audio may only be fetched from Replicate's own file host or from the configured endpoint itself —
+ * a proxy (`REPLICATE_BASE_URL`) serves the clip from its own host and under its own base path.
+ */
+export function speechOutput(value: unknown, baseUrl?: string): string | null {
   const raw = typeof value === "string" ? value : Array.isArray(value) ? value[0] :
     value && typeof value === "object" ? (value as Record<string, unknown>).audio : null;
   if (typeof raw !== "string") return null;
   try {
     const url = new URL(raw);
-    return url.protocol === "https:" && !url.username && !url.password && !url.port &&
-      (url.hostname === "replicate.delivery" || url.hostname.endsWith(".replicate.delivery") ||
-       (url.hostname === "ai.hackclub.com" && url.pathname.startsWith("/proxy/"))) ? raw : null;
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    if (!url.port && (url.hostname === "replicate.delivery" || url.hostname.endsWith(".replicate.delivery"))) return raw;
+    return onEndpoint(url, baseUrl) ? raw : null;
   } catch { return null; }
+}
+
+/** True when the URL is served by the configured endpoint: same origin, under its base path. */
+function onEndpoint(url: URL, baseUrl?: string): boolean {
+  if (!baseUrl) return false;
+  try {
+    const endpoint = new URL(baseUrl);
+    const root = endpoint.pathname.replace(/\/[^/]*$/, "/");
+    return url.origin === endpoint.origin && url.pathname.startsWith(root);
+  } catch { return false; }
 }
 export function speechInput(text: string, model: string, voice: string, language: string) {
   if (!speechChoice(model, voice, language)) throw new Error("Unsupported speech voice or language");
@@ -123,10 +137,11 @@ export async function synthesize(text: string, model: string, voice: string, lan
         }
         speechLog("generated", { ...metadata, provider: target.id, predictionId: result.id, status: result.status,
           confirmedLanguageBoost: result.input?.language_boost, confirmedLanguage: result.input?.language });
-        const url = speechOutput(result.output);
+        const url = speechOutput(result.output, target.baseUrl);
         if (!url) throw new Error("Speech provider returned no audio");
+        // The endpoint's own file links need the key; Replicate's public file host must never see it.
         const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(30000),
-          headers: new URL(url).hostname === "ai.hackclub.com" ? { Authorization: `Bearer ${target.apiKey}` } : {} });
+          headers: onEndpoint(new URL(url), target.baseUrl) ? { Authorization: `Bearer ${target.apiKey}` } : {} });
         if (!response.ok) throw new Error("Could not download speech");
         const bytes = new Uint8Array(await response.arrayBuffer());
         if (!bytes.length || bytes.length > 10 * 1024 * 1024) throw new Error("Invalid speech audio");

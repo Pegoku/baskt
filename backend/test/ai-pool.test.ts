@@ -15,6 +15,7 @@ function provider(id: string, priority: number, extra: Partial<AiProvider> = {})
     reasoning: "low",
     providerOrder: [],
     providerQuantizations: [],
+    vendor: "",
     ...extra,
   };
 }
@@ -31,7 +32,7 @@ afterEach(() => {
 });
 
 describe("provider lines", () => {
-  const base = { baseUrl: "https://api.groq.com/openai/v1", apiKey: "", model: "", reasoning: "off" as const };
+  const base = { baseUrl: "https://api.groq.com/openai/v1", apiKey: "", model: "", reasoning: "off" as const, vendor: "" as const };
   const first = { ...base, apiKey: "one", model: "openai/gpt-oss-20b", priority: 1, providerOrder: [], providerQuantizations: [] };
 
   test("recognises endpoint, key, model and priority by shape", () => {
