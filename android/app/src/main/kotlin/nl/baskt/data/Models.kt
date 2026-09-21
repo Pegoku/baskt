@@ -119,6 +119,8 @@ data class BasketItem(
     val parsed: ParsedIdea? = null,
     val needsChoice: Boolean = false,
     val matches: List<StoreMatch> = emptyList(),
+    /** Scanned while offline; the item is resolved to a product once the server can be reached. */
+    val barcode: String? = null,
     val createdAt: Long = 0,
     val updatedAt: Long = 0,
 ) {

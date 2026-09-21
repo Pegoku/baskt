@@ -475,6 +475,7 @@ fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Uni
                         Text("Already in stock · skipped", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     item.isSkipped -> Text("Skipped this trip", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    item.isQueued && item.barcode != null -> Text("Scanned offline — becomes the product when you’re back online", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
                     item.isQueued -> Text("Waiting for connection — will be matched later", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
                     item.isProcessing -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         LoadingIndicator(modifier = Modifier.size(20.dp))

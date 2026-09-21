@@ -461,8 +461,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun setWhatsAppChat(chat: WhatsAppChat) = viewModelScope.launch { runCatching { container.api.whatsappSetChat(chat) }; loadWhatsApp() }
     suspend fun sendToWhatsApp(store: String? = null): Result<Int> = runCatching { container.api.whatsappSend(basket.currentBasketId.value, store) }
 
-    /** One row per barcode; a deliberate rescan reopens completed rows. */
-    data class Scan(val gtin: String, val products: List<Product> = emptyList(), val loading: Boolean = true, val done: String? = null, val saving: Boolean = false, val at: Long = System.currentTimeMillis()) {
+    /** One row per barcode; a deliberate rescan reopens completed rows. [offline]: never looked up because the server was unreachable. */
+    data class Scan(val gtin: String, val products: List<Product> = emptyList(), val loading: Boolean = true, val done: String? = null, val saving: Boolean = false, val offline: Boolean = false, val at: Long = System.currentTimeMillis()) {
+        /** Can go on the list: either a known product or a code the server will resolve later. */
+        val listable: Boolean get() = !loading && !saving && done == null && (products.isNotEmpty() || offline)
         fun stockItem(stock: List<StockItem>): StockItem? = stock.firstOrNull { item ->
             products.any { it.id == item.productId } ||
                 item.barcode?.let { it.padStart(13, '0') == gtin.padStart(13, '0') } == true
@@ -484,9 +486,21 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     private fun lookupScan(gtin: String) {
         scanJobs[gtin]?.cancel()
         scanJobs[gtin] = viewModelScope.launch {
+            // Codes scanned before answer instantly from disk, with or without a connection; the server only refreshes them.
+            val cached = basket.cachedBarcode(gtin)?.results?.mapNotNull { it.product }.orEmpty()
+            if (cached.isNotEmpty()) scans.update { list -> list.map { if (it.gtin == gtin) it.copy(products = cached, loading = false, offline = false) else it } }
+            if (cached.isNotEmpty() && !basket.online.value) return@launch
             val result = basket.barcode(gtin)
-            val products = result?.results?.mapNotNull { it.product } ?: emptyList()
-            scans.update { list -> list.map { if (it.gtin == gtin) it.copy(products = products, loading = false) else it } }
+            val products = result?.results?.mapNotNull { it.product } ?: cached
+            val offline = products.isEmpty() && !basket.online.value
+            scans.update { list -> list.map { if (it.gtin == gtin) it.copy(products = products, loading = false, offline = offline) else it } }
+        }
+    }
+    /** Connectivity changes: mark unresolved scans as offline, and look them up once the server is back. */
+    private fun watchScanConnectivity() = viewModelScope.launch {
+        basket.online.collect { online ->
+            if (!online) scans.update { list -> list.map { if (!it.loading && it.products.isEmpty()) it.copy(offline = true) else it } }
+            else scans.value.filter { it.offline && it.done == null && !it.saving }.forEach { retryScan(it.gtin) }
         }
     }
     fun retryScan(gtin: String) {
@@ -500,11 +514,11 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun applyScans(gtins: List<String>, destination: String) {
         val session = scanSession
         val ready = scans.value.filter {
-            it.gtin in gtins && !it.loading && !it.saving && it.done == null && it.products.isNotEmpty() &&
+            it.gtin in gtins && !it.loading && !it.saving && it.done == null &&
                 when (destination) {
-                    "stock" -> it.stockItem(basket.stock.value) == null
-                    "unstock" -> it.stockItem(basket.stock.value) != null
-                    "list" -> true
+                    "stock" -> it.products.isNotEmpty() && it.stockItem(basket.stock.value) == null
+                    "unstock" -> it.products.isNotEmpty() && it.stockItem(basket.stock.value) != null
+                    "list" -> it.listable
                     else -> false
                 }
         }
@@ -513,10 +527,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             for (scan in ready) {
                 try {
-                    val product = scan.products.first()
+                    val product = scan.products.firstOrNull()
                     when (destination) {
-                        "list" -> basket.addFromProduct(product)
-                        "stock" -> if (scan.stockItem(basket.stock.value) == null) basket.addProductToStock(product, scan.gtin)
+                        "list" -> if (product != null) basket.addFromProduct(product) else basket.addFromBarcode(scan.gtin)
+                        "stock" -> if (scan.stockItem(basket.stock.value) == null) basket.addProductToStock(product!!, scan.gtin)
                         "unstock" -> scan.stockItem(basket.stock.value)?.let { basket.removeStock(it) }
                         else -> error("Unknown scan destination")
                     }
@@ -690,6 +704,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
             _settings.value = container.awaitSettings()
             container.settingsStore.settings.collect { _settings.value = it }
         }
+        watchScanConnectivity()
         reload()
     }
 

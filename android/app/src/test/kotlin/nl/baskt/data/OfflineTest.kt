@@ -89,6 +89,78 @@ class OfflineTest {
         } finally { scope.cancel(); server.stop(0) }
     }
 
+    private fun barcodeServer(requests: MutableList<String>, found: Boolean = true): HttpServer {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/") { request ->
+            val path = request.requestURI.path
+            requests.add("${request.requestMethod} $path")
+            val product = """{"id":"p1","store":"ah","sourceId":"1","title":"Oat milk","quantityText":"1 l","priceCents":199}"""
+            val body = when {
+                path.contains("/products/barcode/") -> if (found) """{"gtin":"8712345678906","results":[{"store":"ah","product":$product}]}""" else """{"gtin":"8712345678906","results":[{"store":"ah","error":"not found"}]}"""
+                path.endsWith("/from-product") || path.endsWith("/basket/items") -> """{"id":"real-item","text":"Oat milk","status":"MATCHED"}"""
+                else -> """{"items":[]}"""
+            }
+            request.responseHeaders.add("Content-Type", "application/json")
+            request.sendResponseHeaders(200, body.toByteArray().size.toLong())
+            request.responseBody.use { it.write(body.toByteArray()) }
+        }
+        return server.also { it.start() }
+    }
+
+    @Test fun `a barcode scanned offline sits on the list and becomes the product on replay`() = runBlocking {
+        val requests = mutableListOf<String>()
+        val server = barcodeServer(requests)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        try {
+            val disk = store()
+            val repo = BasketRepository(api(server.address.port), scope, disk).also { it.online.value = false }
+            repo.addFromBarcode("8712345678906")
+            val placeholder = repo.items.value.single()
+            assertEquals("8712345678906", placeholder.text)
+            assertEquals("8712345678906", placeholder.barcode)
+            assertTrue(placeholder.isQueued)
+            assertEquals(listOf("barcodeAdd"), repo.pending.value.map { it.type })
+            assertTrue(requests.isEmpty())
+            repo.replayQueue()
+            assertTrue(repo.pending.value.isEmpty())
+            assertEquals(listOf("GET /api/v1/products/barcode/8712345678906", "POST /api/v1/basket/items/from-product"), requests)
+            // The lookup made during replay is kept, so the next scan of this code works without a connection.
+            assertEquals("Oat milk", repo.cachedBarcode("8712345678906")?.results?.single()?.product?.title)
+        } finally { scope.cancel(); server.stop(0) }
+    }
+
+    @Test fun `a barcode no store knows still lands on the list as plain text`() = runBlocking {
+        val requests = mutableListOf<String>()
+        val server = barcodeServer(requests, found = false)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        try {
+            val repo = BasketRepository(api(server.address.port), scope, store()).also { it.online.value = false }
+            repo.addFromBarcode("8712345678906")
+            repo.replayQueue()
+            assertTrue(repo.pending.value.isEmpty())
+            assertEquals(listOf("GET /api/v1/products/barcode/8712345678906", "POST /api/v1/basket/items"), requests)
+        } finally { scope.cancel(); server.stop(0) }
+    }
+
+    @Test fun `barcodes looked up once are answered from disk while offline`() = runBlocking {
+        val requests = mutableListOf<String>()
+        val server = barcodeServer(requests)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        try {
+            val disk = store()
+            val repo = BasketRepository(api(server.address.port), scope, disk)
+            assertEquals("Oat milk", repo.barcode("8712345678906")?.results?.single()?.product?.title)
+            assertEquals(1, requests.size)
+            repo.online.value = false
+            assertEquals("Oat milk", repo.barcode("8712345678906")?.results?.single()?.product?.title)
+            assertEquals("Oat milk", repo.cachedBarcode("8712345678906")?.results?.single()?.product?.title)
+            assertNull(repo.barcode("0000000000000"))
+            assertEquals(1, requests.size)
+            // Survives a restart of the app.
+            assertEquals("Oat milk", BasketRepository(api(server.address.port), scope, disk).also { it.online.value = false }.barcode("8712345678906")?.results?.single()?.product?.title)
+        } finally { scope.cancel(); server.stop(0) }
+    }
+
     @Test fun `a late server response cannot overwrite a newer offline edit`() = runBlocking {
         val arrived = java.util.concurrent.CountDownLatch(1)
         val release = java.util.concurrent.CountDownLatch(1)

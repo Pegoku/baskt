@@ -86,6 +86,7 @@ data class PendingOp(
             "basketRename" -> "Rename basket to “$text”"
             "basketDelete" -> "Delete basket"
             "productAdd" -> "Add product"
+            "barcodeAdd" -> "Add scanned barcode $text"
             "purchaseSave" -> "Save purchase"
             "purchaseDelete" -> "Delete purchase"
             "memoryDelete" -> "Forget preference"

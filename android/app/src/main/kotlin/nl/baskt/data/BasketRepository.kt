@@ -167,6 +167,15 @@ class BasketRepository(
                         "basketDelete" -> api.deleteBasket(real(op.itemId)!!)
                         "groupItems" -> { val created = api.groupFromItems(op.text!!, op.items!!.map { real(it)!! }); idMap[op.itemId!!] = created.group.id }
                         "productAdd" -> { val created = api.addFromProduct(op.productId!!, real(op.basketId)!!, real(op.parentId)); idMap[op.itemId!!] = created.id }
+                        "barcodeAdd" -> {
+                            // Scanned without a connection: look the code up now, then add the product (or the code itself when no store knows it).
+                            val gtin = op.text!!
+                            val lookup = api.barcode(gtin).also { offline?.save("barcode-$gtin", it) }
+                            val product = lookup.results.firstNotNullOfOrNull { it.product }
+                            val basketId = real(op.basketId) ?: _currentBasketId.value
+                            val created = if (product != null) api.addFromProduct(product.id, basketId, real(op.parentId)) else api.addItem(gtin, op.quantity ?: 1, basketId, real(op.parentId))
+                            op.itemId?.let { idMap[it] = created.id }
+                        }
                         "skipStock" -> api.setSkipInStock(op.checked == true)
                         "servings" -> api.setDefaultServings(op.quantity)
                         "rankBy" -> api.setRankBy(op.text!!)
@@ -816,6 +825,15 @@ class BasketRepository(
 
     suspend fun barcode(gtin: String): BarcodeResponse? = cachedRead("barcode-$gtin") { api.barcode(gtin) }
 
+    /** What an earlier scan of this code returned, without touching the network. */
+    fun cachedBarcode(gtin: String): BarcodeResponse? = offline?.load<BarcodeResponse>("barcode-$gtin")
+
+    /** Scanned without a connection: the code sits on the list and becomes the product once the server resolves it. */
+    suspend fun addFromBarcode(gtin: String, parentId: String? = null) {
+        val local = localItem(gtin, 1, parentId).copy(barcode = gtin)
+        queued(PendingOp(type = "barcodeAdd", itemId = local.id, text = gtin, quantity = 1, basketId = _currentBasketId.value, parentId = parentId), { _items.update { it + local } })
+    }
+
     suspend fun addFromProduct(product: Product, parentId: String? = null) {
         val local = localItem(product.title, 1, parentId).copy(matches = listOf(StoreMatch(product.store, "CHOSEN", chosenBy = "USER", chosen = product)))
         queued(PendingOp(type = "productAdd", itemId = local.id, productId = product.id, basketId = _currentBasketId.value, parentId = parentId), { _items.update { it + local } })
@@ -846,7 +864,7 @@ class BasketRepository(
         if (replaying) { _error.value = "Wait for syncing to finish before discarding a change"; return }
         val removedIds = mutableSetOf<String>()
         fun creations(change: PendingOp) {
-            if (change.type in setOf("add", "addGroup", "groupItems", "productAdd", "basketCreate", "stockAdd", "recipeSave", "favouriteAdd", "purchaseSave")) change.itemId?.let { removedIds.add(it) }
+            if (change.type in setOf("add", "addGroup", "groupItems", "productAdd", "barcodeAdd", "basketCreate", "stockAdd", "recipeSave", "favouriteAdd", "purchaseSave")) change.itemId?.let { removedIds.add(it) }
             if (change.type == "transfer" && change.copy == true) change.parentId?.let { removedIds.add(it) }
             if (change.type in setOf("addGroup", "addSkipped") || (change.type == "transfer" && change.copy == true)) removedIds.addAll(change.childIds.orEmpty())
         }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -44,6 +45,7 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
     val stores by viewModel.basket.stores.collectAsState()
     val stock by viewModel.basket.stock.collectAsState()
     val scans by viewModel.scans.collectAsState()
+    val online by viewModel.online.collectAsState()
     var paused by rememberSaveable { mutableStateOf(false) }
     var reviewing by rememberSaveable { mutableStateOf(false) }
     var feedback by remember { mutableStateOf<String?>(null) }
@@ -93,7 +95,14 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                     Text("Scan products", color = Color.White, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                     TextButton(onClick = { paused = !paused }, enabled = !reviewing) { Text(if (paused) "Resume" else "Pause", color = Color.White) }
                 }
-                Text(feedback ?: if (reviewing) "Review your batch below" else if (paused) "Resume when you’re ready" else "Point at a barcode · above or below the frame works too",
+                if (!online) Surface(color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer, shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars).padding(top = 56.dp)) {
+                    Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.CloudOff, null, modifier = Modifier.size(16.dp))
+                        Text("Offline · known products load from your phone, new codes are looked up later", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+                Text(feedback ?: if (reviewing) "Review your batch below" else if (paused) "Resume when you’re ready" else if (!online) "Scan as usual · the barcode goes on your list and becomes the product when you’re back online" else "Point at a barcode · above or below the frame works too",
                     color = Color.White, style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp))
             }
@@ -110,10 +119,12 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                         TextButton(onClick = onClose) { Text("Done") }
                     }
                     val ready = scans.filter { !it.loading && !it.saving && it.done == null && it.products.isNotEmpty() }
+                    val listable = scans.filter { it.listable }
                     val toStock = ready.filter { it.stockItem(stock) == null }
                     val fromStock = ready.filter { it.stockItem(stock) != null }
-                    if (reviewing && ready.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Button(onClick = { viewModel.applyScans(ready.map { it.gtin }, "list") }, modifier = Modifier.fillMaxWidth()) { Text("Add ${ready.size} to list") }
+                    if (reviewing && listable.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Button(onClick = { viewModel.applyScans(listable.map { it.gtin }, "list") }, modifier = Modifier.fillMaxWidth()) { Text("Add ${listable.size} to list") }
+                        if (listable.size > ready.size) Text("${listable.size - ready.size} not looked up yet · added as barcodes, resolved when you’re back online", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (toStock.isNotEmpty()) FilledTonalButton(onClick = { viewModel.applyScans(toStock.map { it.gtin }, "stock") }, modifier = Modifier.weight(1f)) { Text("Add ${toStock.size} to stock") }
                             if (fromStock.isNotEmpty()) OutlinedButton(onClick = { viewModel.applyScans(fromStock.map { it.gtin }, "unstock") }, modifier = Modifier.weight(1f)) { Text("Remove ${fromStock.size} from stock") }
@@ -136,6 +147,24 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                                         val product = scan.products.firstOrNull()
                                         when {
                                             scan.loading -> Row(verticalAlignment = Alignment.CenterVertically) { LoadingIndicator(Modifier.size(28.dp)); Text("Finding product…") }
+                                            product == null && scan.offline -> {
+                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    Icon(Icons.Default.CloudOff, null, tint = MaterialTheme.colorScheme.error)
+                                                    Text("Offline · not looked up yet", style = MaterialTheme.typography.titleMedium)
+                                                }
+                                                if (scan.done != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
+                                                    Column {
+                                                        Text("Added to list as a barcode")
+                                                        Text("It turns into the product when you’re back online", style = MaterialTheme.typography.bodySmall)
+                                                    }
+                                                } else if (scan.saving) {
+                                                    Text("Saving…")
+                                                } else {
+                                                    Text("The barcode goes on your list now and becomes the product once the server is reachable.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    Button(onClick = { viewModel.applyScans(listOf(scan.gtin), "list") }, modifier = Modifier.fillMaxWidth()) { Text("Add barcode to list") }
+                                                }
+                                            }
                                             product == null -> {
                                                 Text("Product not found", style = MaterialTheme.typography.titleMedium)
                                                 Text("Check the barcode or retry when connected. You can keep scanning.", color = MaterialTheme.colorScheme.onSurfaceVariant)
