@@ -16,6 +16,15 @@ android/   Kotlin + Jetpack Compose (Material 3 Expressive) client
    bun install && bun run dev
    ```
    or `docker compose up -d --build`.
+
+   Or skip the checkout entirely and run the image CI publishes on every commit — download
+   [`docker-compose.yml`](docker-compose.yml), put a `.env` beside it (from
+   [`backend/.env.example`](backend/.env.example)) and:
+   ```bash
+   docker compose up -d
+   ```
+   `ghcr.io/pegoku/baskt-backend:latest` follows `main`; `:sha-<commit>` pins one build. Upgrade with
+   `docker compose pull && docker compose up -d`.
 2. App: install `android/app/build/outputs/apk/debug/app-debug.apk`, open Settings, enter the server URL (e.g. `http://192.168.1.10:3000`) and the token, tap **Save & test**.
 3. Add ideas. Tap an item to choose between the suggested products per store. Tap **Compare**.
 

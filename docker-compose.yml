@@ -1,8 +1,9 @@
-# Builds the backend from this checkout. To run the image CI publishes instead, use the
-# docker-compose.yml at the repository root.
+# Runs the published backend image — no checkout or build needed, just this file and a .env
+# beside it (copy backend/.env.example). Update with: docker compose pull && docker compose up -d
 services:
   baskt:
-    build: .
+    image: ghcr.io/pegoku/baskt-backend:latest
+    # Pin a build instead of following main: ghcr.io/pegoku/baskt-backend:sha-<commit>
     env_file: .env
     environment:
       DATABASE_PATH: /data/baskt.db
