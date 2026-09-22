@@ -73,6 +73,8 @@ data class PendingOp(
     val failure: String? = null,
     /** Rename without re-matching (tidy relabels). */
     val keepMatches: Boolean? = null,
+    /** What the phone knew about a scanned code, used to name the item when no store recognises it. */
+    val scanLabel: ScannedLabel? = null,
     val at: Long = System.currentTimeMillis(),
 ) {
     val label: String

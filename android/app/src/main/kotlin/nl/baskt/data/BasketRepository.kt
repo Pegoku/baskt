@@ -137,6 +137,8 @@ class BasketRepository(
                             val result = api.scanItem(op.store!!, op.text!!, op.at)
                             tripScans.update { list -> list.map { if (it.id == op.itemId) it.copy(product = result.product ?: it.product, synced = true) else it } }
                             offline?.save("trip-scans", tripScans.value)
+                            // No store sells this code: the phone still says what it is, rather than showing digits.
+                            if (result.product == null) op.itemId?.let { id -> scope.launch { labelScan(id, op.text) } }
                         }
                         "quantity" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, quantity = op.quantity) }
                         "rename" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, text = op.text, keepMatches = op.keepMatches == true) }
@@ -173,7 +175,8 @@ class BasketRepository(
                             val lookup = api.barcode(gtin).also { offline?.save("barcode-$gtin", it) }
                             val product = lookup.results.firstNotNullOfOrNull { it.product }
                             val basketId = real(op.basketId) ?: _currentBasketId.value
-                            val created = if (product != null) api.addFromProduct(product.id, basketId, real(op.parentId)) else api.addItem(gtin, op.quantity ?: 1, basketId, real(op.parentId))
+                            val created = if (product != null) api.addFromProduct(product.id, basketId, real(op.parentId))
+                                else api.addItem(op.scanLabel?.title ?: gtin, op.quantity ?: 1, basketId, real(op.parentId))
                             op.itemId?.let { idMap[it] = created.id }
                         }
                         "skipStock" -> api.setSkipInStock(op.checked == true)
@@ -602,12 +605,30 @@ class BasketRepository(
     /** Scanned in the store while shopping: kept here (offline too) until the server has resolved and recorded it. */
     val tripScans = MutableStateFlow<List<TripScan>>(offline?.load<List<TripScan>>("trip-scans") ?: emptyList())
 
+    /** Names and pictures for barcodes the server cannot be asked about right now. */
+    val barcodes = OfflineBarcodes(offline)
+
+    /** What the phone alone knows about a code; the server's answer, when it arrives, wins. */
+    fun knownLabel(gtin: String): ScannedLabel? = barcodes.known(gtin, _stock.value)
+    suspend fun resolveLabel(gtin: String): ScannedLabel? = barcodes.resolve(gtin, _stock.value)
+
     suspend fun scanItem(store: String, barcode: String) {
-        val scan = TripScan(id = localId(), store = store, barcode = barcode, at = System.currentTimeMillis())
+        // Show a name and a picture straight away when the phone has seen the code before; a bare number tells
+        // the user nothing about what they just scanned.
+        val scan = TripScan(id = localId(), store = store, barcode = barcode, at = System.currentTimeMillis(), label = knownLabel(barcode))
         queued(PendingOp(type = "scanItem", itemId = scan.id, store = store, text = barcode, at = scan.at), optimistic = {
             tripScans.update { list -> list.filter { System.currentTimeMillis() - it.at < 24 * 60 * 60 * 1000 } + scan }
             offline?.save("trip-scans", tripScans.value)
         })
+        // Only ask elsewhere when the backend is out of reach; when it answers, its product wins anyway.
+        if (scan.label == null && !online.value) scope.launch { labelScan(scan.id, barcode) }
+    }
+
+    /** Fills in a scan's name and picture from Open Food Facts when the backend is unreachable. */
+    private suspend fun labelScan(id: String, gtin: String) {
+        val label = runCatching { barcodes.resolve(gtin, _stock.value) }.getOrNull() ?: return
+        tripScans.update { list -> list.map { if (it.id == id && it.label == null) it.copy(label = label) else it } }
+        offline?.save("trip-scans", tripScans.value)
     }
 
     suspend fun purchaseHistory(): PurchaseHistory? = cachedRead("purchase-history") { api.purchaseHistory() }
@@ -830,8 +851,10 @@ class BasketRepository(
 
     /** Scanned without a connection: the code sits on the list and becomes the product once the server resolves it. */
     suspend fun addFromBarcode(gtin: String, parentId: String? = null) {
-        val local = localItem(gtin, 1, parentId).copy(barcode = gtin)
-        queued(PendingOp(type = "barcodeAdd", itemId = local.id, text = gtin, quantity = 1, basketId = _currentBasketId.value, parentId = parentId), { _items.update { it + local } })
+        // A name beats a number on the list, so the item carries whatever the phone could find out about the code.
+        val label = knownLabel(gtin) ?: runCatching { barcodes.resolve(gtin, _stock.value) }.getOrNull()
+        val local = localItem(label?.title ?: gtin, 1, parentId).copy(barcode = gtin)
+        queued(PendingOp(type = "barcodeAdd", itemId = local.id, text = gtin, quantity = 1, basketId = _currentBasketId.value, parentId = parentId, scanLabel = label), { _items.update { it + local } })
     }
 
     suspend fun addFromProduct(product: Product, parentId: String? = null) {

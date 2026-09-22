@@ -68,6 +68,13 @@ Holding the same label in view does not repeatedly capture it. Unknown products 
 for **Retry lookup**. **Done** closes the session;
 only products you explicitly added are saved.
 
+A scan should never be just a number. Names and pictures come from the server when it answers;
+otherwise the phone falls back to what it already knows (an earlier lookup of that code, or a stock
+item with that barcode) and then to Open Food Facts, which needs internet on the phone but not on
+your server — that last step sends the barcode (nothing else) to openfoodfacts.org, and only when
+your server cannot be reached. Such a scan carries the name onto your list instead of the digits;
+the real store product and its price still replace it once the backend is reachable.
+
 ## AI providers
 
 The backend takes a list of OpenAI-compatible providers instead of one. `AI_BASE_URL`/`AI_API_KEY`/

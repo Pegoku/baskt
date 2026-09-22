@@ -148,9 +148,10 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                                         when {
                                             scan.loading -> Row(verticalAlignment = Alignment.CenterVertically) { LoadingIndicator(Modifier.size(28.dp)); Text("Finding product…") }
                                             product == null && scan.offline -> {
+                                                ScanLabel(scan.label)
                                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                                     Icon(Icons.Default.CloudOff, null, tint = MaterialTheme.colorScheme.error)
-                                                    Text("Offline · not looked up yet", style = MaterialTheme.typography.titleMedium)
+                                                    Text(if (scan.label != null) "Offline · no store price yet" else "Offline · not looked up yet", style = MaterialTheme.typography.titleMedium)
                                                 }
                                                 if (scan.done != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                                     Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
@@ -166,7 +167,8 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                                                 }
                                             }
                                             product == null -> {
-                                                Text("Product not found", style = MaterialTheme.typography.titleMedium)
+                                                ScanLabel(scan.label)
+                                                Text(if (scan.label != null) "No store sells it under this code" else "Product not found", style = MaterialTheme.typography.titleMedium)
                                                 Text("Check the barcode or retry when connected. You can keep scanning.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 TextButton(onClick = { viewModel.retryScan(scan.gtin) }) { Text("Retry lookup") }
                                             }
@@ -201,5 +203,27 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
             }
         }
       }
+    }
+}
+
+/**
+ * What the phone itself knows about a code: shown when no store product is available, so a scan is recognisable
+ * instead of being a bare number. Never a price — this is not a store answer.
+ */
+@Composable
+private fun ScanLabel(label: nl.baskt.data.ScannedLabel?) {
+    if (label == null) return
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (label.imageUrl != null) Surface(color = Color.White, shape = RoundedCornerShape(12.dp), modifier = Modifier.size(56.dp)) {
+            coil3.compose.AsyncImage(model = label.imageUrl, contentDescription = label.title, modifier = Modifier.padding(4.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(label.title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                listOfNotNull(label.quantityText, if (label.source == "openfoodfacts") "from Open Food Facts" else "known by this phone").joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

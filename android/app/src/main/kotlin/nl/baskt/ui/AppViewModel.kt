@@ -462,7 +462,17 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     suspend fun sendToWhatsApp(store: String? = null): Result<Int> = runCatching { container.api.whatsappSend(basket.currentBasketId.value, store) }
 
     /** One row per barcode; a deliberate rescan reopens completed rows. [offline]: never looked up because the server was unreachable. */
-    data class Scan(val gtin: String, val products: List<Product> = emptyList(), val loading: Boolean = true, val done: String? = null, val saving: Boolean = false, val offline: Boolean = false, val at: Long = System.currentTimeMillis()) {
+    data class Scan(
+        val gtin: String,
+        val products: List<Product> = emptyList(),
+        val loading: Boolean = true,
+        val done: String? = null,
+        val saving: Boolean = false,
+        val offline: Boolean = false,
+        /** Name and picture found by the phone itself, shown while (or when) no store product is available. */
+        val label: nl.baskt.data.ScannedLabel? = null,
+        val at: Long = System.currentTimeMillis(),
+    ) {
         /** Can go on the list: either a known product or a code the server will resolve later. */
         val listable: Boolean get() = !loading && !saving && done == null && (products.isNotEmpty() || offline)
         fun stockItem(stock: List<StockItem>): StockItem? = stock.firstOrNull { item ->
@@ -489,11 +499,18 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
             // Codes scanned before answer instantly from disk, with or without a connection; the server only refreshes them.
             val cached = basket.cachedBarcode(gtin)?.results?.mapNotNull { it.product }.orEmpty()
             if (cached.isNotEmpty()) scans.update { list -> list.map { if (it.gtin == gtin) it.copy(products = cached, loading = false, offline = false) else it } }
+            // Anything the phone already knows about the code appears at once, so the card is never a bare number.
+            basket.knownLabel(gtin)?.let { known -> scans.update { list -> list.map { if (it.gtin == gtin) it.copy(label = known) else it } } }
             if (cached.isNotEmpty() && !basket.online.value) return@launch
             val result = basket.barcode(gtin)
             val products = result?.results?.mapNotNull { it.product } ?: cached
             val offline = products.isEmpty() && !basket.online.value
             scans.update { list -> list.map { if (it.gtin == gtin) it.copy(products = products, loading = false, offline = offline) else it } }
+            // No store knows the code (or the server is unreachable): ask Open Food Facts from the phone.
+            if (products.isEmpty() && scans.value.firstOrNull { it.gtin == gtin }?.label == null) {
+                val label = runCatching { basket.resolveLabel(gtin) }.getOrNull()
+                if (label != null) scans.update { list -> list.map { if (it.gtin == gtin) it.copy(label = label) else it } }
+            }
         }
     }
     /** Connectivity changes: mark unresolved scans as offline, and look them up once the server is back. */

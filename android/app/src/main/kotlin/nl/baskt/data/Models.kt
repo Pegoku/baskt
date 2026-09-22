@@ -522,7 +522,16 @@ data class ScanItemResponse(val purchase: Purchase, val line: PurchaseLine, val 
 
 /** Something scanned in the store during this trip; kept locally until the server has recorded it. */
 @Serializable
-data class TripScan(val id: String, val store: String, val barcode: String, val at: Long, val product: Product? = null, val synced: Boolean = false)
+data class TripScan(
+    val id: String,
+    val store: String,
+    val barcode: String,
+    val at: Long,
+    val product: Product? = null,
+    val synced: Boolean = false,
+    /** Name and picture the phone found on its own, shown until (or instead of) the server's answer. */
+    val label: ScannedLabel? = null,
+)
 
 @Serializable
 data class PurchaseDetail(val purchase: Purchase, val lines: List<PurchaseLine> = emptyList(), val products: Map<String, Product> = emptyMap())
