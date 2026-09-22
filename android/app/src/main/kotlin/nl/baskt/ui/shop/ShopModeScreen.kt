@@ -113,7 +113,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
 
     fun archive(item: BasketItem) {
         viewModel.skip(item, true)
-        undoable("Archived “${item.text}”") { viewModel.buyAt(item, store) }
+        undoable("Archived “${item.text}”") { viewModel.restore(item, store) }
     }
 
     // One tap can reach both the checkbox and the row underneath it; without this an item could be ticked and
@@ -192,7 +192,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                 Text(item.text, style = MaterialTheme.typography.titleMedium, textDecoration = TextDecoration.LineThrough, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(item.match(store)?.effective?.quantityText ?: "Archived this trip", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            TextButton(onClick = { viewModel.buyAt(item, store) }) { Text("Restore") }
+                            TextButton(onClick = { viewModel.restore(item, store) }) { Text("Restore") }
                         }
                         HorizontalDivider()
                     }

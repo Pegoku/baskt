@@ -763,6 +763,16 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         compare(force = true)
     }
     fun unskipAll() = viewModelScope.launch { basket.unskipAll(); compare(force = true) }
+    /**
+     * Takes an item out of the archive and back into the trip at [store]. Unlike [buyAt] this does not depend on
+     * the item's own state, so it also works as the undo of an archive swipe, where the copy in hand is stale.
+     */
+    fun restore(item: BasketItem, store: String) = viewModelScope.launch {
+        basket.setChecked(item, false)
+        basket.assignItem(item, store)
+        compare(force = true)
+    }
+
     /** Order step: buying at a store also brings a skipped item back into the trip. */
     fun buyAt(item: BasketItem, store: String) = viewModelScope.launch {
         if (item.isSkipped) basket.setChecked(item, false)
