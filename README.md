@@ -75,6 +75,18 @@ your server — that last step sends the barcode (nothing else) to openfoodfacts
 your server cannot be reached. Such a scan carries the name onto your list instead of the digits;
 the real store product and its price still replace it once the backend is reachable.
 
+## In-store shopping
+
+Open a store from the order step to shop it: large checkboxes, items grouped by aisle, the screen
+stays awake and the loyalty card is one tap away. Ticking an item records it on today's trip and
+puts it in stock; ticking again undoes that, with an **Undo** in the snackbar, and a second tap in
+the same moment is ignored so a stray touch cannot silently drop an item from the trip.
+
+Swipe a row sideways (either direction, Gmail-style) to archive it: the row slides out, the list
+closes the gap and the item leaves this trip and is crossed out on the main list. The snackbar
+offers **Undo**, and the archive button in the top bar shows how many are archived and lists them
+with **Restore**.
+
 ## AI providers
 
 The backend takes a list of OpenAI-compatible providers instead of one. `AI_BASE_URL`/`AI_API_KEY`/
