@@ -498,14 +498,25 @@ basket.post("/tidy", async (c) => {
  * corrections are remembered for later passes.
  */
 basket.post("/tidy/revise", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { plan?: TidyPlan; selected?: Partial<TidySelection>; comment?: string };
-  if (!body.plan || !Array.isArray(body.plan.renames) || !Array.isArray(body.plan.merges) || !Array.isArray(body.plan.deals)) return c.json({ error: { code: "BAD_REQUEST", message: "plan is required" } }, 400);
+  const body = (await c.req.json().catch(() => ({}))) as { plan?: Partial<TidyPlan>; selected?: Partial<TidySelection>; comment?: string };
+  if (!body.plan || typeof body.plan !== "object") return c.json({ error: { code: "BAD_REQUEST", message: "plan is required" } }, 400);
   if (typeof body.comment !== "string" || !body.comment.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "comment is required" } }, 400);
   const strings = (value: unknown) => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : []);
+  // A plan travels as it was sent out, but a client may leave out the lists it has nothing for.
+  const list = <T,>(value: unknown): T[] => (Array.isArray(value) ? value : []);
+  const plan: TidyPlan = {
+    scanned: typeof body.plan.scanned === "number" ? body.plan.scanned : 0,
+    language: typeof body.plan.language === "string" ? body.plan.language : "",
+    renames: list(body.plan.renames),
+    merges: list(body.plan.merges),
+    distinct: list(body.plan.distinct),
+    deals: list(body.plan.deals),
+    reply: typeof body.plan.reply === "string" ? body.plan.reply : null,
+  };
   const selected: TidySelection = { renames: strings(body.selected?.renames), merges: strings(body.selected?.merges), deals: strings(body.selected?.deals) };
-  const ids = new Set([...body.plan.renames.map((entry) => entry.id), ...body.plan.merges.map((entry) => entry.keepId)]);
+  const ids = new Set([...plan.renames.map((entry) => entry.id), ...plan.merges.map((entry) => entry.keepId)]);
   const rows = ids.size ? db().select().from(basketItems).where(inArray(basketItems.id, Array.from(ids))).all() : [];
-  return c.json(await reviseTidy(body.plan, selected, body.comment, new Map(rows.map((row) => [row.id, row]))));
+  return c.json(await reviseTidy(plan, selected, body.comment, new Map(rows.map((row) => [row.id, row]))));
 });
 
 /** Adds a confirmed proposal: plain items and recipe folders in one go. */

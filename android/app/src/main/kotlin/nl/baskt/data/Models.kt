@@ -1,5 +1,7 @@
 package nl.baskt.data
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
@@ -454,20 +456,28 @@ data class TidyDistinct(val items: List<TidyItem>, val reason: String = "")
 
 /** What the magic wand proposes; nothing is applied until the user confirms. */
 /** Which proposals a comment is about: rename item ids, merge keep ids and deal keys ("itemId:store"). */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-data class TidySelection(val renames: List<String> = emptyList(), val merges: List<String> = emptyList(), val deals: List<String> = emptyList()) {
+data class TidySelection(
+    // The selection goes back to the server, where an empty list means "nothing picked", not "absent".
+    @EncodeDefault val renames: List<String> = emptyList(),
+    @EncodeDefault val merges: List<String> = emptyList(),
+    @EncodeDefault val deals: List<String> = emptyList(),
+) {
     val size: Int get() = renames.size + merges.size + deals.size
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class TidyPlan(
-    val scanned: Int = 0,
-    val language: String = "",
-    val renames: List<TidyRename> = emptyList(),
-    val merges: List<TidyMerge> = emptyList(),
-    val distinct: List<TidyDistinct> = emptyList(),
+    // A comment sends the whole plan back, so every field is written out even when it holds its default.
+    @EncodeDefault val scanned: Int = 0,
+    @EncodeDefault val language: String = "",
+    @EncodeDefault val renames: List<TidyRename> = emptyList(),
+    @EncodeDefault val merges: List<TidyMerge> = emptyList(),
+    @EncodeDefault val distinct: List<TidyDistinct> = emptyList(),
     /** Promotions for entries that stay, one per entry and store. */
-    val deals: List<Deal> = emptyList(),
+    @EncodeDefault val deals: List<Deal> = emptyList(),
     /** What the assistant said back to the last comment. */
     val reply: String? = null,
 ) {

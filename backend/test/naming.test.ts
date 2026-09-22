@@ -70,6 +70,18 @@ describe("naming memory", () => {
     expect(revised.reply).toContain("not configured");
   });
 
+  test("a plan that arrives without its empty lists is still a plan", async () => {
+    // The app leaves out lists it has nothing for, so a comment on a rename-only plan must not read as a missing plan.
+    const plan = { scanned: 1, language: "Spanish", renames: [{ id: "x", from: "krulsla melange", to: "mezcla de lechugas", reason: null }] };
+    const response = await api("/basket/tidy/revise", { method: "POST", body: JSON.stringify({ plan, selected: { renames: ["x"] }, comment: "double it" }) });
+    expect(response.status).toBe(200);
+    const revised = (await response.json()) as { renames: unknown[]; merges: unknown[]; deals: unknown[]; reply: string | null };
+    expect(revised.renames).toEqual(plan.renames);
+    expect(revised.merges).toEqual([]);
+    expect(revised.deals).toEqual([]);
+    expect(revised.reply).toContain("not configured");
+  });
+
   test("a comment about nothing selected leaves the plan alone", async () => {
     const plan = { scanned: 0, language: "Spanish", renames: [], merges: [], distinct: [], deals: [] };
     expect(await reviseTidy(plan, { renames: [], merges: [], deals: [] }, "double it", new Map())).toEqual({ ...plan, reply: null });
