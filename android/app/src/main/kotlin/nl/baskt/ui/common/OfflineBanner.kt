@@ -12,19 +12,38 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import nl.baskt.ui.AppViewModel
 
-/** Shown while the server is unreachable: saved data is displayed, edits wait in a queue. */
+/** A queue that is still draining after this long while online is stuck, and that is worth a word. */
+private const val STALLED_AFTER_MS = 10_000L
+
+/**
+ * Shown while the server is unreachable: saved data is displayed, edits wait in a queue. Ordinary edits
+ * pass through the queue in a blink and say nothing; only being offline, a failure or a stalled queue
+ * earns a banner, so the screen does not jump for every tick.
+ */
 @Composable
 fun OfflineBanner(viewModel: AppViewModel, needsServer: String? = null) {
     val online by viewModel.online.collectAsState()
     val pending by viewModel.pending.collectAsState()
+    val draining = online && pending.isNotEmpty() && pending.none { it.failure != null }
+    var stalled by remember { mutableStateOf(false) }
+    LaunchedEffect(draining) {
+        stalled = false
+        if (draining) { delay(STALLED_AFTER_MS); stalled = true }
+    }
     if (online && pending.isEmpty()) return
+    if (draining && !stalled) return
     Surface(color = if (online) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.CloudOff, contentDescription = null, modifier = Modifier.padding(end = 10.dp))
@@ -34,7 +53,7 @@ fun OfflineBanner(viewModel: AppViewModel, needsServer: String? = null) {
                         pending.any { it.failure != null } -> "Some changes could not sync. Review them in Settings."
                         !online && pending.isNotEmpty() -> "Offline — showing saved data. ${pending.size} change${if (pending.size == 1) "" else "s"} will be sent when the server is back."
                         !online -> "Offline — showing saved data." + (needsServer?.let { " $it" } ?: "")
-                        else -> "Sending ${pending.size} queued change${if (pending.size == 1) "" else "s"}…"
+                        else -> "Still sending ${pending.size} change${if (pending.size == 1) "" else "s"}…"
                     },
                     style = MaterialTheme.typography.bodySmall,
                 )

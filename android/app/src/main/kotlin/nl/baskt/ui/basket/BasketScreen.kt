@@ -316,14 +316,6 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
         nl.baskt.ui.common.OfflineBanner(viewModel, needsServer = "New ideas are matched once you're back online.")
-        val skippedCount = items.count { it.isSkipped && !it.isGroup }
-        if (skippedCount > 0 && !selectionMode) {
-            // Ticks mean "not this trip"; they stay until cleared here (or one by one), so nothing is forgotten.
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(if (skippedCount == 1) "1 item skipped this trip" else "$skippedCount items skipped this trip", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                androidx.compose.material3.AssistChip(onClick = { viewModel.unskipAll() }, label = { Text("Clear skipped") })
-            }
-        }
         Box(modifier = Modifier.fillMaxSize()) {
             // Assistant button: bottom-left, level with the Compare button.
             androidx.compose.material3.FloatingActionButton(
@@ -442,6 +434,15 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                             }
                         }
                         // No swipe-to-dismiss on rows: horizontal swipes belong to screen navigation (delete via menu or selection).
+                    }
+                    // Crosses mean "not this trip"; they stay until cleared here (or one by one), so nothing is forgotten.
+                    // The note lives at the foot of the list so the rows above never shift when something is crossed out.
+                    val skippedCount = items.count { it.isSkipped && !it.isGroup }
+                    if (skippedCount > 0) item(key = "skipped-note") {
+                        Row(modifier = Modifier.fillMaxWidth().animateItem().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(if (skippedCount == 1) "1 item skipped this trip" else "$skippedCount items skipped this trip", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                            androidx.compose.material3.AssistChip(onClick = { viewModel.unskipAll() }, label = { Text("Clear skipped") })
+                        }
                     }
                 }
             }
