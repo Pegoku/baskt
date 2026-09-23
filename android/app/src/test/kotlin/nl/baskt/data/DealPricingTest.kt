@@ -120,6 +120,29 @@ class DealSavingTest {
         assertEquals(60, saving.percentOff)
     }
 
+    @Test fun aMultipackPricedPerPieceIsHeldAgainstTheSingleItemAsOnePiece() {
+        // Three cartons for €5,10 against one carton at €0,82: dearer per piece, so no deal for this entry.
+        val threePack = Product("AH:2", "AH", "2", "Campina 3-pack", quantityText = "3 stuks", unitAmount = 3.0, unit = "piece", priceCents = 510, dealText = "5% volume voordeel", isDeal = true)
+        val carton = Product("AH:1", "AH", "1", "Melk", quantityText = "1 l", unitAmount = 1.0, unit = "l", priceCents = 82)
+        val saving = deal(threePack, carton)
+        assertEquals(DealSaving.PriceStep(82, 170, "st"), saving.step())
+        assertNull(saving.percentOff)
+        assertTrue(saving.worse)
+        // Eight for €5,00 works out cheaper per piece, so that one stays.
+        val eightPack = threePack.copy(id = "AH:3", quantityText = "8 stuks", unitAmount = 8.0, priceCents = 500)
+        val better = deal(eightPack, carton)
+        assertEquals(DealSaving.PriceStep(82, 63, "st"), better.step())
+        assertFalse(better.worse)
+    }
+
+    @Test fun aDealAtTheSamePriceOrDearerIsWorse() {
+        assertTrue(deal(product("AH:2", 200), product("AH:1", 200)).worse)
+        assertTrue(deal(product("AH:2", 250), product("AH:1", 200)).worse)
+        assertFalse(deal(product("AH:2", 150), product("AH:1", 200)).worse)
+        // Nothing bought yet: nothing to be worse than.
+        assertFalse(deal(product("AH:2", 250), null).worse)
+    }
+
     @Test fun aMultiBuyOnThePackSaysWhatHasToBeTaken() {
         val saving = deal(product("AH:2", 249, "3 voor 7.00", amount = null, unit = null), product("AH:1", 299, amount = null, unit = null))
         assertEquals(DealSaving.PriceStep(299, 233, null), saving.step())

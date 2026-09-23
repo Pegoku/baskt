@@ -127,6 +127,9 @@ data class DealSaving(
     /** True when the strip would say more than the price already on the product row. */
     fun worthShowing(): Boolean = step().let { it.fromCents != null || it.unit != null } || percentOff != null || packCount > 1
 
+    /** Something is bought now and the deal does not beat it on the fairest footing there is: not a deal for this entry. */
+    val worse: Boolean get() = currentPackCents != null && percentOff == null
+
     private val takeClause: String get() = if (packCount > 1) " when you take $packCount" else ""
 }
 
@@ -138,6 +141,8 @@ fun Deal.saving(current: Product? = null): DealSaving {
     val dealUnit = pricing?.unitPriceCents?.let { cents -> pricing.unitPriceUnit?.let { cents to it } } ?: product.unitPriceAt(each)
     val currentPack = current?.priceCents ?: currentPriceCents
     val currentUnit = current?.let { it.unitPriceAt(it.priceCents) }?.takeIf { it.second.shortUnit() == dealUnit?.second?.shortUnit() }
+        // A multipack priced per piece against a single carton or bottle: that single item is one piece, whatever it is measured in.
+        ?: current?.takeIf { dealUnit?.second?.shortUnit() == "st" && (it.unit != "piece" || (it.unitAmount ?: 1.0) == 1.0) }?.let { it.priceCents to "st" }
     return DealSaving(
         eachCents = each,
         packCount = pricing?.count ?: 1,

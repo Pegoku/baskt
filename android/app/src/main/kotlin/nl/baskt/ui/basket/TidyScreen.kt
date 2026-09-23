@@ -310,7 +310,11 @@ private fun DealPicker(
     onChoose: (String?) -> Unit,
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
-    val savings = deals.associate { it.product.id to it.saving(currentFor(it)) }
+    val allSavings = deals.associate { it.product.id to it.saving(currentFor(it)) }
+    // A promotion that costs more than what the entry buys now is no deal for it, so it is not offered.
+    val deals = deals.filter { !allSavings.getValue(it.product.id).worse }
+    if (deals.isEmpty()) return
+    val savings = allSavings.filterKeys { id -> deals.any { it.product.id == id } }
     val best = savings.values.mapNotNull { it.percentOff }.maxOrNull()
     Column {
         Row(
