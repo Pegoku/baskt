@@ -61,9 +61,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import nl.baskt.data.Deal
 import nl.baskt.data.MergeDecision
+import nl.baskt.data.Product
 import nl.baskt.data.StoreInfo
 import nl.baskt.data.TidySelection
-import nl.baskt.data.euros
+import nl.baskt.data.saving
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.ItemThumb
 import nl.baskt.ui.common.ProductRow
@@ -126,8 +127,19 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             text,
         )
     }
+    // What each entry buys now at that store, so a promotion can be priced against it per kilo or litre.
+    fun currentPick(deal: Deal): Product? = listed.firstOrNull { it.id == deal.itemId }?.match(deal.store)?.effective
     val dealPicker: @Composable (String) -> Unit = { itemId ->
-        dealsByItem[itemId]?.let { list -> DealPicker(list, stores, chosen = review.dealChoice[itemId], onChoose = { chooseDeal(itemId, it) }) }
+        dealsByItem[itemId]?.let { list ->
+            DealPicker(
+                list,
+                stores,
+                chosen = review.dealChoice[itemId],
+                quantity = listed.firstOrNull { it.id == itemId }?.quantity ?: 1,
+                currentFor = { deal -> currentPick(deal) },
+                onChoose = { chooseDeal(itemId, it) },
+            )
+        }
     }
     fun apply() {
         viewModel.applyTidy(chosenRenames, chosenMerges, chosenDeals)
@@ -284,8 +296,17 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
  * when its radio is chosen, and choosing it again clears the choice.
  */
 @Composable
-private fun DealPicker(deals: List<Deal>, stores: List<StoreInfo>, chosen: String?, onChoose: (String?) -> Unit) {
+private fun DealPicker(
+    deals: List<Deal>,
+    stores: List<StoreInfo>,
+    chosen: String?,
+    quantity: Int,
+    currentFor: (Deal) -> Product?,
+    onChoose: (String?) -> Unit,
+) {
     var expanded by rememberSaveable { mutableStateOf(false) }
+    val savings = deals.associate { it.product.id to it.saving(currentFor(it)) }
+    val best = savings.values.mapNotNull { it.percentOff }.maxOrNull()
     Column {
         Row(
             modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
@@ -296,8 +317,8 @@ private fun DealPicker(deals: List<Deal>, stores: List<StoreInfo>, chosen: Strin
             Text(
                 when {
                     chosen != null -> "Deal chosen: " + (deals.firstOrNull { it.product.id == chosen }?.product?.title ?: "")
-                    deals.size == 1 -> "1 deal available"
-                    else -> "${deals.size} deals available"
+                    deals.size == 1 -> "1 deal available" + (best?.let { " · $it% cheaper" } ?: "")
+                    else -> "${deals.size} deals available" + (best?.let { " · up to $it% cheaper" } ?: "")
                 },
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
@@ -316,12 +337,14 @@ private fun DealPicker(deals: List<Deal>, stores: List<StoreInfo>, chosen: Strin
                     ) {
                         RadioButton(selected = selected, onClick = { onChoose(if (selected) null else deal.product.id) })
                         Column(modifier = Modifier.weight(1f)) {
+                            val saving = savings.getValue(deal.product.id)
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 StoreBadge(deal.store, stores)
-                                val saving = deal.savingCents
-                                if (saving != null && saving > 0) Text("save ${saving.euros()}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                saving.savingLine(quantity)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
                             }
                             ProductRow(deal.product)
+                            // The price per kilo or litre once the deal is taken: the number the choice really hangs on.
+                            saving.unitLine()?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
                     }
                 }

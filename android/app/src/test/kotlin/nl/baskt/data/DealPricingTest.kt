@@ -44,3 +44,62 @@ class DealPricingTest {
         assertNull(product(249, null).dealPricing())
     }
 }
+
+class DealSavingTest {
+    private fun product(id: String, price: Int, deal: String? = null, amount: Double? = 0.2, unit: String? = "kg", unitPrice: Int? = null, unitUnit: String? = null) =
+        Product(id, "AH", "1", "Kaas", quantityText = "200 g", unitAmount = amount, unit = unit, priceCents = price, unitPriceCents = unitPrice, unitPriceUnit = unitUnit, dealText = deal, isDeal = deal != null)
+
+    private fun deal(product: Product, current: Product?) = Deal(itemId = "i1", itemText = "kaas", store = "AH", product = product, currentPriceCents = current?.priceCents).saving(current)
+
+    @Test fun multiBuyIsPricedPerPackAndPerKilo() {
+        val saving = deal(product("AH:2", 249, "3 voor 7.00"), product("AH:1", 299))
+        assertEquals(233, saving.eachCents)
+        assertEquals(3, saving.packCount)
+        assertEquals(66, saving.packSavingCents)
+        assertEquals(1167, saving.unitPriceCents)
+        assertEquals(1495, saving.currentUnitPriceCents)
+        assertEquals(22, saving.percentOff)
+        assertEquals("Save €0,66 a pack (−22%) when you take 3", saving.savingLine())
+        assertEquals("€11,67/kg with the deal, now €14,95/kg", saving.unitLine())
+    }
+
+    @Test fun aBiggerPackCanCostMoreAndStillBeCheaperPerKilo() {
+        val saving = deal(product("AH:2", 400, amount = 0.5), product("AH:1", 200, amount = 0.2))
+        assertEquals(800, saving.unitPriceCents)
+        assertEquals(1000, saving.currentUnitPriceCents)
+        assertEquals(20, saving.percentOff)
+        // Nothing is saved on the pack, so the share per kilo is what gets said.
+        assertEquals("20% cheaper per kg", saving.savingLine())
+    }
+
+    @Test fun theWholeLineIsAddedUpWhenMoreThanOnePackIsWanted() {
+        val saving = deal(product("AH:2", 150), product("AH:1", 200))
+        assertEquals("Save €0,50 a pack (−25%) · €1,50 for 3", saving.savingLine(quantity = 3))
+    }
+
+    @Test fun unitsThatDoNotMatchAreComparedOnThePackInstead() {
+        val saving = deal(product("AH:2", 150, unit = "l", amount = 1.0), product("AH:1", 200, unit = "kg", amount = 0.2))
+        assertNull(saving.currentUnitPriceCents)
+        assertEquals(25, saving.percentOff)
+        assertEquals("€1,50/l with the deal", saving.unitLine())
+    }
+
+    @Test fun withoutAPickOrAPackSizeOnlyWhatIsKnownIsSaid() {
+        val noCurrent = deal(product("AH:2", 249, "3 voor 7.00"), null)
+        assertNull(noCurrent.packSavingCents)
+        assertNull(noCurrent.percentOff)
+        assertNull(noCurrent.savingLine())
+        assertEquals("€11,67/kg with the deal", noCurrent.unitLine())
+        val noSizes = deal(product("AH:2", 150, amount = null, unit = null), product("AH:1", 200, amount = null, unit = null))
+        assertNull(noSizes.unitLine())
+        assertEquals("Save €0,50 a pack (−25%)", noSizes.savingLine())
+    }
+
+    @Test fun theListedUnitPriceIsScaledWhenThePackSizeIsUnknown() {
+        val saving = deal(product("AH:2", 200, "1 + 1 gratis", amount = null, unit = null, unitPrice = 400, unitUnit = "kg"), product("AH:1", 250, amount = null, unit = null, unitPrice = 500, unitUnit = "kg"))
+        assertEquals(100, saving.eachCents)
+        assertEquals(200, saving.unitPriceCents)
+        assertEquals(500, saving.currentUnitPriceCents)
+        assertEquals(60, saving.percentOff)
+    }
+}

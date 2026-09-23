@@ -36,3 +36,78 @@ fun Product.dealPricing(): DealPricing? {
 }
 
 fun String.shortUnit(): String = if (this == "piece") "st" else this
+
+/**
+ * What one pack works out to per kilo, litre or piece at [cents]. The pack size the store states wins;
+ * without one the listed unit price is scaled, since the store prints it for the single-pack price.
+ */
+fun Product.unitPriceAt(cents: Int): Pair<Int, String>? {
+    val amount = unitAmount?.takeIf { it > 0 }
+    if (amount != null && unit != null) return (cents / amount).roundToInt() to unit
+    val listed = unitPriceCents ?: return null
+    val listedUnit = unitPriceUnit ?: return null
+    if (priceCents <= 0) return null
+    return (listed.toDouble() * cents / priceCents).roundToInt() to listedUnit
+}
+
+/**
+ * What taking a promotion is worth next to the product an entry buys now: the price a pack really comes
+ * to once a multi-buy is worked out, and the €/unit on both sides, which is the only fair comparison when
+ * the deal pack is a different size.
+ */
+data class DealSaving(
+    /** What one pack costs when the deal is used. */
+    val eachCents: Int,
+    /** Packs you have to take for that price; 1 when there is no multi-buy. */
+    val packCount: Int,
+    val packSavingCents: Int?,
+    val unitPriceCents: Int?,
+    val unitPriceUnit: String?,
+    val currentUnitPriceCents: Int?,
+    val currentPackCents: Int?,
+) {
+    /** Both sides state a price per the same unit, so the comparison can be made there. */
+    val perUnit: Boolean get() = unitPriceCents != null && currentUnitPriceCents != null
+    val percentOff: Int?
+        get() {
+            val from = if (perUnit) currentUnitPriceCents!! else currentPackCents ?: return null
+            val to = if (perUnit) unitPriceCents!! else eachCents
+            return if (from > to && from > 0) ((from - to) * 100.0 / from).roundToInt() else null
+        }
+
+    /** "Save €0,45 a pack (−18%) when you take 3", or just the share when the packs are not the same size. */
+    fun savingLine(quantity: Int = 1): String? {
+        val percent = percentOff?.let { " (−$it%)" } ?: ""
+        val take = if (packCount > 1) " when you take $packCount" else ""
+        val saving = packSavingCents?.takeIf { it > 0 } ?: return percentOff?.let { "$it% cheaper per ${unitPriceUnit?.shortUnit() ?: "pack"}" }
+        val total = if (quantity > 1) " · ${(saving * quantity).euros()} for $quantity" else ""
+        return "Save ${saving.euros()} a pack$percent$take$total"
+    }
+
+    /** "€7,50/kg with the deal, now €9,20/kg" — the final price per unit, which is what the choice hangs on. */
+    fun unitLine(): String? {
+        val unit = unitPriceUnit?.shortUnit() ?: return null
+        val deal = unitPriceCents ?: return null
+        val now = currentUnitPriceCents?.let { ", now ${it.euros()}/$unit" } ?: ""
+        return "${deal.euros()}/$unit with the deal$now"
+    }
+}
+
+/** [current] is the product the entry is set to buy at this store; without it only the deal's own prices are known. */
+fun Deal.saving(current: Product? = null): DealSaving {
+    val pricing = product.dealPricing()
+    val each = pricing?.eachCents ?: product.priceCents
+    // A multi-buy divides the whole bundle by the packs in it, which is a cent truer than dividing the rounded each-price.
+    val dealUnit = pricing?.unitPriceCents?.let { cents -> pricing.unitPriceUnit?.let { cents to it } } ?: product.unitPriceAt(each)
+    val currentPack = current?.priceCents ?: currentPriceCents
+    val currentUnit = current?.let { it.unitPriceAt(it.priceCents) }?.takeIf { it.second.shortUnit() == dealUnit?.second?.shortUnit() }
+    return DealSaving(
+        eachCents = each,
+        packCount = pricing?.count ?: 1,
+        packSavingCents = currentPack?.let { it - each },
+        unitPriceCents = dealUnit?.first,
+        unitPriceUnit = dealUnit?.second,
+        currentUnitPriceCents = currentUnit?.first,
+        currentPackCents = currentPack,
+    )
+}
