@@ -4,7 +4,7 @@ import { db, newId, resetDbForTests } from "@/db";
 import { basketMatches, type BasketItemRow, type BasketMatchRow } from "@/db/schema";
 import { createApp } from "@/app";
 import { pickDeals, planTidy, splitGroups, toCandidate, type TidyCandidate } from "@/matching/tidy";
-import type { Deal } from "@/matching/deals";
+import { judgedSuitable, type Deal } from "@/matching/deals";
 import type { ProductRow } from "@/db/schema";
 import type { DuplicateGroup } from "@/matching/dedupe";
 import { setAdaptersForTests } from "@/stores/registry";
@@ -136,5 +136,17 @@ describe("tidy plan", () => {
     expect(((await kept.json()) as { text: string }).text).toBe("jamón york");
     await api(`/basket/items/${created.id}`, { method: "PATCH", body: JSON.stringify({ text: "ham" }) });
     expect(db().select().from(basketMatches).where(eq(basketMatches.itemId, created.id)).all()).toHaveLength(0);
+  });
+});
+
+describe("deal judge", () => {
+  test("keeps the listed numbers the model accepted and nothing else", () => {
+    expect(judgedSuitable({ suitable: [1, "3", "2.4", 9, "x"] }, 4)).toEqual(new Set([1, 3, 4]));
+    expect(judgedSuitable({ suitable: [] }, 3)).toEqual(new Set());
+  });
+
+  test("a reply without a verdict is no verdict, so the word match stands", () => {
+    expect(judgedSuitable(null, 3)).toBeNull();
+    expect(judgedSuitable({ suitable: "all" }, 3)).toBeNull();
   });
 });
