@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.horizontalScroll
@@ -315,7 +316,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-        nl.baskt.ui.common.OfflineBanner(viewModel, needsServer = "New ideas are matched once you're back online.")
+        nl.baskt.ui.common.OfflineBanner(viewModel)
         Box(modifier = Modifier.fillMaxSize()) {
             // Assistant button: bottom-left, level with the Compare button.
             androidx.compose.material3.FloatingActionButton(
@@ -490,12 +491,13 @@ fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Uni
                     if (item.quantity > 1) Text("×${item.quantity}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 }
                 Spacer(Modifier.height(4.dp))
-                when {
+                // Every state of this line is at least as tall as the store badges, so a row keeps its height
+                // when it is crossed out or waits for the server and the rows below it never shift.
+                Box(modifier = Modifier.heightIn(min = 20.dp), contentAlignment = Alignment.CenterStart) { when {
                     item.inStock -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(Icons.Default.Kitchen, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Already in stock · skipped", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    item.isSkipped -> Text("Skipped this trip", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     item.isQueued && item.barcode != null -> Text("Scanned offline — becomes the product when you’re back online", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
                     item.isQueued -> Text("Waiting for connection — will be matched later", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
                     item.isProcessing -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -503,7 +505,8 @@ fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Uni
                         Text("Finding products…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     item.status == "ERROR" -> Text(item.error ?: "Matching failed", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                    else -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // A crossed-out row keeps its prices, faded: the cross and the strike already say it is left out.
+                    else -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.alpha(if (item.isSkipped) 0.5f else 1f)) {
                         for (store in stores) {
                             val match = item.match(store.code)
                             val product = match?.effective
@@ -524,7 +527,7 @@ fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Uni
                             }
                         }
                     }
-                }
+                } }
                 if (item.needsChoice) {
                     Text("Tap to choose products", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
                 }

@@ -1,11 +1,14 @@
 package nl.baskt.ui.common
 
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -28,15 +31,16 @@ import nl.baskt.ui.AppViewModel
 private const val STALLED_AFTER_MS = 10_000L
 
 /**
- * Shown while the server is unreachable: saved data is displayed, edits wait in a queue. Ordinary edits
- * pass through the queue in a blink and say nothing; only being offline, a failure or a stalled queue
- * earns a banner, so the screen does not jump for every tick.
+ * A short inset card, shaped like the list rows below it, for the states the shopper must know about:
+ * offline (saved data is shown, edits wait in a queue), a change that failed to sync, or a queue that has
+ * been draining for too long. Ordinary edits pass through the queue in a blink and say nothing.
  */
 @Composable
-fun OfflineBanner(viewModel: AppViewModel, needsServer: String? = null) {
+fun OfflineBanner(viewModel: AppViewModel) {
     val online by viewModel.online.collectAsState()
     val pending by viewModel.pending.collectAsState()
-    val draining = online && pending.isNotEmpty() && pending.none { it.failure != null }
+    val failed = pending.count { it.failure != null }
+    val draining = online && pending.isNotEmpty() && failed == 0
     var stalled by remember { mutableStateOf(false) }
     LaunchedEffect(draining) {
         stalled = false
@@ -44,21 +48,27 @@ fun OfflineBanner(viewModel: AppViewModel, needsServer: String? = null) {
     }
     if (online && pending.isEmpty()) return
     if (draining && !stalled) return
-    Surface(color = if (online) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.CloudOff, contentDescription = null, modifier = Modifier.padding(end = 10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    when {
-                        pending.any { it.failure != null } -> "Some changes could not sync. Review them in Settings."
-                        !online && pending.isNotEmpty() -> "Offline — showing saved data. ${pending.size} change${if (pending.size == 1) "" else "s"} will be sent when the server is back."
-                        !online -> "Offline — showing saved data." + (needsServer?.let { " $it" } ?: "")
-                        else -> "Still sending ${pending.size} change${if (pending.size == 1) "" else "s"}…"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            if (!online || pending.any { it.failure != null }) TextButton(onClick = { viewModel.retryConnection() }) { Text("Retry") }
+    val changes = { count: Int -> if (count == 1) "1 change" else "$count changes" }
+    val message = when {
+        failed > 0 -> "${changes(failed)} didn't sync"
+        !online && pending.isNotEmpty() -> "Offline · ${changes(pending.size)} waiting"
+        !online -> "Offline · showing saved data"
+        else -> "Still sending ${changes(pending.size)}…"
+    }
+    val retry = !online || failed > 0
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = if (failed > 0) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, end = if (retry) 4.dp else 12.dp).heightIn(min = 40.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(if (online) Icons.Default.Sync else Icons.Default.CloudOff, contentDescription = null, modifier = Modifier.size(18.dp))
+            Text(message, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+            if (retry) TextButton(onClick = { viewModel.retryConnection() }) { Text("Retry") }
         }
     }
 }

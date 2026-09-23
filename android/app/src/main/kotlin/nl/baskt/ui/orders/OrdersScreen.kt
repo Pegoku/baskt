@@ -126,7 +126,7 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            nl.baskt.ui.common.OfflineBanner(viewModel, needsServer = "Showing the orders known so far.")
+            nl.baskt.ui.common.OfflineBanner(viewModel)
             // Day stepper: only days with an order are reachable, so the arrows never land on an empty day.
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { selected = previous }, enabled = previous != null) { Icon(Icons.Default.ChevronLeft, contentDescription = "Earlier order day") }

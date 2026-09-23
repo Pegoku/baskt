@@ -135,7 +135,7 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            nl.baskt.ui.common.OfflineBanner(viewModel, needsServer = "The assistant needs the server.")
+            nl.baskt.ui.common.OfflineBanner(viewModel)
             if (messages.isEmpty() && !busy) {
                 Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("What can I do?", style = MaterialTheme.typography.titleMedium)
