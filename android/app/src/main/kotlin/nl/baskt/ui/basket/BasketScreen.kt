@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.CallMerge
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
@@ -64,6 +65,7 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import nl.baskt.ui.common.buildShareText
 import nl.baskt.ui.common.shareText
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.filled.Refresh
@@ -71,11 +73,11 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -449,6 +451,22 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
 }
 
 
+/**
+ * The list tick never meant "bought" — it sets an entry aside for this trip (shopping mode is where things
+ * are really ticked off). So it reads as a cross: an open circle while the entry is still on the trip, a
+ * crossed-out one once it is left out.
+ */
+@Composable
+private fun SkipToggle(checked: Boolean, onToggle: () -> Unit, enabled: Boolean = true) {
+    IconToggleButton(checked = checked, onCheckedChange = { onToggle() }, enabled = enabled) {
+        Icon(
+            if (checked) Icons.Default.Cancel else Icons.Outlined.Circle,
+            contentDescription = if (checked) "Put back on this trip" else "Leave out of this trip",
+            tint = if (checked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outline,
+        )
+    }
+}
+
 @Composable
 fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, onToggle: () -> Unit, trailing: (@Composable () -> Unit)? = null) {
     Card(
@@ -456,7 +474,7 @@ fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Uni
         colors = CardDefaults.cardColors(containerColor = if (item.checked) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Row(modifier = Modifier.padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = item.checked, onCheckedChange = { onToggle() })
+            SkipToggle(checked = item.checked, onToggle = onToggle)
             nl.baskt.ui.common.ItemThumb(item.anyProduct?.imageUrl, item.text, modifier = Modifier.padding(end = 10.dp).alpha(if (item.checked) 0.5f else 1f))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -524,7 +542,7 @@ fun GroupCard(group: BasketItem, children: List<BasketItem>, stores: List<StoreI
         colors = CardDefaults.cardColors(containerColor = if (allChecked) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.secondaryContainer),
     ) {
         Row(modifier = Modifier.padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = allChecked, onCheckedChange = { onToggle() }, enabled = children.isNotEmpty())
+            SkipToggle(checked = allChecked, onToggle = onToggle, enabled = children.isNotEmpty())
             // A folder shows the dish it came from; plain folders keep the icon in the title alone.
             val cover = group.recipe?.imageUrl ?: children.firstNotNullOfOrNull { it.anyProduct?.imageUrl }
             if (cover != null) nl.baskt.ui.common.ItemThumb(cover, group.text, modifier = Modifier.padding(end = 10.dp).alpha(if (allChecked) 0.5f else 1f))
