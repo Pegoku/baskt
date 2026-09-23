@@ -75,13 +75,11 @@ data class DealSaving(
             return if (from > to && from > 0) ((from - to) * 100.0 / from).roundToInt() else null
         }
 
-    /** "Save €0,45 a pack (−18%) when you take 3", or just the share when the packs are not the same size. */
+    /** "Save €0,66 a pack when you take 3 · €1,98 for 3"; the share is left to [percentOff] so it is not said twice. */
     fun savingLine(quantity: Int = 1): String? {
-        val percent = percentOff?.let { " (−$it%)" } ?: ""
-        val take = if (packCount > 1) " when you take $packCount" else ""
-        val saving = packSavingCents?.takeIf { it > 0 } ?: return percentOff?.let { "$it% cheaper per ${unitPriceUnit?.shortUnit() ?: "pack"}" }
+        val saving = packSavingCents?.takeIf { it > 0 } ?: return null
         val total = if (quantity > 1) " · ${(saving * quantity).euros()} for $quantity" else ""
-        return "Save ${saving.euros()} a pack$percent$take$total"
+        return "Save ${saving.euros()} a pack$takeClause$total"
     }
 
     /** "€7,50/kg with the deal, now €9,20/kg" — the final price per unit, which is what the choice hangs on. */
@@ -91,6 +89,45 @@ data class DealSaving(
         val now = currentUnitPriceCents?.let { ", now ${it.euros()}/$unit" } ?: ""
         return "${deal.euros()}/$unit with the deal$now"
     }
+
+    /**
+     * The price before and after the deal on the fairest footing there is: per kilo, litre or piece when both
+     * sides state one, else per pack. [unit] is null for a pack; [fromCents] is null when nothing is bought now.
+     */
+    data class PriceStep(val fromCents: Int?, val toCents: Int, val unit: String?)
+
+    fun step(): PriceStep = when {
+        perUnit -> PriceStep(currentUnitPriceCents, unitPriceCents!!, unitPriceUnit!!.shortUnit())
+        currentPackCents == null && unitPriceCents != null -> PriceStep(null, unitPriceCents, unitPriceUnit!!.shortUnit())
+        else -> PriceStep(currentPackCents, eachCents, null)
+    }
+
+    /**
+     * What is left to say under the [step]: the pack saving when the step was per unit, the unit price when it
+     * was per pack, the multi-buy condition, and the total for the quantity wanted.
+     */
+    fun detail(quantity: Int = 1): String? {
+        val parts = mutableListOf<String>()
+        val saving = packSavingCents
+        if (step().unit != null) {
+            when {
+                saving != null && saving > 0 -> parts += "Save ${saving.euros()} a pack$takeClause"
+                // The bigger pack costs more at the till even though it is cheaper per kilo; worth saying plainly.
+                saving != null && saving < 0 -> parts += "${eachCents.euros()} a pack$takeClause, now ${currentPackCents!!.euros()}"
+                packCount > 1 -> parts += "${eachCents.euros()} a pack$takeClause"
+            }
+        } else {
+            if (packCount > 1) parts += "When you take $packCount"
+            if (unitPriceCents != null && unitPriceUnit != null) parts += "${unitPriceCents.euros()}/${unitPriceUnit.shortUnit()}"
+        }
+        if (saving != null && saving > 0 && quantity > 1) parts += "${(saving * quantity).euros()} for $quantity"
+        return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+    }
+
+    /** True when the strip would say more than the price already on the product row. */
+    fun worthShowing(): Boolean = step().let { it.fromCents != null || it.unit != null } || percentOff != null || packCount > 1
+
+    private val takeClause: String get() = if (packCount > 1) " when you take $packCount" else ""
 }
 
 /** [current] is the product the entry is set to buy at this store; without it only the deal's own prices are known. */

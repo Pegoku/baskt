@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.automirrored.outlined.Comment
 import androidx.compose.material.icons.filled.Close
@@ -57,13 +58,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import nl.baskt.data.Deal
+import nl.baskt.data.DealSaving
 import nl.baskt.data.MergeDecision
 import nl.baskt.data.Product
 import nl.baskt.data.StoreInfo
 import nl.baskt.data.TidySelection
+import nl.baskt.data.euros
 import nl.baskt.data.saving
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.ItemThumb
@@ -317,8 +322,8 @@ private fun DealPicker(
             Text(
                 when {
                     chosen != null -> "Deal chosen: " + (deals.firstOrNull { it.product.id == chosen }?.product?.title ?: "")
-                    deals.size == 1 -> "1 deal available" + (best?.let { " · $it% cheaper" } ?: "")
-                    else -> "${deals.size} deals available" + (best?.let { " · up to $it% cheaper" } ?: "")
+                    deals.size == 1 -> "1 deal available" + (best?.let { " · save $it%" } ?: "")
+                    else -> "${deals.size} deals available" + (best?.let { " · save up to $it%" } ?: "")
                 },
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
@@ -337,16 +342,73 @@ private fun DealPicker(
                     ) {
                         RadioButton(selected = selected, onClick = { onChoose(if (selected) null else deal.product.id) })
                         Column(modifier = Modifier.weight(1f)) {
+                            StoreBadge(deal.store, stores)
+                            ProductRow(deal.product, modifier = Modifier.padding(top = 4.dp), dealMath = false)
                             val saving = savings.getValue(deal.product.id)
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                StoreBadge(deal.store, stores)
-                                saving.savingLine(quantity)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
-                            }
-                            ProductRow(deal.product)
-                            // The price per kilo or litre once the deal is taken: the number the choice really hangs on.
-                            saving.unitLine()?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            if (saving.worthShowing()) SavingStrip(saving, quantity)
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The number the choice hangs on, made the headline: what a kilo, litre or pack costs now, struck through,
+ * and what it comes to with the deal, with the share saved as a badge and the pack saving underneath.
+ */
+@Composable
+private fun SavingStrip(saving: DealSaving, quantity: Int) {
+    val step = saving.step()
+    val suffix = step.unit?.let { "/$it" } ?: ""
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        modifier = Modifier.fillMaxWidth().padding(top = 6.dp, end = 8.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    step.fromCents?.let { from ->
+                        Text(
+                            from.euros() + suffix,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                            textDecoration = TextDecoration.LineThrough,
+                        )
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "becomes",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                    Text(
+                        step.toCents.euros() + suffix,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                    if (step.unit == null) Text("a pack", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+                saving.detail(quantity)?.let {
+                    Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
+            saving.percentOff?.let { percent ->
+                Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.primary) {
+                    Text(
+                        "−$percent%",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
                 }
             }
         }
