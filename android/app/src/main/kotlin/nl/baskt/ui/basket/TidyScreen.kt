@@ -65,6 +65,7 @@ import nl.baskt.data.StoreInfo
 import nl.baskt.data.TidySelection
 import nl.baskt.data.euros
 import nl.baskt.ui.AppViewModel
+import nl.baskt.ui.common.ItemThumb
 import nl.baskt.ui.common.ProductRow
 import nl.baskt.ui.common.StoreBadge
 
@@ -83,6 +84,9 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val revising by viewModel.revising.collectAsState()
     val commentMode by viewModel.tidyCommentMode.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
+    // The plan only carries ids, so the pictures come from the entries the list already holds.
+    val listed by viewModel.basket.items.collectAsState()
+    val pictures = listed.associate { it.id to (it.anyProduct?.imageUrl ?: it.recipe?.imageUrl) }
     // The plan and the review state live in the view model: a rotation must neither refetch nor forget ticks.
     LaunchedEffect(Unit) { if (viewModel.tidy.value == null && !viewModel.tidying.value) viewModel.planTidy() }
     val review by viewModel.tidyReview.collectAsState()
@@ -202,8 +206,14 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                         val active = key !in skipped
                         Proposal(key, checked = active, selected = key in selection, onPress = { press(key) }, onHold = { hold(key) }, onTick = { tick(key) },
                             headline = merge.text,
+                            imageUrl = pictures[merge.keepId],
                             supporting = {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    // Seeing the pictures side by side is the quickest way to tell a real duplicate from two different things.
+                                    val thumbs = merge.items.mapNotNull { item -> pictures[item.id]?.let { item.text to it } }
+                                    if (thumbs.size > 1) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        for ((text, url) in thumbs) ItemThumb(url, text, size = 36)
+                                    }
                                     Text(merge.items.joinToString(" · ") { it.text + if (it.quantity > 1) " ×${it.quantity}" else "" } + if (merge.reason.isNotBlank()) "\n${merge.reason}" else "")
                                     if (active && !commenting) {
                                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -223,6 +233,7 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                         val key = "rename-${change.id}"
                         Proposal(key, checked = key !in skipped, selected = key in selection, onPress = { press(key) }, onHold = { hold(key) }, onTick = { tick(key) },
                             headline = change.to + (change.quantity?.let { "  ×$it" } ?: ""),
+                            imageUrl = pictures[change.id],
                             supporting = {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     val detail = listOfNotNull(if (change.from != change.to) "was “${change.from}”" else null, change.reason?.takeIf { it.isNotBlank() }).joinToString("\n")
@@ -238,7 +249,7 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                     items(dealOnlyItems, key = { "deals-$it" }) { itemId ->
                         val list = dealsByItem.getValue(itemId)
                         ListItem(
-                            leadingContent = { Icon(Icons.Outlined.LocalOffer, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                            leadingContent = { ItemThumb(pictures[itemId] ?: list.first().product.imageUrl, list.first().itemText, size = 40) },
                             headlineContent = { Text(list.first().itemText) },
                             supportingContent = { dealPicker(itemId) },
                         )
@@ -251,7 +262,15 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                         ListItem(
                             leadingContent = { Icon(Icons.Outlined.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                             headlineContent = { Text(entry.items.joinToString(" · ") { it.text }) },
-                            supportingContent = { Text(entry.items.mapNotNull { it.product }.joinToString("\n") + "\nLook alike, but each has its own chosen product.") },
+                            supportingContent = {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    val thumbs = entry.items.mapNotNull { item -> pictures[item.id]?.let { item.text to it } }
+                                    if (thumbs.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        for ((text, url) in thumbs) ItemThumb(url, text, size = 36)
+                                    }
+                                    Text(entry.items.mapNotNull { it.product }.joinToString("\n") + "\nLook alike, but each has its own chosen product.")
+                                }
+                            },
                         )
                     }
                 }
@@ -326,13 +345,19 @@ private fun Proposal(
     onHold: () -> Unit,
     onTick: () -> Unit,
     headline: String,
+    imageUrl: String? = null,
     overline: (@Composable () -> Unit)? = null,
     supporting: (@Composable () -> Unit)? = null,
 ) {
     ListItem(
         modifier = Modifier.combinedClickable(onClick = onPress, onLongClick = onHold),
         colors = ListItemDefaults.colors(containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface),
-        leadingContent = { Checkbox(checked = checked, onCheckedChange = { onTick() }) },
+        leadingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = checked, onCheckedChange = { onTick() })
+                ItemThumb(imageUrl, headline, size = 40, modifier = Modifier.padding(start = 4.dp))
+            }
+        },
         overlineContent = overline,
         headlineContent = { Text(headline) },
         supportingContent = supporting,

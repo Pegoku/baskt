@@ -55,6 +55,22 @@ fun StoreBadge(code: String, stores: List<StoreInfo>, modifier: Modifier = Modif
 
 private fun Color.luminance() = 0.2126f * red + 0.7152f * green + 0.0722f * blue
 
+/**
+ * The picture that belongs to a list entry, at row size. Product photos come on white because the stores
+ * ship them cut out on white; an entry without a picture yet gets a quiet tile with a basket on it.
+ */
+@Composable
+fun ItemThumb(imageUrl: String?, contentDescription: String?, size: Int = 44, modifier: Modifier = Modifier) {
+    Surface(
+        shape = RoundedCornerShape((size / 4).dp),
+        color = if (imageUrl != null) Color.White else MaterialTheme.colorScheme.surfaceVariant,
+        modifier = modifier.size(size.dp),
+    ) {
+        if (imageUrl != null) AsyncImage(model = imageUrl, contentDescription = contentDescription, modifier = Modifier.padding((size / 14).dp))
+        else Box(contentAlignment = Alignment.Center) { Text("🛒", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center) }
+    }
+}
+
 /** Opening a product shows its facts first; images can then be enlarged inside the detail sheet. */
 @Composable
 fun ProductThumb(product: Product, size: Int = 56, onOpen: (() -> Unit)? = null) {

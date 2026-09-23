@@ -100,6 +100,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
@@ -456,6 +457,7 @@ fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Uni
     ) {
         Row(modifier = Modifier.padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = item.checked, onCheckedChange = { onToggle() })
+            nl.baskt.ui.common.ItemThumb(item.anyProduct?.imageUrl, item.text, modifier = Modifier.padding(end = 10.dp).alpha(if (item.checked) 0.5f else 1f))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -523,6 +525,9 @@ fun GroupCard(group: BasketItem, children: List<BasketItem>, stores: List<StoreI
     ) {
         Row(modifier = Modifier.padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = allChecked, onCheckedChange = { onToggle() }, enabled = children.isNotEmpty())
+            // A folder shows the dish it came from; plain folders keep the icon in the title alone.
+            val cover = group.recipe?.imageUrl ?: children.firstNotNullOfOrNull { it.anyProduct?.imageUrl }
+            if (cover != null) nl.baskt.ui.common.ItemThumb(cover, group.text, modifier = Modifier.padding(end = 10.dp).alpha(if (allChecked) 0.5f else 1f))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
