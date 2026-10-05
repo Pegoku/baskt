@@ -1,0 +1,14 @@
+[Unit]
+Description=baskt backend
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Media/Projects/Code/GitHub/baskt/backend
+ExecStart=/usr/bin/bun run src/index.ts
+Restart=on-failure
+RestartSec=5
+UMask=0077
+
+[Install]
+WantedBy=default.target

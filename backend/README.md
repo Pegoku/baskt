@@ -15,6 +15,28 @@ Docker: `docker compose up -d --build` (data lives in the `baskt-data` volume).
 
 Without `AI_API_KEY`/`AI_MODEL` the API still works: ideas are searched as typed and ranked by text similarity.
 
+### Run with systemd
+
+The user service in `systemd/baskt.service` runs Bun without watch mode, loads the
+backend's `.env` through Bun, and keeps the existing database location. Adjust
+`WorkingDirectory` and `ExecStart` if your checkout or Bun executable lives elsewhere.
+After installing dependencies and configuring `.env`, run from `backend/`:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp systemd/baskt.service ~/.config/systemd/user/baskt.service
+systemctl --user daemon-reload
+systemctl --user enable --now baskt.service
+```
+
+Boot startup without logging in requires lingering: check with
+`loginctl show-user "$USER" -p Linger`. If it reports `Linger=no`, enable it with
+`loginctl enable-linger "$USER"` (this may require administrator authorization).
+
+Use `systemctl --user status baskt` to check the service, `journalctl --user -u baskt -f`
+to follow logs, and `systemctl --user restart baskt` after updating code or `.env`.
+Use `systemctl --user disable --now baskt` to stop it and disable automatic startup.
+
 ## How matching works
 
 1. `POST /api/v1/basket/items {text}` stores the idea and starts a background job.
