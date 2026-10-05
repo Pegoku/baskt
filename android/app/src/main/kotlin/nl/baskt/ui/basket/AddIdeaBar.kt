@@ -20,7 +20,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
@@ -89,8 +88,7 @@ fun AddIdeaBar(
     fun submit() {
         val value = text.trim()
         if (value.isEmpty()) return
-        // Typing "ingredients for X" and pressing add creates a folder from a recipe.
-        if (recipe != null && allowFolders) onAddGroup(value, null) else onAdd(value, quantity)
+        onAdd(value, quantity)
         reset()
     }
 
@@ -105,12 +103,6 @@ fun AddIdeaBar(
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.weight(1f),
                         )
-                        if (selected.isEmpty() && allowFolders) {
-                            TextButton(onClick = { onAddGroup(recipe.title, recipe.ingredients); reset() }) {
-                                Icon(Icons.Default.CreateNewFolder, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Text("  Add all as folder")
-                            }
-                        }
                     }
                 }
                 FlowRow(
@@ -183,7 +175,7 @@ fun AddIdeaBar(
                     FilledIconButton(onClick = onVoice) { Icon(Icons.Default.Mic, contentDescription = "Dictate") }
                 } else {
                     FilledIconButton(onClick = { submit() }, enabled = text.isNotBlank()) {
-                        Icon(if (recipe != null && allowFolders) Icons.Default.CreateNewFolder else Icons.Default.Add, contentDescription = "Add")
+                        Icon(Icons.Default.Add, contentDescription = "Add")
                     }
                 }
             }
