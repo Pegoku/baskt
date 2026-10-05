@@ -2,6 +2,10 @@ package nl.baskt.ui.basket
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -126,26 +130,29 @@ fun AddIdeaBar(
                         )
                     }
                 }
-                if (selected.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val picked = chips.filter { it in selected }
-                        if (allowFolders) {
-                            FilledTonalButton(onClick = { onAddGroup(recipe?.title ?: text.trim(), picked); reset() }) { Text("Folder (${picked.size})") }
+                // One stable action slot: selection never changes the suggestion panel's height.
+                Box(Modifier.fillMaxWidth().height(56.dp), contentAlignment = Alignment.CenterStart) {
+                    if (selected.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            val picked = chips.filter { it in selected }
+                            if (allowFolders) {
+                                FilledTonalButton(onClick = { onAddGroup(recipe?.title ?: text.trim(), picked); reset() }) { Text("Folder (${picked.size})", maxLines = 1) }
+                            }
+                            Button(onClick = { onAddMany(picked); reset() }) { Text("Add ${picked.size} separately", maxLines = 1) }
+                            TextButton(onClick = { selected = emptySet() }) { Text("Cancel", maxLines = 1) }
                         }
-                        Button(onClick = { onAddMany(picked); reset() }) { Text("Add ${picked.size} separately") }
-                        TextButton(onClick = { selected = emptySet() }) { Text("Cancel") }
+                    } else {
+                        Text(
+                            "Tap to use · hold to select several",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                        )
                     }
-                } else if (chips.isNotEmpty()) {
-                    Text(
-                        "Tap to use · hold to select several",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 14.dp),
-                    )
                 }
             }
             Row(
@@ -192,7 +199,10 @@ private fun SelectableChip(text: String, selected: Boolean, onClick: () -> Unit,
         modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (selected) Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            // Reserve the checkmark width so selecting a chip cannot reflow the FlowRow.
+            Box(Modifier.size(14.dp)) {
+                if (selected) Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
             Text(text, style = MaterialTheme.typography.labelLarge, color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface)
         }
     }

@@ -84,10 +84,10 @@ fun ProductThumb(product: Product, size: Int = 56, onOpen: (() -> Unit)? = null)
 
 /** [dealMath] adds what a multi-buy works out to per pack and per unit; turn it off where that is already said next to the row. */
 @Composable
-fun ProductRow(product: Product, modifier: Modifier = Modifier, dealMath: Boolean = true, trailing: @Composable (() -> Unit)? = null) {
+fun ProductRow(product: Product, modifier: Modifier = Modifier, dealMath: Boolean = true, showOriginal: Boolean = false, trailing: @Composable (() -> Unit)? = null) {
     var details by androidx.compose.runtime.remember(product.id) { androidx.compose.runtime.mutableStateOf(false) }
-    val translation = rememberTranslation(listOf(product.title, product.quantityText, product.dealText.orEmpty()))
-    val shown = translation?.takeIf { it.translated }?.texts
+    val translation = rememberTranslation(listOf(product.title, product.quantityText, product.dealText.orEmpty()), !showOriginal)
+    val shown = translation?.takeIf { it.translated && !showOriginal }?.texts
     if (details) ProductSheet(product) { details = false }
     Row(modifier = modifier.fillMaxWidth().clickable { details = true }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         ProductThumb(product, onOpen = { details = true })

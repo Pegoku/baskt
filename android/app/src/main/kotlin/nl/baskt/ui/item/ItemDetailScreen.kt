@@ -57,6 +57,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import nl.baskt.ui.common.OriginalToggle
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,6 +89,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
     // TextFieldValue so the cursor can be placed at the end when editing starts.
     var titleDraft by remember(item?.text) { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(item?.text ?: "")) }
     var editingTitle by remember { mutableStateOf(false) }
+    var showOriginal by rememberSaveable(itemId) { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
@@ -129,6 +132,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
                 actions = {
                     if (item != null) {
+                        OriginalToggle(showOriginal) { showOriginal = !showOriginal }
                         androidx.compose.foundation.layout.Box {
                             IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
                             androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -187,6 +191,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
                         onUnskip = { viewModel.unskip(item, store.code) },
                         loadHistory = { productId -> viewModel.priceHistory(productId) },
                         busy = "${item.id}:${store.code}" in busyMatches,
+                        showOriginal = showOriginal,
                     )
                 }
             }
@@ -238,6 +243,7 @@ private fun StoreCard(
     onUnskip: () -> Unit = {},
     loadHistory: suspend (String) -> List<nl.baskt.data.PricePoint> = { emptyList() },
     busy: Boolean = false,
+    showOriginal: Boolean = false,
 ) {
     var showOptions by remember(match?.status, match?.updatedAt) { mutableStateOf(match?.status == "PENDING") }
     var searchText by remember { mutableStateOf("") }
@@ -288,7 +294,7 @@ private fun StoreCard(
 
             val chosen = match.chosen
             if (match.status == "CHOSEN" && chosen != null) {
-                ProductRow(chosen) {
+                ProductRow(chosen, showOriginal = showOriginal) {
                     TooltipIconButton(text = "Not what I meant", icon = Icons.Default.ThumbDown, tint = MaterialTheme.colorScheme.onSurfaceVariant, onClick = { onFeedback(chosen.id, false) })
                 }
                 PriceSparkline(chosen.id, loadHistory)
@@ -305,6 +311,7 @@ private fun StoreCard(
                                 product,
                                 match.equivalences[product.id],
                                 selected = product.id == chosen?.id,
+                                showOriginal = showOriginal,
                                 onChoose = { onChoose(product.id) },
                                 onFeedback = { up -> onFeedback(product.id, up) },
                             )
@@ -357,9 +364,9 @@ private fun StoreCard(
 }
 
 @Composable
-private fun OptionRow(product: Product, equivalence: String?, selected: Boolean, onChoose: () -> Unit, onFeedback: (Boolean) -> Unit) {
+private fun OptionRow(product: Product, equivalence: String?, selected: Boolean, showOriginal: Boolean, onChoose: () -> Unit, onFeedback: (Boolean) -> Unit) {
     Column {
-        ProductRow(product) {
+        ProductRow(product, showOriginal = showOriginal) {
             if (selected) {
                 Icon(Icons.Default.Check, contentDescription = "Chosen", tint = MaterialTheme.colorScheme.primary)
             } else {
