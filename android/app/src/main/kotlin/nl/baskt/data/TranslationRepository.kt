@@ -31,6 +31,13 @@ class TranslationRepository(
         fun fieldKey(index: Int) = "translation-field-v1-$language-${index in descriptions}-${texts[index]}"
         fun valid(result: TranslationResponse, source: List<String>) = result.translated && result.language == language &&
             result.texts.size == source.size && result.texts.zip(source).all { (translated, original) -> original.isBlank() || translated.isNotBlank() }
+        // Disk hits must not queue behind slow AI requests for unrelated products.
+        offline.load<TranslationResponse>(legacyKey)?.takeIf { valid(it, texts) }?.let { legacy ->
+            synchronized(offline) { texts.indices.forEach { offline.save(fieldKey(it), legacy.texts[it]) } }
+            return legacy
+        }
+        val cached = texts.mapIndexed { index, text -> if (text.isBlank()) text else offline.load<String>(fieldKey(index)) }
+        if (cached.all { it != null }) return TranslationResponse(cached.map { it!! }, language, true)
         repeat(3) { attempt ->
             val result = slots.withPermit {
                 val legacy = offline.load<TranslationResponse>(legacyKey)?.takeIf { valid(it, texts) }

@@ -48,6 +48,15 @@ are translated into the language selected in Settings (or the device language fo
 The top-corner document icon shows the original; it changes to a translate icon to switch back.
 Hover or long-press for the action tooltip. The same image enlargement is available in recipes.
 Editable source text stays intact; translations are for display and are cached per language.
+The product selection page has the same original/translation toggle in its top bar,
+so you can compare the store names without opening each product. Translation requests
+finish and save even when a row scrolls off screen; temporary failures retry automatically.
+Saved fields are shared between list rows and product details and remain available offline.
+
+In the add-idea suggestions, hold a chip to select ingredients. Folder creation is only
+available for selected chips; the normal Add button and Enter submit your typed idea.
+The selection actions replace the hint in a fixed-height area, and checkmarks keep their
+space, so selecting ingredients does not move or rewrap the suggestions.
 
 Translations require the configured backend AI on first use. Saved translations remain available
 offline; failures explicitly show the original. Older downloaded recipes are refreshed when online

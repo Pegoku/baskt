@@ -54,6 +54,26 @@ class TranslationRepositoryTest {
         } finally { scope.cancel() }
     }
 
+    @Test fun `cached translations bypass occupied network slots`() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val started = kotlinx.coroutines.channels.Channel<Unit>(2)
+            val release = CompletableDeferred<Unit>()
+            val repo = TranslationRepository(scope, disk(), { texts, language, _ ->
+                if (texts.single() != "melk") { started.send(Unit); release.await() }
+                TranslationResponse(texts.map { "translated $it" }, language, true)
+            })
+            repo.translate(listOf("melk"), "es")
+            val first = async { repo.translate(listOf("bloem"), "es") }
+            val second = async { repo.translate(listOf("suiker"), "es") }
+            started.receive(); started.receive()
+            assertEquals("translated melk", withTimeout(2_000) { repo.translate(listOf("melk"), "es") }.texts.single())
+            release.complete(Unit)
+            first.await(); second.await()
+            Unit
+        } finally { scope.cancel() }
+    }
+
     @Test fun `invalid responses are not cached and languages have separate entries`() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
