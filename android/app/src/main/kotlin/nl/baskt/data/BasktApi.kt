@@ -31,6 +31,7 @@ class ApiException(val status: Int, message: String) : Exception(message)
 
 /** Thin client for the baskt backend. Base URL and token come from [SettingsStore] and can change at runtime. */
 class BasktApi(private val settingsProvider: () -> AppSettings, private val operationId: String? = null, sharedClient: HttpClient? = null) {
+    fun forSettings(settings: AppSettings) = BasktApi({ settings }, sharedClient = client)
     fun forOperation(id: String): BasktApi { val settings = settingsProvider(); return BasktApi({ settings }, id, client) }
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; explicitNulls = false }
 

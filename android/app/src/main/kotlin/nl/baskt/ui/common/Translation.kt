@@ -12,31 +12,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import nl.baskt.BasktApp
 import nl.baskt.data.TranslationResponse
-
-private val translationSlots = Semaphore(2)
 
 /** Translation is presentation-only: source values are never changed or written back. */
 @Composable
 fun rememberTranslation(texts: List<String>, enabled: Boolean = true, descriptionIndices: List<Int> = emptyList()): TranslationResponse? {
     val container = (LocalContext.current.applicationContext as BasktApp).container
     val settings by container.settingsStore.settings.collectAsState(initial = container.currentSettings)
+    val online by container.basket.online.collectAsState()
     val language = settings.resolvedLanguage
     var result by remember(texts, descriptionIndices, language, settings.baseUrl, settings.token) { mutableStateOf<TranslationResponse?>(null) }
-    LaunchedEffect(texts, descriptionIndices, language, settings.baseUrl, settings.token, enabled) {
+    LaunchedEffect(texts, descriptionIndices, language, settings.baseUrl, settings.token, enabled, online) {
         if (!enabled) return@LaunchedEffect
-        val key = "translation-v2-$language-${descriptionIndices.joinToString(",")}-${texts.joinToString("\u0000")}"
-        val cached = container.offline.load<TranslationResponse>(key)
-        if (cached != null) { result = cached; return@LaunchedEffect }
         result = try {
-            translationSlots.withPermit {
-                container.offline.load<TranslationResponse>(key) ?: container.api.translate(texts, language, descriptionIndices).also {
-                    if (it.translated && it.texts.size == texts.size) container.offline.save(key, it)
-                }
-            }.takeIf { it.texts.size == texts.size } ?: TranslationResponse(texts, language, false)
+            container.translations(settings).translate(texts, language, descriptionIndices)
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { TranslationResponse(texts, language, false) }
     }

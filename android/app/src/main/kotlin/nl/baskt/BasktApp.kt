@@ -19,7 +19,7 @@ import nl.baskt.data.OfflineStore
 import nl.baskt.data.SettingsStore
 
 /** Manual dependency container: small app, no DI framework needed. */
-class AppContainer(app: Application) {
+class AppContainer(private val app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val settingsStore = SettingsStore(app)
     val speechPlayback = nl.baskt.data.SpeechPlayback(app)
@@ -30,6 +30,15 @@ class AppContainer(app: Application) {
 
     val api = BasktApi(settingsProvider = { currentSettings })
     val offline = OfflineStore(app) { currentSettings.baseUrl.trimEnd('/') + "|" + currentSettings.token }
+    private val translations = mutableMapOf<Pair<String, String>, nl.baskt.data.TranslationRepository>()
+    fun translations(settings: AppSettings): nl.baskt.data.TranslationRepository =
+        translations.getOrPut(settings.baseUrl to settings.token) {
+            val fixedApi = api.forSettings(settings)
+            nl.baskt.data.TranslationRepository(scope,
+                OfflineStore(app) { settings.baseUrl.trimEnd('/') + "|" + settings.token },
+                request = { texts, language, descriptions -> fixedApi.translate(texts, language, descriptions) })
+        }
+
     val basket = BasketRepository(api, scope, offline, onBasketSwitched = { id -> settingsStore.saveCurrentBasket(id); nl.baskt.widget.BasketWidget.refreshAll(app) }, onQueued = { nl.baskt.data.SyncWorker.schedule(app) })
 
     val recipes = nl.baskt.data.RecipeLibrary(api, offline, basket, cacheImages = { urls ->
