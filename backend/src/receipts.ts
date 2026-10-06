@@ -213,6 +213,24 @@ export function purchaseWithLines(id: string): { purchase: PurchaseRow; lines: P
   return { purchase, lines: db().select().from(purchaseLines).where(eq(purchaseLines.purchaseId, id)).orderBy(purchaseLines.sortOrder).all() };
 }
 
+/** Replaces a saved purchase's header and lines (the receipt was corrected by hand). */
+export function updatePurchase(id: string, input: { store: string; purchasedAt: string | null; totalCents: number; lines: Array<ReceiptLine & { productId: string | null }> }): PurchaseRow | null {
+  const database = db();
+  const existing = database.select().from(purchases).where(eq(purchases.id, id)).get();
+  if (!existing) return null;
+  const purchasedAt = input.purchasedAt ? Date.parse(`${input.purchasedAt}T12:00:00`) || existing.purchasedAt : existing.purchasedAt;
+  const row: PurchaseRow = { ...existing, store: input.store, purchasedAt, totalCents: input.totalCents };
+  database.update(purchases).set({ store: row.store, purchasedAt: row.purchasedAt, totalCents: row.totalCents }).where(eq(purchases.id, id)).run();
+  database.delete(purchaseLines).where(eq(purchaseLines.purchaseId, id)).run();
+  for (const [index, line] of input.lines.entries()) {
+    database
+      .insert(purchaseLines)
+      .values({ id: newId(), purchaseId: id, name: line.name, productId: line.productId, quantity: line.quantity, unitPriceCents: line.unitPriceCents, totalPriceCents: line.totalPriceCents, dealText: line.dealText, sortOrder: index })
+      .run();
+  }
+  return row;
+}
+
 export function deletePurchase(id: string) {
   db().delete(purchaseLines).where(eq(purchaseLines.purchaseId, id)).run();
   return db().delete(purchases).where(eq(purchases.id, id)).returning({ id: purchases.id }).all().length > 0;

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { deletePurchase, listPurchases, matchReceiptLine, purchaseWithLines, savePurchase, scanReceiptUploads, spendSummary, type ReceiptLine } from "@/receipts";
+import { deletePurchase, listPurchases, matchReceiptLine, purchaseWithLines, savePurchase, scanReceiptUploads, spendSummary, updatePurchase, type ReceiptLine } from "@/receipts";
 import { hasStore } from "@/stores/registry";
 import { lookupBarcode, productsByIds } from "@/stores/search";
 import { enabledStoreCodes } from "@/db/settings";
@@ -88,6 +88,24 @@ purchasesRoute.get("/summary", (c) => c.json(spendSummary(Math.min(Number(c.req.
 purchasesRoute.get("/:id", (c) => {
   const found = purchaseWithLines(c.req.param("id"));
   if (!found) return c.json({ error: { code: "NOT_FOUND", message: "purchase not found" } }, 404);
+  const products = productsByIds(found.lines.map((line) => line.productId).filter((id): id is string => Boolean(id)));
+  return c.json({ ...found, products: Object.fromEntries(products.map((product) => [product.id, product])) });
+});
+
+/** The corrected receipt: same shape as saving, every line replaced. */
+purchasesRoute.put("/:id", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { store?: string; purchasedAt?: string | null; totalCents?: number | null; lines?: Array<Partial<ReceiptLine> & { productId?: string | null }> };
+  if (!body.store?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "store is required" } }, 400);
+  const lines = (body.lines ?? []).filter((line) => typeof line.name === "string" && typeof line.totalPriceCents === "number") as Array<ReceiptLine & { productId?: string | null }>;
+  const total = typeof body.totalCents === "number" ? body.totalCents : lines.reduce((sum, line) => sum + line.totalPriceCents, 0);
+  const updated = updatePurchase(c.req.param("id"), {
+    store: body.store.trim().toUpperCase(),
+    purchasedAt: body.purchasedAt ?? null,
+    totalCents: total,
+    lines: lines.map((line) => ({ ...line, quantity: line.quantity ?? 1, unitPriceCents: line.unitPriceCents ?? null, dealText: line.dealText ?? null, productId: line.productId ?? null })),
+  });
+  if (!updated) return c.json({ error: { code: "NOT_FOUND", message: "purchase not found" } }, 404);
+  const found = purchaseWithLines(updated.id)!;
   const products = productsByIds(found.lines.map((line) => line.productId).filter((id): id is string => Boolean(id)));
   return c.json({ ...found, products: Object.fromEntries(products.map((product) => [product.id, product])) });
 });

@@ -360,6 +360,16 @@ describe("api", () => {
     expect(summary.totalCents).toBe(457);
     expect(summary.months[0].perStore.AH).toBe(457);
     expect(summary.topProducts[0].name).toBe("AH HALFVOLLE MELK");
+    const corrected = await api(`/purchases/${saved.purchase.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ store: "AH", purchasedAt: "2026-09-02", lines: [{ name: "AH HALFVOLLE MELK", quantity: 1, totalPriceCents: 129, productId: "AH:1" }, { name: "BROOD", quantity: 1, totalPriceCents: 199 }, { name: "KAAS", quantity: 1, totalPriceCents: 450 }] }),
+    });
+    expect(corrected.status).toBe(200);
+    const edited = (await corrected.json()) as any;
+    expect(edited.purchase.totalCents).toBe(778);
+    expect(edited.lines.map((line: any) => line.name)).toEqual(["AH HALFVOLLE MELK", "BROOD", "KAAS"]);
+    expect(new Date(edited.purchase.purchasedAt).getDate()).toBe(2);
+    expect((await api(`/purchases/missing`, { method: "PUT", body: JSON.stringify({ store: "AH", lines: [] }) })).status).toBe(404);
     expect((await api(`/purchases/${saved.purchase.id}`, { method: "DELETE" })).status).toBe(204);
   });
 
