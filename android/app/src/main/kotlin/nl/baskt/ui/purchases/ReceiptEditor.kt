@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Link
@@ -155,6 +156,10 @@ fun ReceiptEditor(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             line.dealText?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            if (line.itemId != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Icon(Icons.Default.Checklist, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                                Text("On your list" + (line.itemText?.let { ": $it" } ?: "") + " · ticked off on save", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                         Text(line.totalPriceCents.euros(), fontWeight = FontWeight.SemiBold)
                         IconButton(onClick = { removing = index }) { Icon(Icons.Default.Delete, contentDescription = "Remove ${line.name}") }
@@ -213,7 +218,10 @@ private fun LineDialog(viewModel: AppViewModel, line: ReceiptLine, store: String
     var price by remember { mutableStateOf(if (line.name.isEmpty()) "" else centsText(line.totalPriceCents)) }
     var deal by remember { mutableStateOf(line.dealText ?: "") }
     var product by remember { mutableStateOf(line.product) }
+    var itemId by remember { mutableStateOf(line.itemId) }
+    var itemText by remember { mutableStateOf(line.itemText) }
     var query by remember { mutableStateOf("") }
+    val listItems = remember(query, name, store) { viewModel.openItemsForReceipt(store, query.ifBlank { name }) }
     var results by remember { mutableStateOf<List<Product>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
     var scanning by remember { mutableStateOf(false) }
@@ -245,6 +253,34 @@ private fun LineDialog(viewModel: AppViewModel, line: ReceiptLine, store: String
                 }
                 OutlinedTextField(value = deal, onValueChange = { deal = it }, label = { Text("Bonus / discount") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 HorizontalDivider()
+                if (itemId != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.Checklist, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text("Pays for “${itemText ?: "an item"}” on your list; it leaves the list when saved.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { itemId = null; itemText = null }) { Icon(Icons.Default.LinkOff, contentDescription = "Keep the item on the list") }
+                    }
+                } else if (listItems.isNotEmpty()) {
+                    Text("On your list", style = MaterialTheme.typography.labelLarge)
+                    for ((item, itemProduct) in listItems) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                itemId = item.id; itemText = item.text
+                                if (product == null && itemProduct != null) product = itemProduct
+                                if (name.isBlank()) name = itemProduct?.title ?: item.text
+                            }.padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            LineThumb(itemProduct, size = 36)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text((if (item.quantity > 1) "${item.quantity}× " else "") + item.text, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                itemProduct?.let { Text(it.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            }
+                            Icon(Icons.Default.Checklist, contentDescription = "This line pays for it", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    HorizontalDivider()
+                }
                 val linked = product
                 if (linked != null) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -299,6 +335,8 @@ private fun LineDialog(viewModel: AppViewModel, line: ReceiptLine, store: String
                         dealText = deal.trim().ifBlank { null },
                         productId = product?.id,
                         product = product,
+                        itemId = itemId,
+                        itemText = itemText,
                     ))
                 },
             ) { Text("Done") }

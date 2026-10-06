@@ -109,6 +109,10 @@ What the model read is open for correction before saving, and a saved purchase c
 later from its sheet: tap a line to fix the name, quantity, price or bonus text, add lines it missed,
 remove ones it invented, and link each line to the real product by searching the store or scanning
 the product's barcode. Linked lines show the product picture here and under previous orders.
+Lines are matched against the open list first: a line that pays for an item on the list takes that
+item's product, says so in the editor, and ticks the item off when the purchase is saved, just like
+an in-store tick. Only lines nothing on the list explains are searched in the store catalogue. You
+can also pick the list item by hand in the line dialog, or unlink it to keep the item on the list.
 
 A digital PDF is read from its text with the regular chat model, so it needs no vision provider. A
 PDF that is only a picture (a scanned paper receipt) is rendered page by page with `pdftoppm` from

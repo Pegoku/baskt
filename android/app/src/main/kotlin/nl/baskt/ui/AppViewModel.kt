@@ -432,8 +432,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         val total = scan.totalCents ?: scan.lines.sumOf { it.totalPriceCents }
         val purchase = Purchase(id, store, at, total, lineCount = scan.lines.size)
         val detail = PurchaseDetail(purchase, scan.lines.mapIndexed { index, line -> nl.baskt.data.PurchaseLine(
-            "$id-$index", id, line.name, line.productId, line.quantity, line.unitPriceCents, line.totalPriceCents, line.dealText, index,
-        ) })
+            "$id-$index", id, line.name, line.productId, line.quantity, line.unitPriceCents, line.totalPriceCents, line.dealText, index, itemId = line.itemId,
+        ) }, scan.lines.mapNotNull { it.product }.associateBy { it.id })
         basket.queued(nl.baskt.data.PendingOp(type = "purchaseSave", itemId = id, store = store, receipt = scan), {
             _purchases.update { listOf(purchase) + it }
             container.offline.save("purchases", _purchases.value)
@@ -459,7 +459,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         val purchase = current.purchase.copy(store = store, purchasedAt = at, totalCents = total, lineCount = scan.lines.size)
         val detail = PurchaseDetail(
             purchase,
-            scan.lines.mapIndexed { index, line -> nl.baskt.data.PurchaseLine("$id-$index", id, line.name, line.productId, line.quantity, line.unitPriceCents, line.totalPriceCents, line.dealText, index) },
+            scan.lines.mapIndexed { index, line -> nl.baskt.data.PurchaseLine("$id-$index", id, line.name, line.productId, line.quantity, line.unitPriceCents, line.totalPriceCents, line.dealText, index, itemId = line.itemId) },
             scan.lines.mapNotNull { it.product }.associateBy { it.id },
         )
         basket.queued(nl.baskt.data.PendingOp(type = "purchaseUpdate", itemId = id, store = store, receipt = scan), {
@@ -468,6 +468,16 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
             container.offline.save("purchase-$id", detail)
             _purchaseDetail.value = detail
         })
+    }
+
+    /** Open list items (this basket) with what they would be bought as at the store, for linking a receipt line by hand. */
+    fun openItemsForReceipt(store: String, query: String): List<Pair<BasketItem, Product?>> {
+        val words = query.lowercase().split(Regex("\\s+")).filter { it.length > 2 }
+        return basket.items.value
+            .filter { !it.isGroup && it.isOpen }
+            .map { it to (it.match(store)?.effective ?: it.anyProduct) }
+            .filter { (item, product) -> words.isEmpty() || words.any { word -> item.text.lowercase().contains(word) || product?.title?.lowercase()?.contains(word) == true } }
+            .take(8)
     }
 
     /** Products at a store for linking a receipt line by name. */

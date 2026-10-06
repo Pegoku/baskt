@@ -503,6 +503,9 @@ data class ReceiptLine(
     val dealText: String? = null,
     val productId: String? = null,
     val product: Product? = null,
+    /** The open list item this line pays for: it leaves the list once the purchase is saved. */
+    val itemId: String? = null,
+    val itemText: String? = null,
 )
 
 /** A receipt file on its way to the server: a photo, or a PDF (digital receipt or a scanned one). */

@@ -214,7 +214,7 @@ private fun PurchaseDetail.asScan(): ReceiptScan = ReceiptScan(
     store = purchase.store,
     purchasedAt = java.time.Instant.ofEpochMilli(purchase.purchasedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString(),
     totalCents = purchase.totalCents,
-    lines = lines.map { ReceiptLine(it.name, it.quantity, it.unitPriceCents, it.totalPriceCents, it.dealText, it.productId, it.productId?.let { id -> products[id] }) },
+    lines = lines.map { ReceiptLine(it.name, it.quantity, it.unitPriceCents, it.totalPriceCents, it.dealText, it.productId, it.productId?.let { id -> products[id] }, itemId = it.itemId) },
 )
 
 /** Reads shared or picked receipt files into memory with their real type, so PDFs reach the server as PDFs. */
