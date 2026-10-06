@@ -1,7 +1,7 @@
 import { mapAhDetails } from "@/stores/ah";
 import { formatDescription, preservesDescription } from "@/matching/format-description";
 import { describe, expect, test } from "bun:test";
-import { completeTranslation, translateContent } from "@/matching/translate";
+import { completeTranslation, translateContent, untouchedName } from "@/matching/translate";
 import { parseProductDetails, plainText } from "@/stores/details";
 import { localizeRecipe } from "@/matching/localize";
 
@@ -24,6 +24,11 @@ describe("source-preserving content", () => {
     expect(completeTranslation(["Milk", ""], ["Melk", "1 litre"])).toBe(false);
     expect(completeTranslation(["Milk", ""], ["Melk", ""])).toBe(true);
     expect(completeTranslation(["Milk", 4], ["Melk", "1 litre"])).toBe(false);
+  });
+  test("flags a name the model handed back untranslated", () => {
+    expect(untouchedName(["AH Terra Zwarte bonen", "200 g", ""], ["AH Terra Zwarte bonen", "200 g", ""])).toBe(true);
+    expect(untouchedName(["AH Terra Frijoles negros", "200 g"], ["AH Terra Zwarte bonen", "200 g"])).toBe(false);
+    expect(untouchedName(["200 g"], ["200 g"])).toBe(false);
   });
   test("unavailable AI preserves source and reports no translation", async () => {
     expect(await translateContent(["250 g bloem"], "en")).toEqual({ texts: ["250 g bloem"], language: "en", translated: false });
