@@ -168,7 +168,7 @@ class BasketRepository(
                         "basketRename" -> api.renameBasket(real(op.itemId)!!, op.text!!, op.emoji)
                         "basketDelete" -> api.deleteBasket(real(op.itemId)!!)
                         "groupItems" -> { val created = api.groupFromItems(op.text!!, op.items!!.map { real(it)!! }); idMap[op.itemId!!] = created.group.id }
-                        "productAdd" -> { val created = api.addFromProduct(op.productId!!, real(op.basketId)!!, real(op.parentId)); idMap[op.itemId!!] = created.id }
+                        "productAdd" -> { val created = api.addFromProduct(op.productId!!, real(op.basketId)!!, real(op.parentId), op.quantity ?: 1); idMap[op.itemId!!] = created.id }
                         "barcodeAdd" -> {
                             // Scanned without a connection: look the code up now, then add the product (or the code itself when no store knows it).
                             val gtin = op.text!!
@@ -857,9 +857,9 @@ class BasketRepository(
         queued(PendingOp(type = "barcodeAdd", itemId = local.id, text = gtin, quantity = 1, basketId = _currentBasketId.value, parentId = parentId, scanLabel = label), { _items.update { it + local } })
     }
 
-    suspend fun addFromProduct(product: Product, parentId: String? = null) {
-        val local = localItem(product.title, 1, parentId).copy(matches = listOf(StoreMatch(product.store, "CHOSEN", chosenBy = "USER", chosen = product)))
-        queued(PendingOp(type = "productAdd", itemId = local.id, productId = product.id, basketId = _currentBasketId.value, parentId = parentId), { _items.update { it + local } })
+    suspend fun addFromProduct(product: Product, parentId: String? = null, quantity: Int = 1) {
+        val local = localItem(product.title, quantity, parentId).copy(matches = listOf(StoreMatch(product.store, "CHOSEN", chosenBy = "USER", chosen = product)))
+        queued(PendingOp(type = "productAdd", itemId = local.id, productId = product.id, quantity = quantity, basketId = _currentBasketId.value, parentId = parentId), { _items.update { it + local } })
     }
 
     suspend fun setEnabledStores(codes: List<String>) = queued(PendingOp(type = "stores", items = codes), {

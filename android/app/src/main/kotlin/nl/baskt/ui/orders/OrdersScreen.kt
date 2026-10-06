@@ -11,9 +11,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
@@ -67,7 +69,8 @@ private fun dayOf(at: Long): LocalDate = Instant.ofEpochMilli(at).atZone(ZoneId.
 
 /**
  * Previous orders, one day at a time: what was ticked off or scanned in the store (and scanned receipts), grouped
- * by store. The arrows and the calendar only land on days something was bought.
+ * by store. The arrows and the calendar only land on days something was bought. Every line can go straight
+ * back on the list, one at a time or a whole purchase at once.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -154,7 +157,7 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             } else {
                 LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     for (entry in dayPurchases) {
-                        item(entry.purchase.id) { PurchaseCard(entry, products, stores) }
+                        item(entry.purchase.id) { PurchaseCard(entry, products, stores, onAdd = { lines -> viewModel.addPurchaseLines(lines, products) }) }
                     }
                     if (dayScans.isNotEmpty()) {
                         item("pending") {
@@ -180,7 +183,7 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun PurchaseCard(entry: PurchaseWithLines, products: Map<String, nl.baskt.data.Product>, stores: List<nl.baskt.data.StoreInfo>) {
+private fun PurchaseCard(entry: PurchaseWithLines, products: Map<String, nl.baskt.data.Product>, stores: List<nl.baskt.data.StoreInfo>, onAdd: (List<PurchaseLine>) -> Unit) {
     val purchase = entry.purchase
     val time = Instant.ofEpochMilli(purchase.purchasedAt).atZone(ZoneId.systemDefault()).toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))
     Card {
@@ -197,13 +200,18 @@ private fun PurchaseCard(entry: PurchaseWithLines, products: Map<String, nl.bask
                 Text(purchase.totalCents.euros(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
             HorizontalDivider()
-            for (line in entry.lines) LineRow(line, products[line.productId])
+            for (line in entry.lines) LineRow(line, products[line.productId], onAdd = { onAdd(listOf(line)) })
+            if (entry.lines.size > 1) TextButton(onClick = { onAdd(entry.lines) }, modifier = Modifier.align(Alignment.End)) {
+                Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Add all to basket")
+            }
         }
     }
 }
 
 @Composable
-private fun LineRow(line: PurchaseLine, product: nl.baskt.data.Product?) {
+private fun LineRow(line: PurchaseLine, product: nl.baskt.data.Product?, onAdd: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         if (product != null) ProductThumb(product, size = 40)
         else Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -214,5 +222,6 @@ private fun LineRow(line: PurchaseLine, product: nl.baskt.data.Product?) {
             if (detail.isNotBlank()) Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text(if (line.totalPriceCents > 0) line.totalPriceCents.euros() else "—", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        IconButton(onClick = onAdd) { Icon(Icons.Default.AddShoppingCart, contentDescription = "Add ${line.name} to the basket") }
     }
 }

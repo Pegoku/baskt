@@ -31,6 +31,7 @@ import nl.baskt.data.DealCard
 import nl.baskt.data.Deal
 import nl.baskt.data.DealsResponse
 import nl.baskt.data.Product
+import nl.baskt.data.PurchaseLine
 import nl.baskt.data.ProductSearchResponse
 import nl.baskt.data.PriceChangesResponse
 import nl.baskt.data.Purchase
@@ -134,6 +135,19 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun addFromProduct(product: Product) = viewModelScope.launch { basket.addFromProduct(product) }
+
+    /**
+     * Puts a line from a previous order back on the list: the same product when the line still knows it, otherwise
+     * just the name, so it gets matched again. Weighed lines (1.5 kg) come back as one entry.
+     */
+    fun addPurchaseLines(lines: List<PurchaseLine>, products: Map<String, Product>) = viewModelScope.launch {
+        for (line in lines) {
+            val quantity = if (line.quantity % 1.0 == 0.0) line.quantity.toInt().coerceAtLeast(1) else 1
+            val product = line.productId?.let { products[it] }
+            if (product != null) basket.addFromProduct(product, quantity = quantity) else basket.add(line.name, quantity)
+        }
+        notify(if (lines.size == 1) "Added ${lines.single().name} to the basket" else "Added ${lines.size} items to the basket")
+    }
 
     private val _recipeResults = MutableStateFlow<List<RecipeSummary>>(emptyList())
     val recipeResults: StateFlow<List<RecipeSummary>> = _recipeResults
