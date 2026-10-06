@@ -5,6 +5,8 @@ RUN bun install --frozen-lockfile --production
 
 FROM oven/bun:1.4-alpine
 WORKDIR /app
+# poppler renders scanned PDF receipts to images; digital PDFs are read from their text.
+RUN apk add --no-cache poppler-utils
 ENV NODE_ENV=production DATABASE_PATH=/data/baskt.db PORT=3000
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json tsconfig.json ./

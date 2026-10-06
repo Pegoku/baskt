@@ -1,4 +1,8 @@
 import { desc, eq } from "drizzle-orm";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { chatJson } from "@/ai/client";
 import { db, newId, now } from "@/db";
 import { purchaseLines, purchases, type ProductRow, type PurchaseLineRow, type PurchaseRow } from "@/db/schema";
 import { attemptOrder, cooldownFor, noteCall, noteFailure, noteUsage } from "@/ai/pool";
@@ -9,10 +13,105 @@ import { searchStore } from "@/stores/search";
 export type ReceiptLine = { name: string; quantity: number; unitPriceCents: number | null; totalPriceCents: number; dealText: string | null };
 export type ReceiptScan = { store: string | null; purchasedAt: string | null; totalCents: number | null; lines: ReceiptLine[]; notes: string | null };
 
-const SYSTEM = `You read photos of Dutch supermarket receipts (Albert Heijn, Jumbo, Lidl, ...). Return ONLY JSON:
+const SCHEMA = `Return ONLY JSON:
 {"store": "AH"|"JUMBO"|"LIDL"|other short store code or null, "purchasedAt": "YYYY-MM-DD" or null, "totalCents": integer total paid in cents or null,
  "lines": [{"name": product text exactly as printed, "quantity": number (default 1), "unitPriceCents": integer or null, "totalPriceCents": integer, "dealText": bonus/discount text or null}], "notes": null or a short remark}.
 Include every product line, also from continued pages; skip totals, deposits (statiegeld) and payment lines; negative discount lines become dealText on the product above.`;
+
+const SYSTEM = `You read photos of Dutch supermarket receipts (Albert Heijn, Jumbo, Lidl, ...). ${SCHEMA}`;
+
+const TEXT_SYSTEM = `You read the text extracted from Dutch supermarket receipts (Albert Heijn, Jumbo, Lidl, ...), including digital receipts (kassabon) saved as PDF. Column order and spacing may be scrambled by the extraction; reconstruct each product line from name, quantity and price. ${SCHEMA}`;
+
+/** A receipt as uploaded: a photo or a PDF (digital receipt from the store app, or a scanned paper one). */
+export type ReceiptUpload = { type: string; bytes: Uint8Array };
+
+function parseScan(content: string): ReceiptScan {
+  const raw = JSON.parse(content) as Partial<ReceiptScan> & { lines?: Array<Partial<ReceiptLine>> };
+  const lines = (raw.lines ?? [])
+    .filter((line) => typeof line.name === "string" && line.name.trim() && typeof line.totalPriceCents === "number")
+    .map((line) => ({
+      name: line.name!.trim(),
+      quantity: typeof line.quantity === "number" && line.quantity > 0 ? line.quantity : 1,
+      unitPriceCents: typeof line.unitPriceCents === "number" ? Math.round(line.unitPriceCents) : null,
+      totalPriceCents: Math.round(line.totalPriceCents!),
+      dealText: typeof line.dealText === "string" && line.dealText.trim() ? line.dealText.trim() : null,
+    }));
+  const store = typeof raw.store === "string" && hasStore(raw.store.toUpperCase()) ? raw.store.toUpperCase() : typeof raw.store === "string" ? raw.store.toUpperCase() : null;
+  return {
+    store,
+    purchasedAt: typeof raw.purchasedAt === "string" ? raw.purchasedAt : null,
+    totalCents: typeof raw.totalCents === "number" ? Math.round(raw.totalCents) : lines.reduce((sum, line) => sum + line.totalPriceCents, 0),
+    lines,
+    notes: typeof raw.notes === "string" ? raw.notes : null,
+  };
+}
+
+/** Text of a PDF with real text in it (a digital receipt); empty for scans that are just pictures. */
+export async function pdfText(bytes: Uint8Array): Promise<string> {
+  const { extractText, getDocumentProxy } = await import("unpdf");
+  // pdf.js takes the buffer over (it is detached afterwards), so it gets its own copy.
+  const pdf = await getDocumentProxy(new Uint8Array(bytes));
+  const { text } = await extractText(pdf, { mergePages: true });
+  return text.replace(/[ \t]+\n/g, "\n").trim();
+}
+
+/** Renders every page of a PDF to a PNG data URL with poppler's pdftoppm (scanned receipts saved as PDF). */
+export async function pdfPages(bytes: Uint8Array, maxPages = 6): Promise<string[]> {
+  const dir = await mkdtemp(join(tmpdir(), "baskt-receipt-"));
+  try {
+    const source = join(dir, "receipt.pdf");
+    await Bun.write(source, bytes);
+    const proc = Bun.spawn(["pdftoppm", "-r", "150", "-png", "-f", "1", "-l", String(maxPages), source, join(dir, "page")], { stdout: "ignore", stderr: "pipe" });
+    const code = await proc.exited;
+    if (code !== 0) throw new Error(`pdftoppm failed: ${(await new Response(proc.stderr).text()).trim().slice(0, 200)}`);
+    const pages = (await readdir(dir)).filter((name) => name.startsWith("page") && name.endsWith(".png")).sort();
+    return Promise.all(pages.map(async (name) => `data:image/png;base64,${Buffer.from(await Bun.file(join(dir, name)).arrayBuffer()).toString("base64")}`));
+  } catch (error) {
+    if (error instanceof Error && /ENOENT|not found|executable/i.test(error.message)) throw new Error("This PDF has no text and the server cannot render it (pdftoppm is not installed)");
+    throw error;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Reads uploaded receipts: photos go to the vision model; a PDF goes by its text when it has any (cheaper, and it
+ * works without a vision provider), otherwise its pages are rendered and read like photos.
+ */
+export async function scanReceiptUploads(uploads: ReceiptUpload[]): Promise<ReceiptScan> {
+  const images: string[] = [];
+  const texts: string[] = [];
+  for (const upload of uploads) {
+    if (upload.type === "application/pdf" || (upload.bytes.length > 4 && upload.bytes[0] === 0x25 && upload.bytes[1] === 0x50 && upload.bytes[2] === 0x44 && upload.bytes[3] === 0x46)) {
+      const text = await pdfText(upload.bytes).catch(() => "");
+      if (text.length >= 40) texts.push(text);
+      else images.push(...(await pdfPages(upload.bytes)));
+    } else {
+      images.push(`data:${upload.type || "image/jpeg"};base64,${Buffer.from(upload.bytes).toString("base64")}`);
+    }
+  }
+  if (images.length) {
+    const scan = await scanReceipt(images);
+    if (!texts.length) return scan;
+    const fromText = await scanReceiptText(texts);
+    return { ...fromText, lines: [...fromText.lines, ...scan.lines], totalCents: (fromText.totalCents ?? 0) + (scan.totalCents ?? 0) };
+  }
+  return scanReceiptText(texts);
+}
+
+/** Parses receipt text (from a digital PDF) with the text model. */
+export async function scanReceiptText(texts: string[]): Promise<ReceiptScan> {
+  const body = texts.map((text, index) => (texts.length > 1 ? `--- Receipt ${index + 1} ---\n${text}` : text)).join("\n\n").slice(0, 24_000);
+  const raw = await chatJson<Record<string, unknown>>(
+    [
+      { role: "system", content: TEXT_SYSTEM },
+      { role: "user", content: `Read ${texts.length > 1 ? "these receipts as one purchase" : "this receipt"}:\n\n${body}` },
+    ],
+    { maxTokens: 6000, retries: 3 },
+  );
+  if (!raw) throw new Error("AI is not configured or did not answer");
+  return parseScan(JSON.stringify(raw));
+}
 
 /** Sends receipt images (data URLs) to a vision model and parses the lines; tries the vision pool in order. */
 export async function scanReceipt(images: string[]): Promise<ReceiptScan> {
@@ -56,24 +155,7 @@ export async function scanReceipt(images: string[]): Promise<ReceiptScan> {
     }
   }
   if (!content) throw new Error(lastError);
-  const raw = JSON.parse(content) as Partial<ReceiptScan> & { lines?: Array<Partial<ReceiptLine>> };
-  const lines = (raw.lines ?? [])
-    .filter((line) => typeof line.name === "string" && line.name.trim() && typeof line.totalPriceCents === "number")
-    .map((line) => ({
-      name: line.name!.trim(),
-      quantity: typeof line.quantity === "number" && line.quantity > 0 ? line.quantity : 1,
-      unitPriceCents: typeof line.unitPriceCents === "number" ? Math.round(line.unitPriceCents) : null,
-      totalPriceCents: Math.round(line.totalPriceCents!),
-      dealText: typeof line.dealText === "string" && line.dealText.trim() ? line.dealText.trim() : null,
-    }));
-  const store = typeof raw.store === "string" && hasStore(raw.store.toUpperCase()) ? raw.store.toUpperCase() : typeof raw.store === "string" ? raw.store.toUpperCase() : null;
-  return {
-    store,
-    purchasedAt: typeof raw.purchasedAt === "string" ? raw.purchasedAt : null,
-    totalCents: typeof raw.totalCents === "number" ? Math.round(raw.totalCents) : lines.reduce((sum, line) => sum + line.totalPriceCents, 0),
-    lines,
-    notes: typeof raw.notes === "string" ? raw.notes : null,
-  };
+  return parseScan(content);
 }
 
 /** Best-effort match of a receipt line to a known product at that store (searches the store when needed). */

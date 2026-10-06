@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { deletePurchase, listPurchases, matchReceiptLine, purchaseWithLines, savePurchase, scanReceipt, spendSummary, type ReceiptLine } from "@/receipts";
+import { deletePurchase, listPurchases, matchReceiptLine, purchaseWithLines, savePurchase, scanReceiptUploads, spendSummary, type ReceiptLine } from "@/receipts";
 import { hasStore } from "@/stores/registry";
 import { lookupBarcode, productsByIds } from "@/stores/search";
 import { enabledStoreCodes } from "@/db/settings";
@@ -8,17 +8,15 @@ import { addStock } from "@/stock";
 
 export const purchasesRoute = new Hono();
 
-/** Multipart upload (`files`, optional `store`) → parsed receipt with product matches; nothing is saved yet. */
+/** Multipart upload (`files`: photos or PDFs, optional `store`) → parsed receipt with product matches; nothing is saved yet. */
 purchasesRoute.post("/scan", async (c) => {
   const form = await c.req.formData().catch(() => null);
   if (!form) return c.json({ error: { code: "BAD_REQUEST", message: "multipart form expected" } }, 400);
   const files = form.getAll("files").filter((entry): entry is File => entry instanceof File);
-  if (!files.length) return c.json({ error: { code: "BAD_REQUEST", message: "at least one image is required" } }, 400);
-  const images = await Promise.all(
-    files.map(async (file) => `data:${file.type || "image/jpeg"};base64,${Buffer.from(await file.arrayBuffer()).toString("base64")}`),
-  );
+  if (!files.length) return c.json({ error: { code: "BAD_REQUEST", message: "at least one image or PDF is required" } }, 400);
+  const uploads = await Promise.all(files.map(async (file) => ({ type: file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg"), bytes: new Uint8Array(await file.arrayBuffer()) })));
   try {
-    const scan = await scanReceipt(images);
+    const scan = await scanReceiptUploads(uploads);
     const hint = form.get("store");
     const store = typeof hint === "string" && hasStore(hint) ? hint : scan.store && hasStore(scan.store) ? scan.store : null;
     const lines = await Promise.all(
