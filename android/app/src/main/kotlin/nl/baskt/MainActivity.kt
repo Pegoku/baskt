@@ -3,6 +3,7 @@ package nl.baskt
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.ReportDrawnWhen
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -56,6 +57,8 @@ class MainActivity : ComponentActivity() {
             val viewModel: AppViewModel = viewModel { AppViewModel(container) }
             androidx.compose.runtime.LaunchedEffect(viewModel) { viewModelRef = viewModel; handleIntent(intent) }
             val settings by viewModel.settings.collectAsState()
+            // Count the restored screen, rather than the empty frame before settings arrive.
+            ReportDrawnWhen { settings != null }
             BasktTheme {
                 if (settings != null) {
                     BasktNavigation(viewModel, startAtSettings = settings!!.token.isBlank() && settings!!.baseUrl == SettingsStore.DEFAULT_BASE_URL)
