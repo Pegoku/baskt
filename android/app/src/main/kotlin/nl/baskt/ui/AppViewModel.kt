@@ -37,6 +37,7 @@ import nl.baskt.data.PriceChangesResponse
 import nl.baskt.data.Purchase
 import nl.baskt.data.PurchaseDetail
 import nl.baskt.data.ReceiptScan
+import nl.baskt.data.ReceiptUpload
 import nl.baskt.data.SpendSummary
 import nl.baskt.data.PricePoint
 import nl.baskt.data.GenerateResponse
@@ -408,11 +409,15 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     private val _purchaseDetail = MutableStateFlow<PurchaseDetail?>(null)
     val purchaseDetail: StateFlow<PurchaseDetail?> = _purchaseDetail
 
-    fun scanReceipt(images: List<Pair<String, ByteArray>>, store: String?) = viewModelScope.launch {
+    /** Set when a receipt arrives through the share sheet: the receipts screen should come up to show the result. */
+    val openReceiptsRequest = MutableStateFlow(false)
+
+    fun scanReceipt(files: List<ReceiptUpload>, store: String?) = viewModelScope.launch {
+        if (files.isEmpty()) return@launch
         if (!online.value) { _scanError.value = "Receipt recognition needs a connection"; return@launch }
         _scanning.value = true
         _scanError.value = null
-        runCatching { container.api.scanReceipt(images, store) }
+        runCatching { container.api.scanReceipt(files, store) }
             .onSuccess { _scan.value = it }
             .onFailure { _scanError.value = it.message ?: "Scan failed" }
         _scanning.value = false

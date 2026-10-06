@@ -362,17 +362,17 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
             auth(); contentType(ContentType.Application.Json); setBody(ConfirmRequest(items, basketId))
         }.expect<ItemsResponse>().items
 
-    suspend fun scanReceipt(images: List<Pair<String, ByteArray>>, store: String?): ReceiptScan =
+    suspend fun scanReceipt(files: List<ReceiptUpload>, store: String?): ReceiptScan =
         client.post(url("/purchases/scan")) {
             auth()
             setBody(
                 io.ktor.client.request.forms.MultiPartFormDataContent(
                     io.ktor.client.request.forms.formData {
                         if (store != null) append("store", store)
-                        for ((name, bytes) in images) {
-                            append("files", bytes, io.ktor.http.Headers.build {
-                                append(io.ktor.http.HttpHeaders.ContentType, "image/jpeg")
-                                append(io.ktor.http.HttpHeaders.ContentDisposition, "filename=\"$name\"")
+                        for (file in files) {
+                            append("files", file.bytes, io.ktor.http.Headers.build {
+                                append(io.ktor.http.HttpHeaders.ContentType, file.type)
+                                append(io.ktor.http.HttpHeaders.ContentDisposition, "filename=\"${file.name}\"")
                             })
                         }
                     },

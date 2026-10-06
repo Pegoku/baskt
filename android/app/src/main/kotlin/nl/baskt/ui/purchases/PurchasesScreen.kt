@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -48,6 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import nl.baskt.data.ReceiptScan
+import nl.baskt.data.ReceiptUpload
 import nl.baskt.data.euros
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.StoreBadge
@@ -69,12 +71,10 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val dateFormat = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
     LaunchedEffect(Unit) { viewModel.loadPurchases() }
 
-    fun upload(uris: List<Uri>) {
-        if (uris.isEmpty()) return
-        val images = uris.mapIndexedNotNull { index, uri -> context.contentResolver.openInputStream(uri)?.use { "receipt-$index.jpg" to it.readBytes() } }
-        viewModel.scanReceipt(images, null)
-    }
+    fun upload(uris: List<Uri>) = viewModel.scanReceipt(readReceiptUris(context, uris), null)
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(5)) { uris: List<Uri> -> upload(uris) }
+    // Any file: digital receipts the store app saves as PDF, downloads, email attachments.
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris: List<Uri> -> upload(uris) }
     // ML Kit document scanner: camera with automatic edge detection, crop, filters and multi-page capture.
     val documentScanner = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
         val scanned = com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult.fromActivityResultIntent(result.data)
@@ -102,6 +102,9 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         },
         floatingActionButton = {
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                androidx.compose.material3.SmallFloatingActionButton(onClick = { filePicker.launch(arrayOf("application/pdf", "image/*")) }) {
+                    Icon(Icons.Default.UploadFile, contentDescription = "From a PDF or file")
+                }
                 androidx.compose.material3.SmallFloatingActionButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
                     Icon(Icons.Default.Image, contentDescription = "From photos")
                 }
@@ -144,7 +147,7 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             }
             if (purchases.isEmpty() && !scanning) {
                 item("empty") {
-                    Text("No receipts yet. Scan a receipt photo and baskt reads the lines, matches them to products and keeps your spending per store.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))
+                    Text("No receipts yet. Scan a receipt photo, pick a PDF, or share one from another app: baskt reads the lines, matches them to products and keeps your spending per store.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))
                 }
             }
             items(purchases, key = { it.id }) { purchase ->
@@ -227,4 +230,12 @@ private fun ReviewScanSheet(scan: ReceiptScan, storeCodes: List<String>, onChang
             dismissButton = { TextButton(onClick = { editing = null }) { Text("Keep") } },
         )
     }
+}
+
+/** Reads shared or picked receipt files into memory with their real type, so PDFs reach the server as PDFs. */
+fun readReceiptUris(context: android.content.Context, uris: List<Uri>): List<ReceiptUpload> = uris.mapIndexedNotNull { index, uri ->
+    val type = context.contentResolver.getType(uri)
+        ?: if (uri.toString().lowercase().endsWith(".pdf")) "application/pdf" else "image/jpeg"
+    val extension = if (type == "application/pdf") "pdf" else "jpg"
+    runCatching { context.contentResolver.openInputStream(uri)?.use { ReceiptUpload("receipt-$index.$extension", type, it.readBytes()) } }.getOrNull()
 }

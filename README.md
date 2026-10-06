@@ -96,6 +96,19 @@ closes the gap and the item leaves this trip and is crossed out on the main list
 offers **Undo**, and the archive button in the top bar shows how many are archived and lists them
 with **Restore**.
 
+## Receipts
+
+**Receipts & spending** reads a receipt and keeps the purchase per store. Three ways in: the camera
+(document scanner with edge detection, up to five pages), a photo from the gallery, or **any file**:
+a PDF or image picked from Downloads, mail or the store app. baskt is also a share target, so the
+Albert Heijn app's "share receipt" PDF (or a photo, or several at once) can be sent straight to it;
+the receipts screen opens with the result. Previous orders can put any line back on the list, one
+at a time or a whole purchase at once.
+
+A digital PDF is read from its text with the regular chat model, so it needs no vision provider. A
+PDF that is only a picture (a scanned paper receipt) is rendered page by page with `pdftoppm` from
+poppler (installed in the Docker image; `poppler-utils` on a bare host) and read like a photo.
+
 ## AI providers
 
 The backend takes a list of OpenAI-compatible providers instead of one. `AI_BASE_URL`/`AI_API_KEY`/

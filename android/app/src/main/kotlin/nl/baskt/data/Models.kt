@@ -505,6 +505,11 @@ data class ReceiptLine(
     val product: Product? = null,
 )
 
+/** A receipt file on its way to the server: a photo, or a PDF (digital receipt or a scanned one). */
+data class ReceiptUpload(val name: String, val type: String, val bytes: ByteArray) {
+    val isPdf: Boolean get() = type == "application/pdf"
+}
+
 @Serializable
 data class ReceiptScan(val store: String? = null, val purchasedAt: String? = null, val totalCents: Int? = null, val lines: List<ReceiptLine> = emptyList(), val notes: String? = null)
 

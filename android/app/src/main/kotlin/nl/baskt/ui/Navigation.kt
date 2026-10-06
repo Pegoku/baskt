@@ -1,6 +1,7 @@
 package nl.baskt.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.navigation3.runtime.NavKey
@@ -57,6 +58,14 @@ import nl.baskt.ui.recipes.RecipeEditorScreen
 fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
     val backStack = rememberNavBackStack(BasketRoute)
     if (startAtSettings && backStack.size == 1) backStack.add(SettingsRoute)
+    // A receipt shared from another app lands on the receipts screen, where the scan result shows up.
+    val openReceipts by viewModel.openReceiptsRequest.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(openReceipts) {
+        if (openReceipts) {
+            viewModel.openReceiptsRequest.value = false
+            if (backStack.lastOrNull() != PurchasesRoute) backStack.add(PurchasesRoute)
+        }
+    }
     // Close the keyboard and drop focus whenever the visible screen changes.
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
