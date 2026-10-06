@@ -1,16 +1,18 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chatJson } from "@/ai/client";
 import { db, newId, now } from "@/db";
-import { purchaseLines, purchases, type ProductRow, type PurchaseLineRow, type PurchaseRow } from "@/db/schema";
+import { basketItems, basketMatches, purchaseLines, purchases, type ProductRow, type PurchaseLineRow, type PurchaseRow } from "@/db/schema";
+import { addStock } from "@/stock";
+import { productsByIds } from "@/stores/search";
 import { attemptOrder, cooldownFor, noteCall, noteFailure, noteUsage } from "@/ai/pool";
 import { normalizeText, tokenize, tokenSimilarity } from "@/lib/text";
 import { hasStore } from "@/stores/registry";
 import { searchStore } from "@/stores/search";
 
-export type ReceiptLine = { name: string; quantity: number; unitPriceCents: number | null; totalPriceCents: number; dealText: string | null };
+export type ReceiptLine = { name: string; quantity: number; unitPriceCents: number | null; totalPriceCents: number; dealText: string | null; /** The open basket item this line pays for, when one was found. */ itemId?: string | null };
 export type ReceiptScan = { store: string | null; purchasedAt: string | null; totalCents: number | null; lines: ReceiptLine[]; notes: string | null };
 
 const SCHEMA = `Return ONLY JSON:
@@ -158,23 +160,85 @@ export async function scanReceipt(images: string[]): Promise<ReceiptScan> {
   return parseScan(content);
 }
 
+/** Receipt-line words that say nothing about the product: the store's own prefix, sizes, counts, stray letters. */
+const NOISE = /^(\d+([.,]\d+)?(l|ml|cl|g|kg|gr|st|stuks|x)?|ah|jumbo|lidl|aldi|plus|dirk|bonus)$/;
+
+/** How much of the receipt line's words show up in a title (0..1). */
+function lineScore(name: string, title: string): number {
+  const all = tokenize(name);
+  const tokens = all.filter((token) => token.length > 2 && !NOISE.test(token));
+  if (!tokens.length) return 0;
+  const titleTokens = tokenize(title);
+  let score = 0;
+  for (const token of tokens) score += Math.max(0, ...titleTokens.map((candidate) => tokenSimilarity(token, candidate)));
+  return score / tokens.length;
+}
+
+export type BasketLineMatch = { itemId: string; itemText: string; product: ProductRow | null; score: number };
+
+/**
+ * The open basket items (any basket) with the product each would be bought as at this store, so a receipt line can
+ * be matched to what was on the list before the store catalogue is searched.
+ */
+export function openItemsAt(store: string): Array<{ itemId: string; text: string; product: ProductRow | null }> {
+  const database = db();
+  const items = database.select().from(basketItems).where(and(eq(basketItems.kind, "item"), eq(basketItems.checked, false), isNull(basketItems.boughtAt))).all();
+  if (!items.length) return [];
+  const matches = database.select().from(basketMatches).where(and(inArray(basketMatches.itemId, items.map((item) => item.id)), eq(basketMatches.store, store))).all();
+  const ids = matches.map((match) => match.chosenProductId ?? (match.status === "PENDING" ? match.candidateIds[0] ?? null : null)).filter((id): id is string => Boolean(id));
+  const products = new Map(productsByIds(ids).map((product) => [product.id, product]));
+  return items.map((item) => {
+    const match = matches.find((entry) => entry.itemId === item.id);
+    const productId = match?.chosenProductId ?? (match?.status === "PENDING" ? match.candidateIds[0] ?? null : null);
+    return { itemId: item.id, text: item.parsedJson?.canonicalName ?? item.text, product: productId ? products.get(productId) ?? null : null };
+  });
+}
+
+/** The open basket item a receipt line pays for, judged by its product's title and by the item's own words. */
+export function matchReceiptLineToBasket(store: string, name: string, candidates = openItemsAt(store), taken = new Set<string>()): BasketLineMatch | null {
+  let best: BasketLineMatch | null = null;
+  for (const candidate of candidates) {
+    if (taken.has(candidate.itemId)) continue;
+    const score = Math.max(candidate.product ? lineScore(name, candidate.product.title) : 0, lineScore(name, candidate.text) * 0.95);
+    if (!best || score > best.score) best = { itemId: candidate.itemId, itemText: candidate.text, product: candidate.product, score };
+  }
+  return best && best.score >= 0.6 ? best : null;
+}
+
 /** Best-effort match of a receipt line to a known product at that store (searches the store when needed). */
 export async function matchReceiptLine(store: string, name: string): Promise<ProductRow | null> {
   if (!hasStore(store)) return null;
   try {
     const result = await searchStore(store, name, { limit: 10 });
-    const tokens = tokenize(name);
     let best: { product: ProductRow; score: number } | null = null;
     for (const product of result.products) {
-      const productTokens = tokenize(product.title);
-      let score = 0;
-      for (const token of tokens) score += Math.max(0, ...productTokens.map((candidate) => tokenSimilarity(token, candidate)));
-      score /= Math.max(tokens.length, 1);
+      const score = lineScore(name, product.title);
       if (!best || score > best.score) best = { product, score };
     }
     return best && best.score >= 0.55 ? best.product : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * The receipt paid for these list items: they leave the open list the way an in-store tick does (bought, stocked),
+ * and items a corrected receipt no longer mentions come back.
+ */
+function settleItems(lines: Array<{ itemId?: string | null; productId: string | null }>, previous: string[], store: string, at: number) {
+  const database = db();
+  const wanted = new Map(lines.filter((line) => line.itemId).map((line) => [line.itemId!, line.productId]));
+  for (const itemId of previous) {
+    if (wanted.has(itemId)) continue;
+    database.update(basketItems).set({ checked: false, boughtAt: null, updatedAt: now() }).where(eq(basketItems.id, itemId)).run();
+  }
+  if (!wanted.size) return;
+  const items = database.select().from(basketItems).where(inArray(basketItems.id, [...wanted.keys()])).all();
+  const products = new Map(productsByIds([...wanted.values()].filter((id): id is string => Boolean(id))).map((product) => [product.id, product]));
+  for (const item of items) {
+    const product = wanted.get(item.id) ? products.get(wanted.get(item.id)!) ?? null : null;
+    addStock({ text: item.parsedJson?.canonicalName ?? item.text, quantityText: product?.quantityText ?? null, productId: product?.id ?? null, imageUrl: product?.imageUrl ?? null });
+    database.update(basketItems).set({ checked: true, boughtAt: at, assignedStore: store, updatedAt: now() }).where(eq(basketItems.id, item.id)).run();
   }
 }
 
@@ -196,9 +260,11 @@ export function savePurchase(input: { store: string; purchasedAt: string | null;
         totalPriceCents: line.totalPriceCents,
         dealText: line.dealText,
         sortOrder: index,
+        itemId: line.itemId ?? null,
       })
       .run();
   }
+  settleItems(input.lines, [], row.store, purchasedAt);
   return row;
 }
 
@@ -221,13 +287,15 @@ export function updatePurchase(id: string, input: { store: string; purchasedAt: 
   const purchasedAt = input.purchasedAt ? Date.parse(`${input.purchasedAt}T12:00:00`) || existing.purchasedAt : existing.purchasedAt;
   const row: PurchaseRow = { ...existing, store: input.store, purchasedAt, totalCents: input.totalCents };
   database.update(purchases).set({ store: row.store, purchasedAt: row.purchasedAt, totalCents: row.totalCents }).where(eq(purchases.id, id)).run();
+  const previous = database.select({ itemId: purchaseLines.itemId }).from(purchaseLines).where(eq(purchaseLines.purchaseId, id)).all().map((line) => line.itemId).filter((itemId): itemId is string => Boolean(itemId));
   database.delete(purchaseLines).where(eq(purchaseLines.purchaseId, id)).run();
   for (const [index, line] of input.lines.entries()) {
     database
       .insert(purchaseLines)
-      .values({ id: newId(), purchaseId: id, name: line.name, productId: line.productId, quantity: line.quantity, unitPriceCents: line.unitPriceCents, totalPriceCents: line.totalPriceCents, dealText: line.dealText, sortOrder: index })
+      .values({ id: newId(), purchaseId: id, name: line.name, productId: line.productId, quantity: line.quantity, unitPriceCents: line.unitPriceCents, totalPriceCents: line.totalPriceCents, dealText: line.dealText, sortOrder: index, itemId: line.itemId ?? null })
       .run();
   }
+  settleItems(input.lines, previous, row.store, purchasedAt);
   return row;
 }
 

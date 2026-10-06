@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { deletePurchase, listPurchases, matchReceiptLine, purchaseWithLines, savePurchase, scanReceiptUploads, spendSummary, updatePurchase, type ReceiptLine } from "@/receipts";
+import { deletePurchase, listPurchases, matchReceiptLine, matchReceiptLineToBasket, openItemsAt, purchaseWithLines, savePurchase, scanReceiptUploads, spendSummary, updatePurchase, type ReceiptLine } from "@/receipts";
 import { hasStore } from "@/stores/registry";
 import { lookupBarcode, productsByIds } from "@/stores/search";
 import { enabledStoreCodes } from "@/db/settings";
@@ -19,10 +19,20 @@ purchasesRoute.post("/scan", async (c) => {
     const scan = await scanReceiptUploads(uploads);
     const hint = form.get("store");
     const store = typeof hint === "string" && hasStore(hint) ? hint : scan.store && hasStore(scan.store) ? scan.store : null;
+    // What is on the list comes first: a line that pays for an open item takes that item's product and ticks it
+    // off when the purchase is saved. Only then is the store catalogue searched.
+    const candidates = store ? openItemsAt(store) : [];
+    const taken = new Set<string>();
     const lines = await Promise.all(
       scan.lines.map(async (line) => {
+        const onList = store ? matchReceiptLineToBasket(store, line.name, candidates, taken) : null;
+        if (onList) {
+          taken.add(onList.itemId);
+          const product = onList.product ?? (await matchReceiptLine(store!, line.name));
+          return { ...line, productId: product?.id ?? null, product, itemId: onList.itemId, itemText: onList.itemText };
+        }
         const product = store ? await matchReceiptLine(store, line.name) : null;
-        return { ...line, productId: product?.id ?? null, product };
+        return { ...line, productId: product?.id ?? null, product, itemId: null, itemText: null };
       }),
     );
     return c.json({ ...scan, store, lines });

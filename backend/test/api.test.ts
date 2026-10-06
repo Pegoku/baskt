@@ -373,6 +373,33 @@ describe("api", () => {
     expect((await api(`/purchases/${saved.purchase.id}`, { method: "DELETE" })).status).toBe(204);
   });
 
+  test("a receipt line pays for the open item it matches and ticks it off when saved", async () => {
+    const created = await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "chocolademelk", quantity: 1 }) });
+    const id = ((await created.json()) as { id: string }).id;
+    await waitForMatched(id);
+    const { matchReceiptLineToBasket } = await import("@/receipts");
+    const match = matchReceiptLineToBasket("AH", "AH CHOCOLADEMELK 1L");
+    expect(match?.itemId).toBe(id);
+    expect(match?.product?.store).toBe("AH");
+    expect(matchReceiptLineToBasket("AH", "PINDAKAAS")).toBeNull();
+    const saved = (await (await api("/purchases", {
+      method: "POST",
+      body: JSON.stringify({ store: "AH", lines: [{ name: "AH CHOCOLADEMELK 1L", quantity: 1, totalPriceCents: 199, productId: match!.product!.id, itemId: id }] }),
+    })).json()) as any;
+    expect(saved.lines[0].itemId).toBe(id);
+    let basket = (await (await api("/basket")).json()) as any;
+    let item = basket.items.find((entry: any) => entry.id === id);
+    expect(item.boughtAt).toBeGreaterThan(0);
+    expect(item.checked).toBe(true);
+    // Nothing on the list any more? A corrected receipt without the line gives the item back.
+    await api(`/purchases/${saved.purchase.id}`, { method: "PUT", body: JSON.stringify({ store: "AH", lines: [{ name: "BROOD", quantity: 1, totalPriceCents: 199 }] }) });
+    basket = (await (await api("/basket")).json()) as any;
+    item = basket.items.find((entry: any) => entry.id === id);
+    expect(item.boughtAt).toBeNull();
+    expect(item.checked).toBe(false);
+    await api(`/basket/items/${id}`, { method: "DELETE" });
+  });
+
   test("ticking an item in the store records a trip line, stocks it, and unbuy takes it back", async () => {
     const created = await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "chocolademelk", quantity: 2 }) });
     const id = ((await created.json()) as { id: string }).id;
