@@ -25,17 +25,28 @@ android/   Kotlin + Jetpack Compose (Material 3 Expressive) client
    ```
    `ghcr.io/pegoku/baskt-backend:latest` follows `main`; `:sha-<commit>` pins one build. Upgrade with
    `docker compose pull && docker compose up -d`.
-2. App: install `android/app/build/outputs/apk/debug/app-debug.apk`, open Settings, enter the server URL (e.g. `http://192.168.1.10:3000`) and the token, tap **Save & test**.
+2. App: install `android/app/build/outputs/apk/optimized/app-optimized.apk`, open Settings, enter the server URL (e.g. `http://192.168.1.10:3000`) and the token, tap **Save & test**.
 3. Add ideas. Tap an item to choose between the suggested products per store. Tap **Compare**.
 
 ## Build the APK
 
 ```bash
 cd android
-JAVA_HOME=/opt/android-studio/jbr ./gradlew :app:assembleDebug   # any JDK 17+ works
+JAVA_HOME=/opt/android-studio/jbr ./gradlew :app:assembleOptimized   # any JDK 17+ works
 ```
 
 `android/local.properties` must point `sdk.dir` at an Android SDK (compileSdk 37 is downloaded automatically when licences are accepted).
+
+Use the **optimized** APK for everyday use: it enables R8 code/resource shrinking and runs without
+debug overhead. It uses this machine's development signing key, so it updates a debug APK built with
+the same key without losing data. CI publishes both `baskt-optimized-apk` and `baskt-debug-apk`;
+`:app:assembleDebug` remains available for debugging. Production `release` signing is separate.
+
+To measure an installed build, unlock an adb-connected phone and run
+`python3 android/scripts/measure-startup.py`. It force-stops the app between five cold launches,
+preserves app data, and reports both the first frame and the restored screen. Compare the restored
+screen: the first frame can precede the saved basket. Startup composes the current page; adjacent
+orders and comparison pages load as you navigate to them.
 
 ## Product details and translations
 

@@ -28,7 +28,11 @@ jobs:
       - name: Accept Android SDK licences
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
       - uses: gradle/actions/setup-gradle@v5
-      - run: ./gradlew :app:assembleDebug --no-daemon
+      - run: ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleOptimized --no-daemon
+      - uses: actions/upload-artifact@v5
+        with:
+          name: baskt-optimized-apk
+          path: android/app/build/outputs/apk/optimized/app-optimized.apk
       - uses: actions/upload-artifact@v5
         with:
           name: baskt-debug-apk
