@@ -203,6 +203,7 @@ class BasketRepository(
                             val created = api.savePurchase(op.store!!, scan.purchasedAt, scan.totalCents, scan.lines)
                             idMap[op.itemId!!] = created.purchase.id
                         }
+                        "purchaseUpdate" -> { val scan = op.receipt!!; api.updatePurchase(real(op.itemId)!!, op.store!!, scan.purchasedAt, scan.totalCents, scan.lines) }
                         "purchaseDelete" -> api.deletePurchase(real(op.itemId)!!)
                         "memoryDelete" -> api.deleteMemory(op.itemId!!)
                         "nameDelete" -> api.deleteNameMemory(op.itemId!!)

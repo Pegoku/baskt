@@ -90,6 +90,7 @@ data class PendingOp(
             "productAdd" -> "Add product"
             "barcodeAdd" -> "Add scanned barcode $text"
             "purchaseSave" -> "Save purchase"
+            "purchaseUpdate" -> "Correct purchase"
             "purchaseDelete" -> "Delete purchase"
             "memoryDelete" -> "Forget preference"
             "chatClear" -> "Clear chat history"

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
@@ -48,6 +49,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import nl.baskt.data.PurchaseDetail
+import nl.baskt.data.ReceiptLine
 import nl.baskt.data.ReceiptScan
 import nl.baskt.data.ReceiptUpload
 import nl.baskt.data.euros
@@ -167,7 +170,17 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
 
     val current = scan
     if (current != null) {
-        ReviewScanSheet(current, stores.map { it.code }, onChange = { viewModel.updateScan(it) }, onDismiss = { viewModel.clearScan() }, onSave = { store -> viewModel.savePurchase(current, store) })
+        ReceiptEditor(viewModel, current, stores.map { it.code }, title = "Check the receipt", saveLabel = "Save purchase", onChange = { viewModel.updateScan(it) }, onDismiss = { viewModel.clearScan() }, onSave = { store -> viewModel.savePurchase(current, store) })
+    }
+    // Correcting a purchase that was already saved: same editor, the saved lines as the starting point.
+    var correcting by remember { mutableStateOf<ReceiptScan?>(null) }
+    val correctingId = detail?.purchase?.id
+    val draft = correcting
+    if (draft != null && correctingId != null) {
+        ReceiptEditor(viewModel, draft, stores.map { it.code }, title = "Correct the receipt", saveLabel = "Save changes", onChange = { correcting = it }, onDismiss = { correcting = null }, onSave = { store ->
+            viewModel.updatePurchase(correctingId, draft, store)
+            correcting = null
+        })
     }
     val open = detail
     if (open != null) {
@@ -177,10 +190,12 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                     StoreBadge(open.purchase.store, stores)
                     Text(dateFormat.format(Date(open.purchase.purchasedAt)), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                     Text(open.purchase.totalCents.euros(), fontWeight = FontWeight.Bold)
+                    IconButton(onClick = { correcting = open.asScan() }) { Icon(Icons.Default.Edit, contentDescription = "Correct this receipt") }
                     IconButton(onClick = { viewModel.deletePurchase(open.purchase.id) }) { Icon(Icons.Default.Delete, contentDescription = "Delete") }
                 }
                 for (line in open.lines) {
-                    Row(modifier = Modifier.fillMaxWidth()) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        LineThumb(open.products[line.productId], size = 40)
                         Column(modifier = Modifier.weight(1f)) {
                             Text((if (line.quantity != 1.0) "${line.quantity.toString().removeSuffix(".0")}× " else "") + line.name)
                             open.products[line.productId]?.let { Text(it.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -194,43 +209,13 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     }
 }
 
-@Composable
-private fun ReviewScanSheet(scan: ReceiptScan, storeCodes: List<String>, onChange: (ReceiptScan) -> Unit, onDismiss: () -> Unit, onSave: (String) -> Unit) {
-    var store by remember(scan.store) { mutableStateOf(scan.store ?: storeCodes.firstOrNull() ?: "AH") }
-    var editing by remember { mutableStateOf<Int?>(null) }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Check the receipt", style = MaterialTheme.typography.titleLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (code in (storeCodes + listOfNotNull(scan.store)).distinct()) FilterChip(selected = store == code, onClick = { store = code }, label = { Text(code) })
-            }
-            Text(listOfNotNull(scan.purchasedAt, scan.totalCents?.euros()?.let { "total $it" }, scan.notes).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            for ((index, line) in scan.lines.withIndex()) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text((if (line.quantity != 1.0) "${line.quantity.toString().removeSuffix(".0")}× " else "") + line.name)
-                        Text(line.product?.title ?: "no product match", style = MaterialTheme.typography.bodySmall, color = if (line.product != null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.tertiary)
-                    }
-                    Text(line.totalPriceCents.euros())
-                    IconButton(onClick = { editing = index }) { Icon(Icons.Default.Delete, contentDescription = "Remove line") }
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { onSave(store) }, enabled = scan.lines.isNotEmpty()) { Text("Save purchase") }
-                TextButton(onClick = onDismiss) { Text("Discard") }
-            }
-        }
-    }
-    editing?.let { index ->
-        AlertDialog(
-            onDismissRequest = { editing = null },
-            title = { Text("Remove this line?") },
-            text = { Text(scan.lines[index].name) },
-            confirmButton = { TextButton(onClick = { onChange(scan.copy(lines = scan.lines.filterIndexed { i, _ -> i != index })); editing = null }) { Text("Remove") } },
-            dismissButton = { TextButton(onClick = { editing = null }) { Text("Keep") } },
-        )
-    }
-}
+/** A saved purchase in the shape the editor works on. */
+private fun PurchaseDetail.asScan(): ReceiptScan = ReceiptScan(
+    store = purchase.store,
+    purchasedAt = java.time.Instant.ofEpochMilli(purchase.purchasedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString(),
+    totalCents = purchase.totalCents,
+    lines = lines.map { ReceiptLine(it.name, it.quantity, it.unitPriceCents, it.totalPriceCents, it.dealText, it.productId, it.productId?.let { id -> products[id] }) },
+)
 
 /** Reads shared or picked receipt files into memory with their real type, so PDFs reach the server as PDFs. */
 fun readReceiptUris(context: android.content.Context, uris: List<Uri>): List<ReceiptUpload> = uris.mapIndexedNotNull { index, uri ->

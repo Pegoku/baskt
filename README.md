@@ -105,6 +105,11 @@ Albert Heijn app's "share receipt" PDF (or a photo, or several at once) can be s
 the receipts screen opens with the result. Previous orders can put any line back on the list, one
 at a time or a whole purchase at once.
 
+What the model read is open for correction before saving, and a saved purchase can be corrected
+later from its sheet: tap a line to fix the name, quantity, price or bonus text, add lines it missed,
+remove ones it invented, and link each line to the real product by searching the store or scanning
+the product's barcode. Linked lines show the product picture here and under previous orders.
+
 A digital PDF is read from its text with the regular chat model, so it needs no vision provider. A
 PDF that is only a picture (a scanned paper receipt) is rendered page by page with `pdftoppm` from
 poppler (installed in the Docker image; `poppler-utils` on a bare host) and read like a photo.

@@ -12,6 +12,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.plugins.timeout
 import io.ktor.client.statement.HttpResponse
@@ -389,6 +390,13 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
     suspend fun purchases(): List<Purchase> = client.get(url("/purchases")) { auth() }.expect<PurchasesResponse>().purchases
 
     suspend fun purchase(id: String): PurchaseDetail = client.get(url("/purchases/$id")) { auth() }.expect()
+
+    /** The corrected receipt replaces the saved purchase's lines. */
+    suspend fun updatePurchase(id: String, store: String, purchasedAt: String?, totalCents: Int?, lines: List<ReceiptLine>): PurchaseDetail =
+        client.put(url("/purchases/$id")) {
+            auth(); contentType(ContentType.Application.Json)
+            setBody(SavePurchaseRequest(store, purchasedAt, totalCents, lines.map { it.copy(product = null) }))
+        }.expect()
 
     suspend fun deletePurchase(id: String) {
         client.delete(url("/purchases/$id")) { auth() }.expect<Unit>()

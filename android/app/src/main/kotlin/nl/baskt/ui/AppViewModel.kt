@@ -450,6 +450,35 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun openPurchase(id: String) = viewModelScope.launch { _purchaseDetail.value = cachedLoad<PurchaseDetail?>("purchase-$id", null) { container.api.purchase(id) } }
+
+    /** The corrected receipt of a saved purchase: the list, the open sheet and the cache all show it right away. */
+    fun updatePurchase(id: String, scan: ReceiptScan, store: String) = viewModelScope.launch {
+        val current = _purchaseDetail.value?.takeIf { it.purchase.id == id } ?: container.offline.load<PurchaseDetail>("purchase-$id") ?: return@launch
+        val at = scan.purchasedAt?.let { runCatching { java.time.LocalDate.parse(it).atTime(12, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() }.getOrNull() } ?: current.purchase.purchasedAt
+        val total = scan.totalCents ?: scan.lines.sumOf { it.totalPriceCents }
+        val purchase = current.purchase.copy(store = store, purchasedAt = at, totalCents = total, lineCount = scan.lines.size)
+        val detail = PurchaseDetail(
+            purchase,
+            scan.lines.mapIndexed { index, line -> nl.baskt.data.PurchaseLine("$id-$index", id, line.name, line.productId, line.quantity, line.unitPriceCents, line.totalPriceCents, line.dealText, index) },
+            scan.lines.mapNotNull { it.product }.associateBy { it.id },
+        )
+        basket.queued(nl.baskt.data.PendingOp(type = "purchaseUpdate", itemId = id, store = store, receipt = scan), {
+            _purchases.update { list -> list.map { if (it.id == id) purchase else it } }
+            container.offline.save("purchases", _purchases.value)
+            container.offline.save("purchase-$id", detail)
+            _purchaseDetail.value = detail
+        })
+    }
+
+    /** Products at a store for linking a receipt line by name. */
+    suspend fun productsForReceipt(query: String, store: String): List<Product> =
+        runCatching { container.api.searchProducts(query, store) }.getOrNull()?.results?.flatMap { it.products }?.filter { it.store == store } ?: emptyList()
+
+    /** The product behind a scanned barcode, at this store first and at any store otherwise. */
+    suspend fun productForBarcode(gtin: String, store: String): Product? {
+        val results = basket.barcode(gtin)?.results ?: return null
+        return results.firstOrNull { it.store == store }?.product ?: results.firstNotNullOfOrNull { it.product }
+    }
     fun closePurchase() { _purchaseDetail.value = null }
     fun deletePurchase(id: String) = viewModelScope.launch { basket.queued(nl.baskt.data.PendingOp(type = "purchaseDelete", itemId = id), {
         _purchases.update { list -> list.filterNot { it.id == id } }; container.offline.save("purchases", _purchases.value); _purchaseDetail.value = null
