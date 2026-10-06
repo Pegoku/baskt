@@ -117,7 +117,9 @@ fun HomePager(
     HorizontalPager(
         state = pager,
         modifier = Modifier.fillMaxSize(),
-        beyondViewportPageCount = 1,
+        // Compose only the visible page at launch. Pager prefetches neighbours during gestures;
+        // eagerly composing them also starts history loading and comparison before the basket draws.
+        beyondViewportPageCount = 0,
         flingBehavior = fling,
         key = { it },
     ) { page ->
