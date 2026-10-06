@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddShoppingCart
@@ -44,6 +46,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,7 +73,7 @@ private fun dayOf(at: Long): LocalDate = Instant.ofEpochMilli(at).atZone(ZoneId.
 
 /**
  * Previous orders, one day at a time: what was ticked off or scanned in the store (and scanned receipts), grouped
- * by store. The arrows and the calendar only land on days something was bought. Every line can go straight
+ * by store. Swiping, the arrows and the calendar only land on days something was bought. Every line can go straight
  * back on the list, one at a time or a whole purchase at once.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -92,6 +96,15 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val next = if (index >= 0) days.getOrNull(index + 1) else null
     var picking by remember { mutableStateOf(false) }
 
+    // One page per order day. Past the newest day the swipe carries on to the basket, as before.
+    val pager = rememberPagerState(initialPage = (days.size - 1).coerceAtLeast(0)) { days.size }
+    val currentDays by rememberUpdatedState(days)
+    LaunchedEffect(index) {
+        if (index < 0 || pager.currentPage == index) return@LaunchedEffect
+        if ((pager.currentPage - index).let { it * it } > 1) pager.scrollToPage(index) else pager.animateScrollToPage(index)
+    }
+    LaunchedEffect(pager) { snapshotFlow { pager.settledPage }.collect { page -> currentDays.getOrNull(page)?.let { selected = it } } }
+
     val today = LocalDate.now()
     val dayTitle = when (day) {
         null -> "No orders yet"
@@ -99,8 +112,10 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         today.minusDays(1) -> "Yesterday"
         else -> day.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(Locale.getDefault()))
     }
-    val dayPurchases = purchases.filter { day != null && dayOf(it.purchase.purchasedAt) == day }.sortedBy { it.purchase.purchasedAt }
-    val dayScans = pendingScans.filter { day != null && dayOf(it.at) == day }
+    fun purchasesOn(on: LocalDate) = purchases.filter { dayOf(it.purchase.purchasedAt) == on }.sortedBy { it.purchase.purchasedAt }
+    fun scansOn(on: LocalDate) = pendingScans.filter { dayOf(it.at) == on }
+    val dayPurchases = day?.let(::purchasesOn) ?: emptyList()
+    val dayScans = day?.let(::scansOn) ?: emptyList()
     val dayTotal = dayPurchases.sumOf { it.purchase.totalCents }
 
     if (picking && day != null) {
@@ -155,27 +170,31 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                     }
                 }
             } else {
-                LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    for (entry in dayPurchases) {
-                        item(entry.purchase.id) { PurchaseCard(entry, products, stores, onAdd = { lines -> viewModel.addPurchaseLines(lines, products) }) }
-                    }
-                    if (dayScans.isNotEmpty()) {
-                        item("pending") {
-                            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Icon(Icons.Default.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text("Scanned, waiting for connection", style = MaterialTheme.typography.titleSmall)
-                                    }
-                                    for (scan in dayScans) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        StoreLogo(scan.store, stores, size = 20)
-                                        Text(scan.barcode, style = MaterialTheme.typography.bodyMedium)
+                HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), key = { days[it].toEpochDay() }, verticalAlignment = Alignment.Top) { page ->
+                    val pageDay = days[page]
+                    val pageScans = scansOn(pageDay)
+                    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        for (entry in purchasesOn(pageDay)) {
+                            item(entry.purchase.id) { PurchaseCard(entry, products, stores, onAdd = { lines -> viewModel.addPurchaseLines(lines, products) }) }
+                        }
+                        if (pageScans.isNotEmpty()) {
+                            item("pending") {
+                                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+                                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Icon(Icons.Default.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("Scanned, waiting for connection", style = MaterialTheme.typography.titleSmall)
+                                        }
+                                        for (scan in pageScans) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            StoreLogo(scan.store, stores, size = 20)
+                                            Text(scan.barcode, style = MaterialTheme.typography.bodyMedium)
+                                        }
                                     }
                                 }
                             }
                         }
+                        item("footer") { Spacer(Modifier.height(24.dp)) }
                     }
-                    item("footer") { Spacer(Modifier.height(24.dp)) }
                 }
             }
         }
