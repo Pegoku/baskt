@@ -18,7 +18,7 @@ class TranslationRepository(
         val key = "translation-v2-$language-${descriptions.joinToString(",")}-${texts.joinToString("\u0000")}"
         val work = synchronized(pending) {
             pending[key] ?: scope.async(Dispatchers.IO, start = CoroutineStart.LAZY) {
-                resolve(texts, language, descriptions, key)
+                resolve(texts, language, descriptions)
             }.also { task ->
                 pending[key] = task
                 task.invokeOnCompletion { synchronized(pending) { if (pending[key] === task) pending.remove(key) } }
@@ -27,24 +27,17 @@ class TranslationRepository(
         return work.await()
     }
 
-    private suspend fun resolve(texts: List<String>, language: String, descriptions: List<Int>, legacyKey: String): TranslationResponse {
-        fun fieldKey(index: Int) = "translation-field-v1-$language-${index in descriptions}-${texts[index]}"
+    // v2 drops fields cached when the server could still hand a product name back untranslated.
+    // Fields are the only cache, so a title translated in the product sheet also shows in its row.
+    private suspend fun resolve(texts: List<String>, language: String, descriptions: List<Int>): TranslationResponse {
+        fun fieldKey(index: Int) = "translation-field-v2-$language-${index in descriptions}-${texts[index]}"
         fun valid(result: TranslationResponse, source: List<String>) = result.translated && result.language == language &&
             result.texts.size == source.size && result.texts.zip(source).all { (translated, original) -> original.isBlank() || translated.isNotBlank() }
         // Disk hits must not queue behind slow AI requests for unrelated products.
-        offline.load<TranslationResponse>(legacyKey)?.takeIf { valid(it, texts) }?.let { legacy ->
-            synchronized(offline) { texts.indices.forEach { offline.save(fieldKey(it), legacy.texts[it]) } }
-            return legacy
-        }
         val cached = texts.mapIndexed { index, text -> if (text.isBlank()) text else offline.load<String>(fieldKey(index)) }
         if (cached.all { it != null }) return TranslationResponse(cached.map { it!! }, language, true)
         repeat(3) { attempt ->
             val result = slots.withPermit {
-                val legacy = offline.load<TranslationResponse>(legacyKey)?.takeIf { valid(it, texts) }
-                if (legacy != null) {
-                    synchronized(offline) { texts.indices.forEach { offline.save(fieldKey(it), legacy.texts[it]) } }
-                    return@withPermit legacy
-                }
                 val shown = texts.mapIndexed { index, text -> if (text.isBlank()) text else offline.load<String>(fieldKey(index)) }.toMutableList()
                 val missing = texts.indices.filter { shown[it] == null }
                 if (missing.isEmpty()) return@withPermit TranslationResponse(shown.map { it!! }, language, true)

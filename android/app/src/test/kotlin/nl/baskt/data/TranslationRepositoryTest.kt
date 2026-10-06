@@ -91,4 +91,17 @@ class TranslationRepositoryTest {
             assertEquals(5, calls)
         } finally { scope.cancel() }
     }
+
+    @Test fun `a row reuses the title its product sheet translated instead of a stale batch`() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val disk = disk()
+            disk.save("translation-v2-es--AH Terra Zwarte bonen\u0000200 g", TranslationResponse(listOf("AH Terra Zwarte bonen", "200 g"), "es", true))
+            val repo = TranslationRepository(scope, disk, { texts, language, _ ->
+                TranslationResponse(texts.map { if (it == "AH Terra Zwarte bonen") "AH Terra Frijoles negros" else it }, language, true)
+            })
+            repo.translate(listOf("AH Terra Zwarte bonen", "description"), "es", listOf(1))
+            assertEquals("AH Terra Frijoles negros", repo.translate(listOf("AH Terra Zwarte bonen", "200 g"), "es").texts[0])
+        } finally { scope.cancel() }
+    }
 }
