@@ -5,10 +5,7 @@ import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.animation.core.spring
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -19,11 +16,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.lerp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.basket.BasketScreen
@@ -32,22 +27,19 @@ import nl.baskt.ui.compare.OrderScreen
 import nl.baskt.ui.orders.OrdersScreen
 import kotlin.math.absoluteValue
 
-/** Fraction of a page the finger must travel before releasing navigates; a brisk fling commits sooner. */
-private const val CommitFraction = 0.35f
+/** Where the default pager fling settles on the next page when the finger lets go; the haptic marks it. */
+private const val CommitFraction = 0.5f
 /** Drag back this far below the commit point before the gesture counts as un-committed again. */
 private const val CommitHysteresis = 0.1f
-/** How much slower the receding page moves than the finger. */
-private const val UnderlayParallax = 0.25f
 
 /** The basket sits at this index; previous orders are the page to its left. */
 private const val BasketPage = 1
 
 /**
- * Orders ← Basket → Review → Order as four pages of one pager, treated as a gesture-driven lateral transition:
- * the page follows the finger 1:1 once touch slop is cleared, deeper pages slide over the shallower one
- * like a stack (the one underneath recedes, lags and rounds off), release settles on a stiff spatial
- * spring that keeps the finger's velocity, and a single light tick marks the point where letting go would
- * navigate.
+ * Orders ← Basket → Review → Order as four pages of one pager. The pages lie side by side and follow the finger
+ * 1:1 with the stock pager fling, like the order days inside Orders: per-frame scaling, clipping and shadows on
+ * whole screens, and composing a neighbour mid-gesture, made this swipe drop most of its frames. A single light
+ * tick marks the point where letting go would navigate.
  */
 @Composable
 fun HomePager(
@@ -69,10 +61,10 @@ fun HomePager(
     // `startPage` counts from the basket (0 = basket, 1 = review); the orders page sits before it.
     val pager = rememberPagerState(initialPage = startPage + BasketPage) { 4 }
     val scope = rememberCoroutineScope()
-    // Stiff, well-damped spring: the Expressive fast spatial spec (0.6 damping, 800 stiffness) still
-    // bounces for a beat after release, which reads as sluggish for something the finger just threw.
-    val spring = remember { spring<Float>(dampingRatio = 0.8f, stiffness = 1400f) }
-    fun go(page: Int) = scope.launch { pager.animateScrollToPage(page, animationSpec = spring) }
+    fun go(page: Int) = scope.launch { pager.animateScrollToPage(page) }
+    // The first frame composes only the basket; neighbours follow once it is up, so a swipe never has to build one.
+    var warm by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(800); warm = true }
     BackHandler(enabled = pager.currentPage != BasketPage) { go(if (pager.currentPage < BasketPage) BasketPage else pager.currentPage - 1) }
 
     // Haptic at the commit threshold only: one tick when the drag crosses the point where releasing
@@ -108,41 +100,13 @@ fun HomePager(
         }
     }
 
-    val fling = PagerDefaults.flingBehavior(
-        state = pager,
-        snapPositionalThreshold = CommitFraction,
-        snapAnimationSpec = spring,
-    )
-
     HorizontalPager(
         state = pager,
         modifier = Modifier.fillMaxSize(),
-        // Compose only the visible page at launch. Pager prefetches neighbours during gestures;
-        // eagerly composing them also starts history loading and comparison before the basket draws.
-        beyondViewportPageCount = 0,
-        flingBehavior = fling,
+        beyondViewportPageCount = if (warm) 1 else 0,
         key = { it },
     ) { page ->
-        Box(
-            Modifier.fillMaxSize().graphicsLayer {
-                // > 0: this page sits left of the viewport centre (the shallower page, underneath);
-                // < 0: it sits to the right (the deeper page, sliding over the top).
-                val position = (pager.currentPage - page) + pager.currentPageOffsetFraction
-                val away = position.absoluteValue.coerceIn(0f, 1f)
-                val transit = 4f * away * (1f - away) // 0 at rest, 1 halfway through a swipe
-                if (position > 0f) {
-                    val scale = lerp(1f, 0.95f, away)
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = position * size.width * UnderlayParallax
-                    alpha = lerp(1f, 0.85f, away)
-                } else {
-                    shadowElevation = 12.dp.toPx() * transit
-                }
-                shape = RoundedCornerShape(lerp(0f, 24.dp.toPx(), away))
-                clip = true
-            },
-        ) {
+        Box(Modifier.fillMaxSize()) {
             when (page) {
                 0 -> OrdersScreen(viewModel, onBack = { go(BasketPage) })
                 BasketPage -> BasketScreen(
@@ -162,7 +126,7 @@ fun HomePager(
                     onChat = onChat,
                     onTidy = onTidy,
                 )
-                2 -> CompareScreen(viewModel, onBack = { go(BasketPage) }, onOpenItem = onOpenItem, onOrder = { go(3) }, onPickStore = { viewModel.assign("store:$it"); go(3) })
+                2 -> CompareScreen(viewModel, active = pager.currentPage == 2 || pager.targetPage == 2, onBack = { go(BasketPage) }, onOpenItem = onOpenItem, onOrder = { go(3) }, onPickStore = { viewModel.assign("store:$it"); go(3) })
                 else -> OrderScreen(viewModel, onBack = { go(2) }, onShop = onShop)
             }
         }

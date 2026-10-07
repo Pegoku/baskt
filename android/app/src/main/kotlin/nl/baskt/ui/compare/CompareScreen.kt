@@ -50,14 +50,15 @@ import nl.baskt.ui.common.StoreBadge
 import nl.baskt.ui.common.storeName
 
 @Composable
-fun CompareScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String) -> Unit, onOrder: () -> Unit = {}, onPickStore: (String) -> Unit = {}) {
+fun CompareScreen(viewModel: AppViewModel, active: Boolean = true, onBack: () -> Unit, onOpenItem: (String) -> Unit, onOrder: () -> Unit = {}, onPickStore: (String) -> Unit = {}) {
     val comparison by viewModel.comparison.collectAsState()
     val comparing by viewModel.comparing.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
     val items by viewModel.basket.items.collectAsState()
     var tab by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(items) { viewModel.compare() }
+    // Composed next to the basket ahead of a swipe; only compare once it is actually being looked at.
+    LaunchedEffect(items, active) { if (active) viewModel.compare() }
 
     Scaffold(
         floatingActionButton = {
