@@ -1,5 +1,6 @@
 package nl.baskt.ui.orders
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -51,6 +53,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +73,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
+import kotlin.math.abs
 
 private fun dayOf(at: Long): LocalDate = Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault()).toLocalDate()
 
@@ -103,20 +109,23 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         if (index < 0 || pager.currentPage == index) return@LaunchedEffect
         if ((pager.currentPage - index).let { it * it } > 1) pager.scrollToPage(index) else pager.animateScrollToPage(index)
     }
-    LaunchedEffect(pager) { snapshotFlow { pager.settledPage }.collect { page -> currentDays.getOrNull(page)?.let { selected = it } } }
+    // currentPage flips halfway through a swipe, so the arrows and calendar follow the finger, not the settle.
+    LaunchedEffect(pager) { snapshotFlow { pager.currentPage }.collect { page -> currentDays.getOrNull(page)?.let { selected = it } } }
 
     val today = LocalDate.now()
-    val dayTitle = when (day) {
-        null -> "No orders yet"
+    fun titleOf(on: LocalDate) = when (on) {
         today -> "Today"
         today.minusDays(1) -> "Yesterday"
-        else -> day.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(Locale.getDefault()))
+        else -> on.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(Locale.getDefault()))
     }
     fun purchasesOn(on: LocalDate) = purchases.filter { dayOf(it.purchase.purchasedAt) == on }.sortedBy { it.purchase.purchasedAt }
     fun scansOn(on: LocalDate) = pendingScans.filter { dayOf(it.at) == on }
-    val dayPurchases = day?.let(::purchasesOn) ?: emptyList()
-    val dayScans = day?.let(::scansOn) ?: emptyList()
-    val dayTotal = dayPurchases.sumOf { it.purchase.totalCents }
+    fun summaryOf(page: Int): String {
+        val on = days[page]
+        val dayPurchases = purchasesOn(on)
+        val total = dayPurchases.sumOf { it.purchase.totalCents }
+        return listOfNotNull(if (total > 0) total.euros() else null, "${dayPurchases.sumOf { it.lines.size } + scansOn(on).size} items", if (days.size > 1) "${page + 1} of ${days.size} days" else null).joinToString(" · ")
+    }
 
     if (picking && day != null) {
         val selectable = days.map { it.toEpochDay() }.toSet()
@@ -148,14 +157,27 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             // Day stepper: only days with an order are reachable, so the arrows never land on an empty day.
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { selected = previous }, enabled = previous != null) { Icon(Icons.Default.ChevronLeft, contentDescription = "Earlier order day") }
-                TextButton(onClick = { picking = true }, enabled = day != null, modifier = Modifier.weight(1f)) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(dayTitle, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (day != null) Text(
-                            listOfNotNull(if (dayTotal > 0) dayTotal.euros() else null, "${dayPurchases.sumOf { it.lines.size } + dayScans.size} items", if (days.size > 1) "${index + 1} of ${days.size} days" else null).joinToString(" · "),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                // The day labels ride along with the pages: each slides and fades by its distance from the scroll position.
+                var labelWidth by remember { mutableIntStateOf(0) }
+                Box(
+                    modifier = Modifier.weight(1f).height(56.dp).clipToBounds().onSizeChanged { labelWidth = it.width }
+                        .clickable(enabled = day != null) { picking = true },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (day == null) Text("No orders yet", style = MaterialTheme.typography.titleMedium)
+                    else for (page in (pager.currentPage - 1)..(pager.currentPage + 1)) {
+                        if (page !in days.indices) continue
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.fillMaxWidth().graphicsLayer {
+                                val distance = page - (pager.currentPage + pager.currentPageOffsetFraction)
+                                translationX = distance * labelWidth * 0.6f
+                                alpha = (1f - abs(distance) * 1.6f).coerceIn(0f, 1f)
+                            },
+                        ) {
+                            Text(titleOf(days[page]), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(summaryOf(page), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
                 IconButton(onClick = { selected = next }, enabled = next != null) { Icon(Icons.Default.ChevronRight, contentDescription = "Later order day") }
