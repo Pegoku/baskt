@@ -16,6 +16,8 @@ export type SiteSource = {
   linkPattern: RegExp;
   base: string;
   imagePattern?: RegExp;
+  /** Result cards put the thumbnail before the recipe link instead of after it. */
+  imageBeforeLink?: boolean;
 };
 
 export const SITE_SOURCES: SiteSource[] = [
@@ -50,6 +52,7 @@ export const SITE_SOURCES: SiteSource[] = [
     base: "https://recetas.elperiodico.com",
     searchUrl: (query) => `https://recetas.elperiodico.com/busqueda/q/${encodeURIComponent(query)}`,
     linkPattern: /(?:https:\/\/recetas\.elperiodico\.com)?\/receta-de-([a-z0-9-]+)-\d+\.html/g,
+    imageBeforeLink: true,
   },
   {
     id: "cookpad",
@@ -86,23 +89,38 @@ function filterRelevant(hits: RecipeHit[], query: string, limit: number) {
   return (relevant.length ? relevant : []).slice(0, limit).map((entry) => entry.hit);
 }
 
+const IMAGE_URL = /https:\/\/[^"'\s]+\.(?:jpe?g|png|webp)(?:\?[^"'\s]*)?/g;
+
+/** The thumbnail of one result card: search only up to the neighbouring card's link so we never borrow its image. */
+function cardImage(html: string, links: { match: RegExpMatchArray; url: string }[], index: number, before: boolean) {
+  const { match, url } = links[index];
+  const at = match.index!;
+  if (before) {
+    let start = Math.max(0, at - 1500);
+    for (let i = index - 1; i >= 0; i--) if (links[i].url !== url) { start = Math.max(start, links[i].match.index! + links[i].match[0].length); break; }
+    return Array.from(html.slice(start, at).matchAll(IMAGE_URL)).at(-1)?.[0] ?? null;
+  }
+  let end = at + 1500;
+  for (let i = index + 1; i < links.length; i++) if (links[i].url !== url) { end = Math.min(end, links[i].match.index!); break; }
+  return html.slice(at, end).match(IMAGE_URL)?.[0] ?? null;
+}
+
 export async function searchSite(site: SiteSource, query: string, limit = 8): Promise<RecipeHit[]> {
-  return cachedUpstream(`recipe-search:v1:${site.id}:${query.trim().toLowerCase()}:${limit}`, 60 * 60 * 1000, () => searchSiteLive(site, query, limit));
+  return cachedUpstream(`recipe-search:v2:${site.id}:${query.trim().toLowerCase()}:${limit}`, 60 * 60 * 1000, () => searchSiteLive(site, query, limit));
 }
 
 async function searchSiteLive(site: SiteSource, query: string, limit: number): Promise<RecipeHit[]> {
   const html = await fetchHtml(site.searchUrl(query));
   const seen = new Set<string>();
   const hits: RecipeHit[] = [];
-  for (const match of html.matchAll(site.linkPattern)) {
-    const path = match[0];
-    const url = path.startsWith("http") ? path : `${site.base}${path}`;
+  const links = Array.from(html.matchAll(site.linkPattern), (match) => ({ match, url: match[0].startsWith("http") ? match[0] : `${site.base}${match[0]}` }));
+  for (const [index, { match, url }] of links.entries()) {
     if (seen.has(url)) continue;
     seen.add(url);
     // Prefer the anchor text when it is right next to the link, else derive a title from the slug.
     const around = html.slice(match.index!, match.index! + 600);
     const anchor = around.match(/>([^<>]{4,120})<\/a>/)?.[1]?.replace(/\s+/g, " ").trim();
-    const image = html.slice(Math.max(0, match.index! - 1500), match.index! + 1500).match(/https:\/\/[^"'\s]+\.(?:jpe?g|png|webp)(?:\?[^"'\s]*)?/)?.[0] ?? null;
+    const image = cardImage(html, links, index, site.imageBeforeLink ?? false);
     hits.push({ title: anchor && !/^(lees|bekijk|meer|read|ver)/i.test(anchor) ? anchor : titleFromSlug(match[1]), url, imageUrl: image, source: site.name, language: site.language });
     if (hits.length >= limit * 3) break;
   }
