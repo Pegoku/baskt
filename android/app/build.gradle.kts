@@ -4,6 +4,11 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+val commitCount = providers.exec {
+    commandLine("git", "rev-list", "--count", "HEAD")
+    isIgnoreExitValue = true
+}.standardOutput.asText.get().trim().toIntOrNull() ?: 1
+
 android {
     namespace = "nl.baskt"
     compileSdk = 37
@@ -12,8 +17,10 @@ android {
         applicationId = "nl.baskt"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // Every commit gets a higher version, so Obtainium (and Android) see each CI release as an update; local
+        // builds of the same commit get the same number, so they keep installing over the released APK.
+        versionCode = commitCount
+        versionName = "0.1.$commitCount"
     }
 
     buildTypes {
