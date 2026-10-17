@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CardMembership
 import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.Badge
@@ -91,10 +92,14 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
     // item assigns it to this store, so bought items never count as "the order step ran".
     val assigned = items.any { !it.isGroup && !it.isBought && it.assignedStore != null }
     val candidates = items.filter { !it.isGroup && !it.isSkipped && (it.isBought || !assigned || it.assignedStore == store) }
-    val shopping = candidates.filter { !it.isBought || it.assignedStore == store }.mapNotNull { item -> item.match(store)?.effective?.let { item to it } }
+    // Items without a product here stay on the trip as well (in their own section at the end), so they can still be
+    // looked for on the shelf and ticked off.
+    val shopping = candidates.filter { !it.isBought || it.assignedStore == store }.map { item -> item to item.match(store)?.effective }
     val remaining = shopping.filter { !it.first.isBought }
-    val total = shopping.sumOf { (item, product) -> product.priceCents * item.quantity }
-    val sections = shopping.groupBy { it.second.category?.substringBefore(" / ")?.ifBlank { null } ?: "Other" }.toSortedMap()
+    val total = shopping.sumOf { (item, product) -> (product?.priceCents ?: 0) * item.quantity }
+    val (found, notFound) = shopping.partition { it.second != null }
+    val sections = found.groupBy { it.second?.category?.substringBefore(" / ")?.ifBlank { null } ?: "Other" }.toSortedMap().toList() +
+        listOfNotNull(notFound.takeIf { it.isNotEmpty() }?.let { "Not found at this store" to it })
     val scansHere = tripScans.filter { it.store == store && System.currentTimeMillis() - it.at < 12 * 60 * 60 * 1000 }
     val archived = items.filter { !it.isGroup && it.isSkipped }
     var showArchived by remember { mutableStateOf(false) }
@@ -224,20 +229,29 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
                                         Checkbox(checked = item.isBought, onCheckedChange = { toggle(item, product) }, modifier = Modifier.padding(4.dp))
-                                        ProductThumb(product, size = 44)
+                                        if (product != null) ProductThumb(product, size = 44)
+                                        else Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(12.dp), modifier = Modifier.size(44.dp)) {
+                                            Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.SearchOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                        }
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
-                                                (if (item.quantity > 1) "${item.quantity}× " else "") + product.title,
+                                                (if (item.quantity > 1) "${item.quantity}× " else "") + (product?.title ?: item.text),
                                                 style = MaterialTheme.typography.titleMedium,
                                                 textDecoration = if (item.isBought) TextDecoration.LineThrough else null,
                                                 color = if (item.isBought) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                                             )
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                                 if (item.isBought) Icon(Icons.Default.Kitchen, contentDescription = "In stock", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                Text(if (item.isBought) "Bought · in stock · in today's order" else "${product.quantityText} · for “${item.text}”", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Text(
+                                                    when {
+                                                        item.isBought -> "Bought · in stock · in today's order"
+                                                        product == null -> "No product matched here · tick it if you find it"
+                                                        else -> "${product.quantityText} · for “${item.text}”"
+                                                    },
+                                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                         }
-                                        Text((product.priceCents * item.quantity).euros(), fontWeight = FontWeight.SemiBold)
+                                        if (product != null) Text((product.priceCents * item.quantity).euros(), fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                             }
@@ -275,15 +289,6 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                             if (product != null) Text(product.priceCents.euros(), fontWeight = FontWeight.SemiBold)
                         }
                         HorizontalDivider()
-                    }
-                }
-                val missing = items.filter { !it.isGroup && it.isOpen && (!assigned || it.assignedStore == store) && it.match(store)?.effective == null }
-                if (missing.isNotEmpty()) {
-                    item("missing") {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Not matched at this store", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            for (item in missing) Text("• ${item.text}", style = MaterialTheme.typography.bodyMedium)
-                        }
                     }
                 }
             }
