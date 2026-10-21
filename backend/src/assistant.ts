@@ -740,7 +740,16 @@ export async function chat(
   progress.set(basketId, []);
   report(basketId, "Thinking about your request");
   try {
-    for (let step = 0; step < MAX_STEPS; step += 1) {
+    for (let step = 0; step <= MAX_STEPS; step += 1) {
+      // Out of tool steps: one last turn without tools, so the answer reports what the searches found
+      // instead of ending on "Done.".
+      const last = step === MAX_STEPS;
+      if (last)
+        messages.push({
+          role: "system",
+          content:
+            "No more tools. Reply now with your final JSON (tool null), using the results above.",
+        });
       const raw = await chatJson<{
         answer?: unknown;
         reply?: unknown;
@@ -748,7 +757,11 @@ export async function chat(
         proposal?: unknown;
         recipes?: unknown;
         products?: unknown;
-      }>(messages, { maxTokens: 4000, tools: TOOL_SPECS, profile: "assistant" });
+      }>(messages, {
+        maxTokens: 4000,
+        tools: last ? undefined : TOOL_SPECS,
+        profile: "assistant",
+      });
       if (!raw) {
         reply =
           reply || "I could not reach the AI right now. Please try again.";
@@ -765,7 +778,7 @@ export async function chat(
         typeof (raw.tool as ToolCall).name === "string"
           ? (raw.tool as ToolCall)
           : null;
-      if (!tool) break;
+      if (!tool || last) break;
       report(basketId, describeTool(tool));
       const result = await runTool(tool, basketId);
       console.log(
