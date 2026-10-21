@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { db, now, resetDbForTests } from "@/db";
-import { runTool, sanitizeProposal, toolResultText } from "@/assistant";
+import { linkedProducts, runTool, sanitizeProposal, toolResultText } from "@/assistant";
 import { basketItems, DEFAULT_BASKET_ID, type ItemKind } from "@/db/schema";
 import { upsertProducts } from "@/stores/search";
 
@@ -70,5 +70,19 @@ describe("assistant", () => {
     expect(await runTool({ name: "product_details", args: { productId: "AH:nope" } }, DEFAULT_BASKET_ID)).toMatchObject({ error: expect.stringContaining("unknown productId") });
     expect(await runTool({ name: "check_product_image", args: { productId: "AH:wi1", question: "is it organic?" } }, DEFAULT_BASKET_ID)).toMatchObject({ error: expect.stringContaining("vision") });
     expect(await runTool({ name: "check_product_image", args: { productId: "AH:wi1" } }, DEFAULT_BASKET_ID)).toMatchObject({ error: "question required" });
+  });
+
+  test("an answer links the products it quotes, in the order it names them, and the ones the model lists", () => {
+    const product = (sourceId: string, title: string) => ({
+      store: "AH", sourceId, title, brand: null, quantityText: "500 g", unitAmount: null, unit: null, priceCents: 279,
+      regularPriceCents: null, unitPriceCents: null, unitPriceUnit: null, dealText: null, isDeal: false, imageUrl: null,
+      sourceUrl: null, category: null, available: true,
+    });
+    upsertProducts([product("rice1", "Antonio Sotos Paella"), product("rice2", "AH Rijst rondjes zeezout"), product("rice3", "AH Risottorijst")]);
+    const answer = "Tienes el arroz ah rijst rondjes zeezout (2,39 €) y el arroz Antonio Sotos Paella (500 g).";
+    // Quoted titles match regardless of case and punctuation; a seen but unmentioned product stays out.
+    expect(linkedProducts(answer, null, ["AH:rice1", "AH:rice2", "AH:rice3"])).toEqual(["AH:rice2", "AH:rice1"]);
+    // Listed ids count even when the answer paraphrases them; invented ids are dropped.
+    expect(linkedProducts("Prueba el risotto.", ["AH:rice3", "AH:made-up", 7], [])).toEqual(["AH:rice3"]);
   });
 });

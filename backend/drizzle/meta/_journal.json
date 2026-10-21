@@ -120,6 +120,13 @@
       "when": 1789841566889,
       "tag": "0016_shop_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1792621575634,
+      "tag": "0017_chat_products",
+      "breakpoints": true
     }
   ]
 }

@@ -242,6 +242,8 @@ export const chatMessages = sqliteTable(
     content: text("content").notNull(),
     proposalJson: text("proposal_json", { mode: "json" }).$type<Proposal | null>(),
     recipesJson: text("recipes_json", { mode: "json" }).$type<RecipeCard[] | null>(),
+    // Products the answer talks about, shown as tappable cards with a quick add.
+    productIdsJson: text("product_ids_json", { mode: "json" }).$type<string[] | null>(),
     createdAt: integer("created_at").notNull(),
   },
   (table) => [index("chat_messages_basket_idx").on(table.basketId, table.createdAt)],

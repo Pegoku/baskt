@@ -43,6 +43,11 @@ export function history(basketId: string): ChatMessageRow[] {
     .all();
 }
 
+/** A stored message plus the products its answer links to, looked up fresh so prices stay current. */
+export function messageView(row: ChatMessageRow) {
+  return { ...row, products: productsByIds(row.productIdsJson ?? []) };
+}
+
 export function clearHistory(basketId: string) {
   db().delete(chatMessages).where(eq(chatMessages.basketId, basketId)).run();
 }
@@ -381,7 +386,7 @@ const SYSTEM = (
 Answer in ${language}. Be brief.
 
 Work in steps. Each turn return ONLY a JSON object:
-{"answer": string, "tool": {"name","args"} | null, "proposal": {"summary", "changes": [...]} | null, "recipes": [{"title","url","source","imageUrl"}] | null}
+{"answer": string, "tool": {"name","args"} | null, "proposal": {"summary", "changes": [...]} | null, "recipes": [{"title","url","source","imageUrl"}] | null, "products": [productId] | null}
 Tools: list_basket {detail} (every item: itemId, text, quantity; detail=true also gives the per-store pick with productId/title/size/price) · list_stock (what is at home) · search_products {store, query} (store codes: STORES) · product_details {productId} (brand, description, availability) · check_product_image {productId, question} (a vision model looks at the packaging photos and answers) · search_recipes {query} (recipe cards) · read_recipe {url} (ingredients + steps).
 Change types (real itemIds/productIds from tool results only): {"type":"add","text","quantity"} · {"type":"delete","itemId","text"} · {"type":"delete_all"} (empties the basket; the app expands it to one row per item) · {"type":"rename","itemId","from","to"} · {"type":"quantity","itemId","text","quantity"} · {"type":"replace","itemId","text","store","productId","from","to"} · {"type":"skip","itemId","text","store"} · {"type":"add_recipe_folder","url","title"}.
 Rules:
@@ -389,6 +394,7 @@ Rules:
 - A tool result ending in "only the first N of M entries are shown" is incomplete: never conclude from it that the basket is empty or that you have seen everything.
 - Product swaps (e.g. "1 kg bags to 500 g"): list_basket {"detail":true}, then search_products per store; propose "replace" only where you found a fitting product and say which you could not.
 - Finding a product for the user ("find me lactose-free butter at AH", "is this really the whole grain one?"): search_products, read the titles, then product_details for the likely ones, and check_product_image when the title/description leave doubt or the user asks you to check the picture. Report what you found (title, size, price, what the picture showed) in "answer"; propose "add"/"replace" only when the user wants it on the list.
+- "products": the productIds of every product your answer names (from search_products/product_details results, in the order you mention them). The app shows them as cards the user can open and add to the basket, so name the product in "answer" and list it here.
 - Never ask permission in text; put ALL changes in "proposal" in the same turn. The app shows it as a card titled "summary" (e.g. "What you still need to buy for pancakes").
 - "answer" is ONLY for answering a question (e.g. cooking time) or a warning; "" when the card says it all; NEVER name items that are in "changes". Plain text, no markdown.
 - Recipes: ALWAYS search_recipes first and return real results in "recipes" (max 5); never invent one. Use read_recipe when the user is specific.
@@ -626,6 +632,47 @@ function sanitizeRecipes(raw: unknown): RecipeCard[] | null {
   return cards.length ? cards : null;
 }
 
+function normalized(text: string) {
+  return ` ${text
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()} `;
+}
+
+/**
+ * Products to show under the answer: the ones the model listed, plus any product it looked at whose title the
+ * answer quotes (the model often names products without listing them). Only real products, at most six.
+ */
+export function linkedProducts(
+  answer: string,
+  named: unknown,
+  seen: Iterable<string>,
+): string[] {
+  const ids = Array.isArray(named)
+    ? named.filter((id): id is string => typeof id === "string")
+    : [];
+  const text = normalized(answer);
+  const quoted = productsByIds([...seen]).filter((product) =>
+    text.includes(normalized(product.title)),
+  );
+  // Answer order reads best: sort by where each title appears, listed-but-unquoted ones keep their order after.
+  const position = (title: string) => {
+    const at = text.indexOf(normalized(title));
+    return at < 0 ? Number.MAX_SAFE_INTEGER : at;
+  };
+  return productsByIds([...new Set([...ids, ...quoted.map((product) => product.id)])])
+    .map((product, index) => ({ product, index }))
+    .sort(
+      (a, b) =>
+        position(a.product.title) - position(b.product.title) ||
+        a.index - b.index,
+    )
+    .slice(0, 6)
+    .map(({ product }) => product.id);
+}
+
 /** One user turn: stores the message, runs the tool loop, stores and returns the assistant's message. */
 export async function chat(
   basketId: string,
@@ -637,6 +684,7 @@ export async function chat(
     content: text,
     proposalJson: null,
     recipesJson: null,
+    productIdsJson: null,
   });
   if (!aiConfigured()) {
     return [
@@ -648,6 +696,7 @@ export async function chat(
           "The assistant needs an AI provider configured on the server (AI_API_KEY / AI_MODEL).",
         proposalJson: null,
         recipesJson: null,
+        productIdsJson: null,
       }),
     ];
   }
@@ -671,9 +720,14 @@ export async function chat(
           )
           .join("; ")}]`
       : "";
+    const linked = row.productIdsJson?.length
+      ? `\n[products shown: ${productsByIds(row.productIdsJson)
+          .map((product) => `${product.title} (${product.id})`)
+          .join("; ")}]`
+      : "";
     messages.push({
       role: row.role === "assistant" ? "system" : "user",
-      content: `${row.role === "assistant" ? "ASSISTANT (previous turn): " : ""}${row.content}${extra}`,
+      content: `${row.role === "assistant" ? "ASSISTANT (previous turn): " : ""}${row.content}${extra}${linked}`,
     });
   }
 
@@ -681,6 +735,8 @@ export async function chat(
   let proposal: Proposal | null = null;
   let recipes: RecipeCard[] | null = null;
   let lastRecipeHits: RecipeCard[] = [];
+  let namedProducts: unknown = null;
+  const seenProducts = new Set<string>();
   progress.set(basketId, []);
   report(basketId, "Thinking about your request");
   try {
@@ -691,6 +747,7 @@ export async function chat(
         tool?: unknown;
         proposal?: unknown;
         recipes?: unknown;
+        products?: unknown;
       }>(messages, { maxTokens: 4000, tools: TOOL_SPECS, profile: "assistant" });
       if (!raw) {
         reply =
@@ -701,6 +758,7 @@ export async function chat(
       if (typeof answer === "string" && answer.trim()) reply = answer.trim();
       proposal = sanitizeProposal(raw.proposal, basketId) ?? proposal;
       recipes = sanitizeRecipes(raw.recipes) ?? recipes;
+      if (Array.isArray(raw.products) && raw.products.length) namedProducts = raw.products;
       const tool =
         raw.tool &&
         typeof raw.tool === "object" &&
@@ -720,6 +778,10 @@ export async function chat(
         result.length
       )
         lastRecipeHits = result as RecipeCard[];
+      // Products the model has seen, so the answer can link the ones it quotes.
+      for (const entry of Array.isArray(result) ? result : [result])
+        if (entry && typeof (entry as { productId?: unknown }).productId === "string")
+          seenProducts.add((entry as { productId: string }).productId);
       report(basketId, "Thinking");
       messages.push({
         role: "system",
@@ -747,6 +809,7 @@ export async function chat(
   if (proposal) proposal = withNamedDuplicates(proposal, text, basketId);
   if (!recipes && lastRecipeHits.length)
     recipes = sanitizeRecipes(lastRecipeHits);
+  const productIds = linkedProducts(reply, namedProducts, seenProducts);
   // A proposal card (with its summary as title) is a complete message on its own; only fill text when there is nothing else.
   if (!reply && !proposal) reply = recipes ? "Here are some recipes." : "Done.";
   return [
@@ -757,6 +820,7 @@ export async function chat(
       content: reply,
       proposalJson: proposal,
       recipesJson: recipes,
+      productIdsJson: productIds.length ? productIds : null,
     }),
   ];
 }

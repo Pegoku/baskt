@@ -1,0 +1,1 @@
+ALTER TABLE `chat_messages` ADD `product_ids_json` text;

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { DEFAULT_BASKET_ID } from "@/db/schema";
-import { applyProposal, chat, clearHistory, history, progressFor } from "@/assistant";
+import { applyProposal, chat, clearHistory, history, messageView, progressFor } from "@/assistant";
 import { basketExists } from "@/routes/baskets";
 
 /** Assistant chat: persistent per-basket history, tool-using turns, confirm-before-apply proposals. */
@@ -9,7 +9,7 @@ export const chatRoute = new Hono();
 chatRoute.get("/", (c) => {
   const basketId = c.req.query("basketId") ?? DEFAULT_BASKET_ID;
   if (!basketExists(basketId)) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
-  return c.json({ basketId, messages: history(basketId) });
+  return c.json({ basketId, messages: history(basketId).map(messageView) });
 });
 
 /** Live steps of the turn in progress (empty when idle); the app polls this while waiting. */
@@ -24,7 +24,7 @@ chatRoute.post("/", async (c) => {
   const basketId = body.basketId ?? DEFAULT_BASKET_ID;
   if (!basketExists(basketId)) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
   if (!body.text?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "text is required" } }, 400);
-  return c.json({ messages: await chat(basketId, body.text.trim()) });
+  return c.json({ messages: (await chat(basketId, body.text.trim())).map(messageView) });
 });
 
 chatRoute.delete("/", (c) => {
@@ -38,5 +38,5 @@ chatRoute.post("/proposals/:messageId/apply", async (c) => {
   const indices = Array.isArray(body.indices) ? body.indices.filter((value): value is number => Number.isInteger(value)) : [];
   const result = await applyProposal(c.req.param("messageId"), indices);
   if (!result) return c.json({ error: { code: "NOT_FOUND", message: "proposal not found" } }, 404);
-  return c.json(result);
+  return c.json({ ...result, message: messageView(result.message) });
 });
