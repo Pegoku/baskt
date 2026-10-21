@@ -1,6 +1,9 @@
 package nl.baskt.ui.common
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -11,6 +14,14 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
@@ -28,12 +39,61 @@ import nl.baskt.data.unitPriceLabel
 fun ZoomableImage(url: String, title: String, modifier: Modifier = Modifier) {
     var zoomed by remember { mutableStateOf(false) }
     AsyncImage(url, contentDescription = "Enlarge $title", modifier = modifier.clickable { zoomed = true })
-    if (zoomed) Dialog(onDismissRequest = { zoomed = false }) {
-        Surface(shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth().clickable { zoomed = false }) {
-            Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                AsyncImage(url, title, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
+    if (zoomed) ImageViewer(url, title) { zoomed = false }
+}
+
+/** A full-screen dialog, so the zoomed image can grow past its card. Only taps beside both, or Close, dismiss it. */
+@Composable
+private fun ImageViewer(url: String, title: String, onDismiss: () -> Unit) {
+    var card by remember { mutableStateOf(Rect.Zero) }
+    var frame by remember { mutableStateOf(Rect.Zero) }
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    // Keep the scaled image covering its frame so it can't be dragged away.
+    fun clamp(value: Offset, s: Float): Offset {
+        val maxX = (s - 1) * frame.width / 2
+        val maxY = (s - 1) * frame.height / 2
+        return Offset(value.x.coerceIn(-maxX, maxX), value.y.coerceIn(-maxY, maxY))
+    }
+    // Scaling happens around the frame's centre, so a point keeps its place when the offset follows it.
+    fun zoomAround(point: Offset, newScale: Float, pan: Offset = Offset.Zero) {
+        val focus = point - frame.center
+        offset = clamp(focus - (focus - offset) * (newScale / scale) + pan, newScale)
+        scale = newScale
+    }
+    fun onImage(point: Offset): Boolean {
+        val center = frame.center + offset
+        val half = Offset(frame.width, frame.height) * (scale / 2)
+        return Rect(center - half, center + half).contains(point)
+    }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        Box(
+            Modifier.fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onDoubleTap = { point -> if (scale > 1f) { scale = 1f; offset = Offset.Zero } else if (onImage(point)) zoomAround(point, 2.5f) },
+                        onTap = { point -> if (!card.contains(point) && !onImage(point)) onDismiss() },
+                    )
+                }
+                .pointerInput(Unit) {
+                    detectTransformGestures { centroid, pan, zoom, _ -> zoomAround(centroid, (scale * zoom).coerceIn(1f, 5f), pan) }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            // A background rather than a Surface, which would clip the zoomed image to the card.
+            Column(
+                Modifier.padding(24.dp).fillMaxWidth()
+                    .onGloballyPositioned { card = it.boundsInRoot() }
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.large)
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                AsyncImage(url, title, modifier = Modifier.fillMaxWidth().aspectRatio(1f).zIndex(1f)
+                    .onGloballyPositioned { frame = it.boundsInRoot() }
+                    .graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y })
                 Text(title, style = MaterialTheme.typography.titleMedium)
-                TextButton(onClick = { zoomed = false }) { Text("Close image") }
+                Text("Pinch or double-tap to zoom", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = onDismiss) { Text("Close image") }
             }
         }
     }
