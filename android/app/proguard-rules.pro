@@ -8,3 +8,9 @@
 -keepclassmembers class * extends androidx.work.InputMerger {
     public <init>();
 }
+
+# ML Kit discovers its component registrars from manifest metadata and instantiates them by reflection.
+# Without their no-argument constructors, BarcodeScanning.getClient() finds no factory and crashes.
+-keepclassmembers class * implements com.google.firebase.components.ComponentRegistrar {
+    public <init>();
+}
