@@ -37,6 +37,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -71,10 +72,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import nl.baskt.data.ChatMessage
+import nl.baskt.data.Product
 import nl.baskt.data.ProposedChange
 import nl.baskt.data.RecipeCard
 import nl.baskt.ui.AppViewModel
+import nl.baskt.data.StoreInfo
+import nl.baskt.ui.common.ProductRow
 import nl.baskt.ui.common.StoreBadge
+import nl.baskt.ui.common.StoreLogo
 import nl.baskt.ui.recipes.RecipeSheet
 
 /**
@@ -89,6 +94,9 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
     val steps by viewModel.chatSteps.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
     val recipeDetail by viewModel.recipeDetail.collectAsState()
+    val items by viewModel.basket.items.collectAsState()
+    // Products already picked for an item in this basket show as added instead of offering a second copy.
+    val inBasket = remember(items) { items.flatMap { item -> item.matches.mapNotNull { it.chosen?.id } }.toSet() }
     var input by remember { mutableStateOf("") }
     val dictate = nl.baskt.ui.common.rememberVoiceInput(viewModel, "What would you like to ask?") {
         if (online) { input = ""; viewModel.sendChat(it, voiceInput = true) } else input = it
@@ -148,7 +156,7 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
             LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(messages, key = { it.id }) { message ->
                     if (message.role == "user") UserBubble(message.content)
-                    else AssistantMessage(viewModel, message, stores.map { it.code to it.name }.toMap(), onApply = { indices -> viewModel.applyProposal(message, indices) }, onOpenRecipe = { openRecipe = it; viewModel.openRecipe(nl.baskt.data.RecipeSummary(it.title, it.url, it.imageUrl, source = it.source)) }, onAddFolder = { viewModel.addRecipeFolder(it.url); onFolderAdded() })
+                    else AssistantMessage(viewModel, message, stores, inBasket, onApply = { indices -> viewModel.applyProposal(message, indices) }, onOpenRecipe = { openRecipe = it; viewModel.openRecipe(nl.baskt.data.RecipeSummary(it.title, it.url, it.imageUrl, source = it.source)) }, onAddFolder = { viewModel.addRecipeFolder(it.url); onFolderAdded() })
                 }
                 if (busy) item("busy") {
                     // Live trace of the assistant's work: earlier steps dimmed, the current one with the spinner.
@@ -190,14 +198,15 @@ private fun UserBubble(text: String) {
 }
 
 @Composable
-private fun AssistantMessage(viewModel: AppViewModel, message: ChatMessage, storeNames: Map<String, String>, onApply: (List<Int>) -> Unit, onOpenRecipe: (RecipeCard) -> Unit, onAddFolder: (RecipeCard) -> Unit) {
+private fun AssistantMessage(viewModel: AppViewModel, message: ChatMessage, stores: List<StoreInfo>, inBasket: Set<String>, onApply: (List<Int>) -> Unit, onOpenRecipe: (RecipeCard) -> Unit, onAddFolder: (RecipeCard) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (message.content.isNotBlank()) {
             Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)) {
                 Text(message.content, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp).widthIn(max = 320.dp))
             }
         }
-        message.proposalJson?.let { proposal -> ProposalCard(message, proposal.summary, proposal.changes, proposal.applied ?: emptyList(), storeNames, onApply) }
+        for (product in message.products) ProductCard(product, stores, product.id in inBasket) { viewModel.addFromProduct(product) }
+        message.proposalJson?.let { proposal -> ProposalCard(message, proposal.summary, proposal.changes, proposal.applied ?: emptyList(), stores.associate { it.code to it.name }, onApply) }
         message.recipesJson?.takeIf { it.isNotEmpty() }?.let { cards ->
             for (card in cards) {
                 Card(onClick = { onOpenRecipe(card) }) {
@@ -213,6 +222,21 @@ private fun AssistantMessage(viewModel: AppViewModel, message: ChatMessage, stor
             }
         }
         SpeechToggle(viewModel, message)
+    }
+}
+
+/** A product the answer names: tap for its details, or add it straight to the basket with this exact pick. */
+@Composable
+private fun ProductCard(product: Product, stores: List<StoreInfo>, added: Boolean, onAdd: () -> Unit) {
+    Card {
+        ProductRow(product, Modifier.padding(start = 10.dp, top = 8.dp, bottom = 8.dp, end = 4.dp)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                StoreLogo(product.store, stores, size = 20)
+                FilledTonalIconButton(onClick = onAdd, enabled = !added) {
+                    Icon(if (added) Icons.Default.Check else Icons.Default.Add, contentDescription = if (added) "In your basket" else "Add ${product.title} to the basket")
+                }
+            }
+        }
     }
 }
 

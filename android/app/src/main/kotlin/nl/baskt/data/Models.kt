@@ -606,6 +606,8 @@ data class ChatMessage(
     val content: String,
     val proposalJson: Proposal? = null,
     val recipesJson: List<RecipeCard>? = null,
+    /** Products the answer names, current listing; shown as cards with a quick add. */
+    val products: List<Product> = emptyList(),
     val createdAt: Long = 0,
 )
 
