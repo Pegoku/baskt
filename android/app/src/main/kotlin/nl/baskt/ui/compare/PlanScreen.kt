@@ -113,7 +113,7 @@ fun PlanScreen(viewModel: AppViewModel, active: Boolean = true, onBack: () -> Un
                 open.isEmpty() -> EmptyPlan("Everything is skipped", "Put something back on this trip to compare the stores.")
                 data == null && comparing -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
                 data == null -> EmptyPlan("No comparison available", "The stores could not be compared. Pull prices again once you are online.")
-                else -> PlanList(data, listed, open, enabled, stores, viewModel, onOpenItem)
+                else -> PlanList(data, listed, open, enabled, stores, viewModel, onOpenItem, onShop)
             }
         }
     }
@@ -137,6 +137,7 @@ private fun PlanList(
     stores: List<StoreInfo>,
     viewModel: AppViewModel,
     onOpenItem: (String) -> Unit,
+    onShop: (String) -> Unit,
 ) {
     val ranked = data.stores.sortedBy { it.rank }
     val rows = data.items.associateBy { it.itemId }
@@ -154,6 +155,7 @@ private fun PlanList(
                 missing = data.items.filter { it.itemId in summary.missingItemIds }.map { it.text },
                 chosen = allAt(summary.store),
                 onChoose = { viewModel.assign("store:${summary.store}") },
+                onShop = { onShop(summary.store) },
             )
         }
         // Only worth a second trip when splitting the list actually saves something.
@@ -202,7 +204,7 @@ private fun SectionTitle(text: String, modifier: Modifier = Modifier) {
 
 /** One store's total for the whole list, and the button that sends everything there. */
 @Composable
-private fun StoreCard(summary: StoreSummary, stores: List<StoreInfo>, itemCount: Int, best: Boolean, missing: List<String>, chosen: Boolean, onChoose: () -> Unit) {
+private fun StoreCard(summary: StoreSummary, stores: List<StoreInfo>, itemCount: Int, best: Boolean, missing: List<String>, chosen: Boolean, onChoose: () -> Unit, onShop: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = if (best) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer)) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -232,10 +234,11 @@ private fun StoreCard(summary: StoreSummary, stores: List<StoreInfo>, itemCount:
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.tertiary,
             )
-            if (chosen) FilledTonalButton(onClick = onChoose, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+            // Once the whole list is assigned here, the same spot takes you into the store.
+            if (chosen) Button(onClick = onShop, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
                 Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                Text("Everything here")
+                Text("Start shopping at ${storeName(summary.store, stores)}")
             } else Button(onClick = onChoose, modifier = Modifier.fillMaxWidth()) { Text("Everything at ${storeName(summary.store, stores)}") }
         }
     }
@@ -419,7 +422,7 @@ private fun ShopBar(shoppable: List<StoreInfo>, perStore: Map<String, OrderStore
                             Spacer(Modifier.width(ButtonDefaults.IconSpacing))
                             Column {
                                 Text("Shop at ${store.name}", style = MaterialTheme.typography.labelLarge)
-                                Text("${total.count} items · ${total.totalCents.euros()}", style = MaterialTheme.typography.labelSmall)
+                                Text((if (total.count == 1) "1 item" else "${total.count} items") + " · ${total.totalCents.euros()}", style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }
