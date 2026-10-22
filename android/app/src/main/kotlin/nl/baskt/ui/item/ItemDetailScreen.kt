@@ -102,6 +102,14 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
         val value = titleDraft.text.trim()
         if (value.isNotEmpty() && value != current.text) viewModel.rename(current, value) else titleDraft = androidx.compose.ui.text.input.TextFieldValue(current.text)
     }
+    var confirmDelete by remember { mutableStateOf(false) }
+    if (confirmDelete && item != null) nl.baskt.ui.common.ConfirmDialog(
+        title = "Delete this item?",
+        body = "“${item.text}” leaves the list, with the products chosen for it.",
+        confirmLabel = "Delete",
+        onDismiss = { confirmDelete = false },
+        onConfirm = { viewModel.delete(item); onBack() },
+    )
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
@@ -145,7 +153,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
                                 androidx.compose.material3.DropdownMenuItem(
                                     text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                                     leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                                    onClick = { menuOpen = false; viewModel.delete(item); onBack() },
+                                    onClick = { menuOpen = false; confirmDelete = true },
                                 )
                             }
                         }

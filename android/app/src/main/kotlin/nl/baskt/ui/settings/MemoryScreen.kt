@@ -48,7 +48,7 @@ fun MemoryScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         },
     ) { padding ->
         if (memory.isEmpty() && names.isEmpty()) {
-            Text("Nothing learned yet. Picks, thumbs, \"none of these fit\" and wording corrections from comment mode end up here.", modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Nothing learned yet. Picks, thumbs, \"none of these fit\" and wording corrections from comment mode end up here.", modifier = Modifier.padding(padding).padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             return@Scaffold
         }
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -64,7 +66,7 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
             TopAppBar(
                 title = { Text("Deals") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
-                actions = { IconButton(onClick = { viewModel.findDeals(live = true) }) { Icon(Icons.Default.Refresh, contentDescription = "Search the stores again") } },
+                actions = { if (tab == 0) IconButton(onClick = { viewModel.findDeals(live = true) }) { Icon(Icons.Default.Refresh, contentDescription = "Search the stores again") } },
             )
         },
     ) { padding ->
@@ -72,14 +74,14 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
             nl.baskt.ui.common.OfflineBanner(viewModel)
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 3)) { Text("My items") }
-                SegmentedButton(selected = tab == 2, onClick = { tab = 2 }, shape = SegmentedButtonDefaults.itemShape(1, 3)) { Text("All deals") }
-                SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(2, 3)) { Text("Prices") }
+                SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 3)) { Text("All deals") }
+                SegmentedButton(selected = tab == 2, onClick = { tab = 2 }, shape = SegmentedButtonDefaults.itemShape(2, 3)) { Text("Prices") }
             }
-            if (tab == 2) {
+            if (tab == 1) {
                 AllDealsTab(viewModel, stores, onAdded = { notify(it) })
                 return@Column
             }
-            if (tab == 1) {
+            if (tab == 2) {
                 val data = changes
                 val format = java.text.SimpleDateFormat("d MMM HH:mm", java.util.Locale.getDefault())
                 Text(
@@ -172,7 +174,7 @@ private fun AllDealsTab(viewModel: AppViewModel, stores: List<nl.baskt.data.Stor
             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { viewModel.loadAllDeals(query.trim(), store) }),
             trailingIcon = { IconButton(onClick = { viewModel.loadAllDeals(query.trim(), store) }) { Icon(Icons.Default.Search, contentDescription = "Search") } },
         )
-        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             androidx.compose.material3.FilterChip(selected = store == null, onClick = { store = null }, label = { Text("All stores") })
             for (info in enabled) androidx.compose.material3.FilterChip(selected = store == info.code, onClick = { store = info.code }, label = { Text(info.name) })
         }

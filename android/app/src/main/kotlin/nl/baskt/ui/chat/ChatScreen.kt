@@ -112,12 +112,20 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
         viewModel.sendChat(text)
     }
 
+    var confirmClear by remember { mutableStateOf(false) }
+    if (confirmClear) nl.baskt.ui.common.ConfirmDialog(
+        title = "Clear the conversation?",
+        body = "The assistant forgets this chat; your list and memory stay as they are.",
+        confirmLabel = "Clear",
+        onDismiss = { confirmClear = false },
+        onConfirm = { viewModel.clearChat() },
+    )
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Assistant") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
-                actions = { if (messages.isNotEmpty()) IconButton(onClick = { viewModel.clearChat() }) { Icon(Icons.Default.DeleteSweep, contentDescription = "Clear chat") } },
+                actions = { if (messages.isNotEmpty()) IconButton(onClick = { confirmClear = true }) { Icon(Icons.Default.DeleteSweep, contentDescription = "Clear chat") } },
             )
         },
         bottomBar = {

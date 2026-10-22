@@ -183,6 +183,14 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         })
     }
     val open = detail
+    var confirmDelete by remember { mutableStateOf(false) }
+    if (confirmDelete && open != null) nl.baskt.ui.common.ConfirmDialog(
+        title = "Delete this receipt?",
+        body = "Its lines disappear from your spending and from previous orders.",
+        confirmLabel = "Delete",
+        onDismiss = { confirmDelete = false },
+        onConfirm = { viewModel.deletePurchase(open.purchase.id) },
+    )
     if (open != null) {
         ModalBottomSheet(onDismissRequest = { viewModel.closePurchase() }) {
             Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -191,7 +199,7 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                     Text(dateFormat.format(Date(open.purchase.purchasedAt)), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                     Text(open.purchase.totalCents.euros(), fontWeight = FontWeight.Bold)
                     IconButton(onClick = { correcting = open.asScan() }) { Icon(Icons.Default.Edit, contentDescription = "Correct this receipt") }
-                    IconButton(onClick = { viewModel.deletePurchase(open.purchase.id) }) { Icon(Icons.Default.Delete, contentDescription = "Delete") }
+                    IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.Delete, contentDescription = "Delete") }
                 }
                 for (line in open.lines) {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {

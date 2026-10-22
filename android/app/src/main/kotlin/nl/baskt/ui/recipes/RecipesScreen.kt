@@ -222,6 +222,16 @@ private fun RecipeList(list: List<RecipeSummary>, empty: String, busy: Boolean, 
 
 @Composable
 private fun MineList(mine: List<UserRecipe>, favourites: List<RecipeSummary>, recent: List<RecipeSummary>, viewModel: AppViewModel, isFavourite: (RecipeSummary) -> Boolean, onEdit: (UserRecipe) -> Unit, onOpen: (RecipeSummary) -> Unit, onFolder: (String) -> Unit) {
+    var deleting by remember { mutableStateOf<UserRecipe?>(null) }
+    deleting?.let { recipe ->
+        nl.baskt.ui.common.ConfirmDialog(
+            title = "Delete this recipe?",
+            body = "“${recipe.title}” is removed from your library.",
+            confirmLabel = "Delete",
+            onDismiss = { deleting = null },
+            onConfirm = { viewModel.deleteMyRecipe(recipe.id) },
+        )
+    }
     if (mine.isEmpty() && favourites.isEmpty() && recent.isEmpty()) {
         Text("Your own recipes, favourites and recently viewed recipes appear here. Tap \"New recipe\" to write one or let the AI draft it from a description.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(20.dp))
         return
@@ -238,7 +248,7 @@ private fun MineList(mine: List<UserRecipe>, favourites: List<RecipeSummary>, re
                     }
                     IconButton(onClick = { onEdit(recipe) }) { Icon(Icons.Default.Edit, contentDescription = "Edit") }
                     IconButton(onClick = { onFolder(recipe.url) }) { Icon(Icons.Default.CreateNewFolder, contentDescription = "Add as folder") }
-                    IconButton(onClick = { viewModel.deleteMyRecipe(recipe.id) }) { Icon(Icons.Default.Delete, contentDescription = "Delete") }
+                    IconButton(onClick = { deleting = recipe }) { Icon(Icons.Default.Delete, contentDescription = "Delete") }
                 }
             }
         }

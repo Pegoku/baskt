@@ -58,6 +58,14 @@ fun GroupScreen(viewModel: AppViewModel, groupId: String, onBack: () -> Unit, on
     val enabledStores = stores.filter { it.enabled }
     val context = LocalContext.current
 
+    var confirmDelete by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    if (confirmDelete && group != null) nl.baskt.ui.common.ConfirmDialog(
+        title = "Delete this folder?",
+        body = "“${group.text}” and everything in it leave the list.",
+        confirmLabel = "Delete",
+        onDismiss = { confirmDelete = false },
+        onConfirm = { viewModel.delete(group); onBack() },
+    )
     Scaffold(
         topBar = {
             TopAppBar(
@@ -71,7 +79,7 @@ fun GroupScreen(viewModel: AppViewModel, groupId: String, onBack: () -> Unit, on
                         }
                     }
                     if (group != null) {
-                        IconButton(onClick = { viewModel.delete(group); onBack() }) { Icon(Icons.Default.Delete, contentDescription = "Delete folder") }
+                        IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.Delete, contentDescription = "Delete folder") }
                         TransferMenu(baskets, currentBasketId) { basketId, copy -> viewModel.transfer(group, basketId, copy); if (!copy) onBack() }
                     }
                 },
