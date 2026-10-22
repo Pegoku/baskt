@@ -29,7 +29,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -225,13 +224,20 @@ private fun StoreCard(
     modifier: Modifier = Modifier,
 ) {
     val name = storeName(summary.store, stores)
-    Card(colors = CardDefaults.cardColors(containerColor = if (best) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer), modifier = modifier) {
+    // Tapping the card is the choice itself; the selected one wears the same border as a chosen item option.
+    Card(
+        onClick = onChoose,
+        colors = CardDefaults.cardColors(containerColor = if (chosen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer),
+        border = if (chosen) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+        modifier = modifier,
+    ) {
         Column(modifier = Modifier.padding(12.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StoreLogo(summary.store, stores, size = 28)
-                Text(name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                if (chosen) Icon(Icons.Default.Check, contentDescription = "Everything here", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
             }
-            Text(summary.fullTotalCents.euros(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(summary.fullTotalCents.euros(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = if (best) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
             Text(
                 when {
                     best && missing.isEmpty() -> "cheapest · all $itemCount items"
@@ -254,22 +260,12 @@ private fun StoreCard(
                 color = MaterialTheme.colorScheme.tertiary,
             )
             Spacer(Modifier.weight(1f))
-            when {
-                chosen -> Button(onClick = onShop, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)) {
-                    Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                    Text("Shop", maxLines = 1)
-                }
-                assigned.count > 0 -> {
-                    Button(onClick = onShop, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)) {
-                        Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                        Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                        Text("Shop ${assigned.count} · ${assigned.totalCents.euros()}", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    TextButton(onClick = onChoose, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Everything here", maxLines = 1) }
-                }
-                else -> FilledTonalButton(onClick = onChoose, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)) { Text("Everything here", maxLines = 1) }
-            }
+            // Shopping starts here as soon as the store has any share of the list.
+            if (assigned.count > 0) Button(onClick = onShop, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)) {
+                Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                Text(if (chosen) "Shop" else "Shop ${assigned.count} · ${assigned.totalCents.euros()}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+            } else Text("Tap to shop everything here", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -277,24 +273,24 @@ private fun StoreCard(
 /** Cheapest store for every item, above the stores: the plan that splits the list. */
 @Composable
 private fun MixCard(total: Int, saving: Int, versus: String, active: Boolean, onChoose: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = if (active) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer)) {
-        Row(modifier = Modifier.padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Card(
+        onClick = onChoose,
+        colors = CardDefaults.cardColors(containerColor = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer),
+        border = if (active) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+    ) {
+        Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Mix & match", style = MaterialTheme.typography.titleSmall)
                     Text(total.euros(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 }
                 Text(
-                    when {
-                        saving > 0 -> "Cheapest store per item · saves ${saving.euros()} vs all at $versus"
-                        else -> "Cheapest store per item · no cheaper than all at $versus"
-                    },
+                    if (saving > 0) "Cheapest store per item · saves ${saving.euros()} vs all at $versus" else "Cheapest store per item · no cheaper than all at $versus",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             if (active) Icon(Icons.Default.Check, contentDescription = "Mix in use", tint = MaterialTheme.colorScheme.primary)
-            else FilledTonalButton(onClick = onChoose, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)) { Text("Use mix", maxLines = 1) }
         }
     }
 }
