@@ -1,27 +1,24 @@
 package nl.baskt.ui.compare
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Block
@@ -40,7 +37,6 @@ import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -88,9 +84,6 @@ fun PlanScreen(viewModel: AppViewModel, active: Boolean = true, onBack: () -> Un
     LaunchedEffect(items, active) { if (active) viewModel.compare() }
 
     val data = comparison
-    val perStore = data?.order?.perStore ?: emptyMap()
-    val shoppable = enabled.filter { (perStore[it.code]?.count ?: 0) > 0 }
-    val unassigned = open.count { it.assignedStore == null }
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -100,9 +93,6 @@ fun PlanScreen(viewModel: AppViewModel, active: Boolean = true, onBack: () -> Un
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to the list") } },
                 actions = { IconButton(onClick = { viewModel.compare(refreshPrices = true) }, enabled = open.isNotEmpty()) { Icon(Icons.Default.Refresh, contentDescription = "Refresh prices") } },
             )
-        },
-        bottomBar = {
-            if (open.isNotEmpty()) ShopBar(shoppable, perStore, unassigned, onShop)
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
@@ -146,23 +136,38 @@ private fun PlanList(
     fun allAt(store: String) = open.isNotEmpty() && open.all { it.assignedStore == store || it.match(store)?.effective == null }
     LazyColumn(contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item("h-stores") { SectionTitle("Where to shop") }
-        items(ranked, key = { "store-${it.store}" }) { summary ->
-            StoreCard(
-                summary = summary,
-                stores = stores,
-                itemCount = data.items.size,
-                best = summary.rank == 1 && ranked.size > 1,
-                missing = data.items.filter { it.itemId in summary.missingItemIds }.map { it.text },
-                chosen = allAt(summary.store),
-                onChoose = { viewModel.assign("store:${summary.store}") },
-                onShop = { onShop(summary.store) },
-            )
+        val perStore = data.order.perStore
+        val cheapestRow = data.items.associate { it.itemId to it.cheapestStore }
+        // The mix is in use once every open item sits at its cheapest store (items found nowhere stay unassigned).
+        val mixActive = ranked.size > 1 && open.isNotEmpty() && open.all { cheapestRow[it.id] == null || it.assignedStore == cheapestRow[it.id] } && open.any { it.assignedStore != null }
+        if (ranked.size > 1) item("mix") {
+            val cheapest = ranked.first()
+            MixCard(total = data.mixAndMatchTotalCents, saving = cheapest.fullTotalCents - data.mixAndMatchTotalCents, versus = storeName(cheapest.store, stores), active = mixActive) { viewModel.assign("mix") }
         }
-        // Only worth a second trip when splitting the list actually saves something.
-        val cheapest = ranked.firstOrNull()
-        val mixSaving = if (cheapest != null) cheapest.fullTotalCents - data.mixAndMatchTotalCents else 0
-        if (ranked.size > 1 && cheapest != null && mixSaving > 0) item("mix") {
-            MixCard(total = data.mixAndMatchTotalCents, saving = mixSaving, versus = storeName(cheapest.store, stores)) { viewModel.assign("mix") }
+        item("stores") {
+            Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (summary in ranked) StoreCard(
+                    summary = summary,
+                    stores = stores,
+                    itemCount = data.items.size,
+                    best = summary.rank == 1 && ranked.size > 1,
+                    missing = data.items.filter { it.itemId in summary.missingItemIds }.map { it.text },
+                    chosen = allAt(summary.store),
+                    assigned = perStore[summary.store] ?: OrderStoreTotal(),
+                    onChoose = { viewModel.assign("store:${summary.store}") },
+                    onShop = { onShop(summary.store) },
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
+            }
+        }
+        val unassigned = open.count { it.assignedStore == null }
+        if (unassigned > 0 && open.any { it.assignedStore != null }) item("unassigned") {
+            Text(
+                if (unassigned == 1) "1 item has no store yet · pick one below" else "$unassigned items have no store yet · pick them below",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
         }
         if (data.missingEverywhere.isNotEmpty()) item("missing") {
             Text(
@@ -202,64 +207,94 @@ private fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = modifier.padding(horizontal = 4.dp, vertical = 4.dp))
 }
 
-/** One store's total for the whole list, and the button that sends everything there. */
+/**
+ * One store's total for the whole list, side by side with the others. The button sends everything there; once the
+ * whole list (or this store's share of a mix) is assigned here, it starts shopping instead.
+ */
 @Composable
-private fun StoreCard(summary: StoreSummary, stores: List<StoreInfo>, itemCount: Int, best: Boolean, missing: List<String>, chosen: Boolean, onChoose: () -> Unit, onShop: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = if (best) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer)) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StoreLogo(summary.store, stores, size = 32)
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(storeName(summary.store, stores), style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        if (missing.isEmpty()) "Everything on the list · $itemCount items" else "${summary.matchedCount} of $itemCount items",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(summary.fullTotalCents.euros(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    if (best) Text("cheapest", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                }
+private fun StoreCard(
+    summary: StoreSummary,
+    stores: List<StoreInfo>,
+    itemCount: Int,
+    best: Boolean,
+    missing: List<String>,
+    chosen: Boolean,
+    assigned: OrderStoreTotal,
+    onChoose: () -> Unit,
+    onShop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val name = storeName(summary.store, stores)
+    Card(colors = CardDefaults.cardColors(containerColor = if (best) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer), modifier = modifier) {
+        Column(modifier = Modifier.padding(12.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StoreLogo(summary.store, stores, size = 28)
+                Text(name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            Text(summary.fullTotalCents.euros(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(
+                when {
+                    best && missing.isEmpty() -> "cheapest · all $itemCount items"
+                    missing.isEmpty() -> "all $itemCount items"
+                    else -> "${summary.matchedCount} of $itemCount items"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = if (best && missing.isEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             if (missing.isNotEmpty()) Text(
-                "Missing: ${missing.joinToString(", ")} · shared items only ${summary.comparableTotalCents.euros()}",
-                style = MaterialTheme.typography.bodySmall,
+                "Missing: ${missing.joinToString(", ")}",
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             if (summary.unconfirmedCount > 0) Text(
-                if (summary.unconfirmedCount == 1) "1 item still uses the suggested product" else "${summary.unconfirmedCount} items still use the suggested product",
-                style = MaterialTheme.typography.bodySmall,
+                if (summary.unconfirmedCount == 1) "1 suggested pick" else "${summary.unconfirmedCount} suggested picks",
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.tertiary,
             )
-            // Once the whole list is assigned here, the same spot takes you into the store.
-            if (chosen) Button(onClick = onShop, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                Text("Start shopping at ${storeName(summary.store, stores)}")
-            } else Button(onClick = onChoose, modifier = Modifier.fillMaxWidth()) { Text("Everything at ${storeName(summary.store, stores)}") }
+            Spacer(Modifier.weight(1f))
+            when {
+                chosen -> Button(onClick = onShop, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)) {
+                    Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                    Text("Shop", maxLines = 1)
+                }
+                assigned.count > 0 -> {
+                    Button(onClick = onShop, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)) {
+                        Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                        Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                        Text("Shop ${assigned.count} · ${assigned.totalCents.euros()}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    TextButton(onClick = onChoose, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Everything here", maxLines = 1) }
+                }
+                else -> FilledTonalButton(onClick = onChoose, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)) { Text("Everything here", maxLines = 1) }
+            }
         }
     }
 }
 
+/** Cheapest store for every item, above the stores: the plan that splits the list. */
 @Composable
-private fun MixCard(total: Int, saving: Int, versus: String, onChoose: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Mix & match", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Cheapest store per item · saves ${saving.euros()} vs all at $versus · more than one trip",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+private fun MixCard(total: Int, saving: Int, versus: String, active: Boolean, onChoose: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = if (active) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer)) {
+        Row(modifier = Modifier.padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Mix & match", style = MaterialTheme.typography.titleSmall)
+                    Text(total.euros(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 }
-                Text(total.euros(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    when {
+                        saving > 0 -> "Cheapest store per item · saves ${saving.euros()} vs all at $versus"
+                        else -> "Cheapest store per item · no cheaper than all at $versus"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            FilledTonalButton(onClick = onChoose, modifier = Modifier.fillMaxWidth()) { Text("Use the cheapest mix") }
+            if (active) Icon(Icons.Default.Check, contentDescription = "Mix in use", tint = MaterialTheme.colorScheme.primary)
+            else FilledTonalButton(onClick = onChoose, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)) { Text("Use mix", maxLines = 1) }
         }
     }
 }
@@ -393,41 +428,6 @@ private fun SkipOption(selected: Boolean, onClick: () -> Unit, modifier: Modifie
             Icon(Icons.Default.Block, contentDescription = null, modifier = Modifier.size(28.dp), tint = if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Skip", style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
             Text(if (selected) "Not this trip" else "Leave home", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, maxLines = 2)
-        }
-    }
-}
-
-/** Sticky bar: one button per store that has items, each opening shopping mode with that store's share of the list. */
-@Composable
-private fun ShopBar(shoppable: List<StoreInfo>, perStore: Map<String, OrderStoreTotal>, unassigned: Int, onShop: (String) -> Unit) {
-    Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)).padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            if (shoppable.isEmpty()) {
-                Text("Pick a store above, or choose per item, to start shopping.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
-            } else {
-                if (unassigned > 0) Text(
-                    if (unassigned == 1) "1 item has no store yet" else "$unassigned items have no store yet",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.padding(horizontal = 4.dp),
-                )
-                Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (store in shoppable) {
-                        val total = perStore[store.code] ?: continue
-                        Button(onClick = { onShop(store.code) }, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)) {
-                            Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                            Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                            Column {
-                                Text("Shop at ${store.name}", style = MaterialTheme.typography.labelLarge)
-                                Text((if (total.count == 1) "1 item" else "${total.count} items") + " · ${total.totalCents.euros()}", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 }
