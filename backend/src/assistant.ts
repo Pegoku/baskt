@@ -163,6 +163,8 @@ function describeTool(call: ToolCall): string {
       return "Reading your basket";
     case "list_stock":
       return "Checking what you have in stock";
+    case "list_purchases":
+      return "Looking at what you bought";
     case "search_products":
       return `Searching ${storeName(args.store)} for “${String(args.query ?? "")}”`;
     case "product_details":
@@ -202,6 +204,12 @@ const TOOL_SPECS = [
   {
     name: "list_stock",
     description: "What the household already has at home.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "list_purchases",
+    description:
+      "What the household bought recently (ticked off while shopping or from scanned receipts), newest first: date, store, product name, quantity, price, productId.",
     parameters: { type: "object", properties: {} },
   },
   {
@@ -265,6 +273,7 @@ const TOOL_SPECS = [
 const TOOL_RESULT_CHARS: Record<string, number> = {
   list_basket: 6000,
   list_stock: 4000,
+  list_purchases: 5000,
   product_details: 3000,
 };
 
@@ -296,7 +305,34 @@ export async function runTool(call: ToolCall, basketId: string): Promise<unknown
       return listStock().map((row) => ({
         text: row.text,
         quantity: row.quantityText,
+        productId: row.productId,
       }));
+    }
+    case "list_purchases": {
+      const { purchaseHistory } = await import("@/orders");
+      const { stockForProduct } = await import("@/stock");
+      const history = purchaseHistory(30);
+      // Relative times: the model has no clock, and "what did I just buy" is about the newest trip.
+      const ago = (at: number) => {
+        const hours = Math.round((Date.now() - at) / 3_600_000);
+        return hours < 1 ? "less than an hour ago" : hours < 48 ? `${hours} h ago` : `${Math.round(hours / 24)} days ago`;
+      };
+      return history.purchases.flatMap(({ purchase, lines }) =>
+        lines.map((line) => {
+          // Barcodes scanned at the till carry no productId; the stock entry they created does.
+          const productId = line.productId ?? (line.barcode ? stockForProduct(null, line.barcode)?.productId : null) ?? null;
+          const product = productId ? (history.products[productId] ?? productsByIds([productId])[0]) : undefined;
+          return {
+            bought: ago(purchase.purchasedAt),
+            store: purchase.store,
+            name: product?.title ?? line.name,
+            size: product?.quantityText ?? null,
+            quantity: line.quantity,
+            priceCents: line.totalPriceCents,
+            productId,
+          };
+        }),
+      );
     }
     case "search_products": {
       const store = String(args.store ?? "");
@@ -387,7 +423,7 @@ Answer in ${language}. Be brief.
 
 Work in steps. Each turn return ONLY a JSON object:
 {"answer": string, "tool": {"name","args"} | null, "proposal": {"summary", "changes": [...]} | null, "recipes": [{"title","url","source","imageUrl"}] | null, "products": [productId] | null}
-Tools: list_basket {detail} (every item: itemId, text, quantity; detail=true also gives the per-store pick with productId/title/size/price) · list_stock (what is at home) · search_products {store, query} (store codes: STORES) · product_details {productId} (brand, description, availability) · check_product_image {productId, question} (a vision model looks at the packaging photos and answers) · search_recipes {query} (recipe cards) · read_recipe {url} (ingredients + steps).
+Tools: list_basket {detail} (every item: itemId, text, quantity; detail=true also gives the per-store pick with productId/title/size/price) · list_stock (what is at home) · list_purchases (what was bought recently, newest first) · search_products {store, query} (store codes: STORES) · product_details {productId} (brand, description, availability) · check_product_image {productId, question} (a vision model looks at the packaging photos and answers) · search_recipes {query} (recipe cards) · read_recipe {url} (ingredients + steps).
 Change types (real itemIds/productIds from tool results only): {"type":"add","text","quantity"} · {"type":"delete","itemId","text"} · {"type":"delete_all"} (empties the basket; the app expands it to one row per item) · {"type":"rename","itemId","from","to"} · {"type":"quantity","itemId","text","quantity"} · {"type":"replace","itemId","text","store","productId","from","to"} · {"type":"skip","itemId","text","store"} · {"type":"add_recipe_folder","url","title"}.
 Rules:
 - Emptying the basket ("delete everything", "clear the list"): ONE {"type":"delete_all"} change, never a list of deletes, and no need to call list_basket first.
@@ -395,7 +431,8 @@ Rules:
 - Product swaps (e.g. "1 kg bags to 500 g"): list_basket {"detail":true}, then search_products per store; propose "replace" only where you found a fitting product and say which you could not.
 - search_products queries are in Dutch, short and generic (the catalogues are Dutch: "paella rijst", not "arroz paella barato"); one search per store, then compare prices yourself.
 - Finding a product for the user ("find me lactose-free butter at AH", "is this really the whole grain one?"): search_products, read the titles, then product_details for the likely ones, and check_product_image when the title/description leave doubt or the user asks you to check the picture. Report what you found (title, size, price, what the picture showed) in "answer"; propose "add"/"replace" only when the user wants it on the list.
-- "products": the productIds of every product your answer names (from search_products/product_details results, in the order you mention them). The app shows them as cards the user can open and add to the basket, so name the product in "answer" and list it here.
+- Questions about past shopping ("what rice did I just buy?", "how much was the milk last time?"): list_purchases and answer from it; name the product and list its productId in "products".
+- "products": the productIds of every product your answer names (from search_products/product_details results, in the order you mention them). The app shows them as cards the user can open and add to the basket, so name the product in "answer" and list it here (never write productIds in "answer").
 - Never ask permission in text; put ALL changes in "proposal" in the same turn. The app shows it as a card titled "summary" (e.g. "What you still need to buy for pancakes").
 - "answer" is ONLY for answering a question (e.g. cooking time) or a warning; "" when the card says it all; NEVER name items that are in "changes". Plain text, no markdown.
 - Recipes: ALWAYS search_recipes first and return real results in "recipes" (max 5); never invent one. Use read_recipe when the user is specific.
