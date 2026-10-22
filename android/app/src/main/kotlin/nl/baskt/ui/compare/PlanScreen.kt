@@ -156,9 +156,11 @@ private fun PlanList(
                 onChoose = { viewModel.assign("store:${summary.store}") },
             )
         }
-        if (ranked.size > 1) item("mix") {
-            val cheapest = ranked.first()
-            MixCard(total = data.mixAndMatchTotalCents, saving = cheapest.fullTotalCents - data.mixAndMatchTotalCents, versus = storeName(cheapest.store, stores)) { viewModel.assign("mix") }
+        // Only worth a second trip when splitting the list actually saves something.
+        val cheapest = ranked.firstOrNull()
+        val mixSaving = if (cheapest != null) cheapest.fullTotalCents - data.mixAndMatchTotalCents else 0
+        if (ranked.size > 1 && cheapest != null && mixSaving > 0) item("mix") {
+            MixCard(total = data.mixAndMatchTotalCents, saving = mixSaving, versus = storeName(cheapest.store, stores)) { viewModel.assign("mix") }
         }
         if (data.missingEverywhere.isNotEmpty()) item("missing") {
             Text(
@@ -247,7 +249,7 @@ private fun MixCard(total: Int, saving: Int, versus: String, onChoose: () -> Uni
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Mix & match", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        if (saving > 0) "Cheapest store per item · saves ${saving.euros()} vs all at $versus" else "Cheapest store per item · more than one trip",
+                        "Cheapest store per item · saves ${saving.euros()} vs all at $versus · more than one trip",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
