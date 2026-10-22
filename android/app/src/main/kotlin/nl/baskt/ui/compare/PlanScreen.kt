@@ -260,12 +260,14 @@ private fun StoreCard(
                 color = MaterialTheme.colorScheme.tertiary,
             )
             Spacer(Modifier.weight(1f))
-            // Shopping starts here as soon as the store has any share of the list.
-            if (assigned.count > 0) Button(onClick = onShop, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)) {
-                Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                Text(if (chosen) "Shop" else "Shop ${assigned.count} · ${assigned.totalCents.euros()}", maxLines = 1, overflow = TextOverflow.Ellipsis)
-            } else Text("Tap to shop everything here", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // One fixed-height slot for the button or the hint, so choosing a store never resizes the cards.
+            Box(modifier = Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.Center) {
+                if (assigned.count > 0) Button(onClick = onShop, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
+                    Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                    Text(if (chosen) "Shop" else "Shop ${assigned.count} · ${assigned.totalCents.euros()}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                } else Text("Tap to shop everything here", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+            }
         }
     }
 }
