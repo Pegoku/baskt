@@ -11,6 +11,15 @@ class BarcodeConfirmationTest {
         assertTrue(validRetailBarcode(expandUpce("04252614")!!))
     }
 
+    @Test fun readsGtinFromGs1Labels() {
+        assertEquals("8718907680127", gs1Gtin("0108718907680127172610 24".replace(" ", "")))
+        assertEquals("8718907680127", gs1Gtin("]C1010871890768012717261024"))
+        assertEquals("8718907680127", gs1Gtin("\u001D0108718907680127\u001D10LOT42"))
+        assertNull(gs1Gtin("0118718907680124"))
+        assertNull(gs1Gtin("0108718907680128"))
+        assertNull(gs1Gtin("JJD014600012345678"))
+    }
+
     @Test fun requiresConsistentRecentFrames() {
         val gate = BarcodeConfirmation()
         val code = "4006381333931"

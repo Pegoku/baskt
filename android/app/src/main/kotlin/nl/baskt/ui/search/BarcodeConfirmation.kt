@@ -43,3 +43,30 @@ internal fun expandUpce(code: String): String? {
     }
     return "${code[0]}$body${code[7]}"
 }
+
+/**
+ * Turn any supported scan into the retail code products are looked up by.
+ * Fresh and weighed goods (Albert Heijn meat, fish, cheese) print GS1-128 or GS1 DataMatrix labels that
+ * carry the GTIN under application identifier 01 next to dates and batch numbers; only that GTIN matters here.
+ */
+internal fun retailCode(format: Int, raw: String?): String? {
+    raw ?: return null
+    val code = when (format) {
+        com.google.mlkit.vision.barcode.common.Barcode.FORMAT_UPC_E -> expandUpce(raw)
+        com.google.mlkit.vision.barcode.common.Barcode.FORMAT_CODE_128,
+        com.google.mlkit.vision.barcode.common.Barcode.FORMAT_DATA_MATRIX -> gs1Gtin(raw)
+        else -> raw
+    } ?: return null
+    return if (code.length == 12) "0$code" else code
+}
+
+/** GTIN-13 from a GS1 element string, or null for other Code 128 / DataMatrix content and outer-case GTINs. */
+internal fun gs1Gtin(raw: String): String? {
+    // Strip the symbology identifier (]C1, ]d2) and any leading FNC1 the decoder kept as a group separator.
+    val data = raw.removePrefix("]C1").removePrefix("]d2").trimStart('\u001D')
+    if (!data.startsWith("01") || data.length < 16) return null
+    val gtin14 = data.substring(2, 16)
+    // A non-zero indicator digit marks a trade unit of several items, which no shelf product matches.
+    if (gtin14[0] != '0') return null
+    return gtin14.drop(1).takeIf(::validRetailBarcode)
+}

@@ -143,11 +143,13 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                 com.google.mlkit.vision.barcode.common.Barcode.FORMAT_EAN_8,
                 com.google.mlkit.vision.barcode.common.Barcode.FORMAT_UPC_A,
                 com.google.mlkit.vision.barcode.common.Barcode.FORMAT_UPC_E,
+                com.google.mlkit.vision.barcode.common.Barcode.FORMAT_CODE_128,
+                com.google.mlkit.vision.barcode.common.Barcode.FORMAT_DATA_MATRIX,
             )
             .enableAutoZoom()
             .build()
         com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(context, options).startScan()
-            .addOnSuccessListener { barcode -> barcode.rawValue?.let { viewModel.scanItem(store, it) } }
+            .addOnSuccessListener { barcode -> nl.baskt.ui.search.retailCode(barcode.format, barcode.rawValue)?.let { viewModel.scanItem(store, it) } }
             .addOnFailureListener { error ->
                 val cancelled = error is com.google.mlkit.common.MlKitException && error.errorCode == com.google.mlkit.common.MlKitException.CODE_SCANNER_CANCELLED
                 if (!cancelled) android.widget.Toast.makeText(context, error.message ?: "Scanner unavailable", android.widget.Toast.LENGTH_SHORT).show()

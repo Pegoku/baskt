@@ -92,6 +92,7 @@ internal fun ScannerCamera(paused: Boolean, cameraFraction: Float, onScan: (Stri
         val executor = Executors.newSingleThreadExecutor()
         val scanner = BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(
             Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8, Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E,
+            Barcode.FORMAT_CODE_128, Barcode.FORMAT_DATA_MATRIX,
         ).build())
         val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
         val analysis = ImageAnalysis.Builder().setResolutionSelector(ResolutionSelector.Builder()
@@ -137,9 +138,7 @@ internal fun ScannerCamera(paused: Boolean, cameraFraction: Float, onScan: (Stri
                                             previewBounds(code)?.takeIf { target.contains(it) }?.let { code to it }
                                         }
                                         // Ambiguous frames (two products in the target) must never choose arbitrarily.
-                                        val code = inside.singleOrNull()?.first?.let {
-                                            if (it.format == Barcode.FORMAT_UPC_E) it.rawValue?.let(::expandUpce) else it.rawValue
-                                        }?.let { if (it.length == 12) "0$it" else it }
+                                        val code = inside.singleOrNull()?.first?.let { retailCode(it.format, it.rawValue) }
                                         gate.observe(code, SystemClock.elapsedRealtime())?.let { confirmed ->
                                             if (currentScan(confirmed)) {
                                                 val bounds = RectF(inside.single().second)
