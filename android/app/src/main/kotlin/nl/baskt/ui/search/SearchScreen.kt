@@ -42,9 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
-import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import nl.baskt.data.Product
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.ProductRow
@@ -74,12 +71,7 @@ fun SearchScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (Strin
         snackbar.showSnackbar("Added “${item.text}”")
     }
 
-    fun startScan() {
-        val options = GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8, Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E, Barcode.FORMAT_CODE_128, Barcode.FORMAT_DATA_MATRIX).enableAutoZoom().build()
-        GmsBarcodeScanning.getClient(context, options).startScan()
-            .addOnSuccessListener { barcode -> retailCode(barcode.format, barcode.rawValue)?.let { viewModel.lookupBarcode(it) } }
-            .addOnFailureListener { error -> viewModel.basket.run { } ; query = ""; viewModel.clearSearch(); android.widget.Toast.makeText(context, error.message ?: "Scanner unavailable", android.widget.Toast.LENGTH_SHORT).show() }
-    }
+    val startScan = nl.baskt.ui.common.rememberBarcodeScanner { viewModel.lookupBarcode(it) }
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,

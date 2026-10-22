@@ -117,18 +117,7 @@ fun LoyaltyCardDialog(store: String, stores: List<StoreInfo>, number: String, on
 fun LoyaltyCardEditor(store: String, stores: List<StoreInfo>, initial: String?, onDismiss: () -> Unit, onSave: (String?) -> Unit) {
     val context = LocalContext.current
     var number by remember { mutableStateOf(initial ?: "") }
-    fun scanCard() {
-        val options = com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions.Builder()
-            .setBarcodeFormats(com.google.mlkit.vision.barcode.common.Barcode.FORMAT_ALL_FORMATS)
-            .enableAutoZoom()
-            .build()
-        com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(context, options).startScan()
-            .addOnSuccessListener { barcode -> barcode.rawValue?.let { number = it } }
-            .addOnFailureListener { error ->
-                val cancelled = error is com.google.mlkit.common.MlKitException && error.errorCode == com.google.mlkit.common.MlKitException.CODE_SCANNER_CANCELLED
-                if (!cancelled) android.widget.Toast.makeText(context, error.message ?: "Scanner unavailable", android.widget.Toast.LENGTH_SHORT).show()
-            }
-    }
+    val scanCard = nl.baskt.ui.common.rememberBarcodeScanner(intArrayOf(com.google.mlkit.vision.barcode.common.Barcode.FORMAT_ALL_FORMATS)) { number = it }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { StoreLogo(store, stores); Text("${stores.firstOrNull { it.code == store }?.name ?: store} card") } },
