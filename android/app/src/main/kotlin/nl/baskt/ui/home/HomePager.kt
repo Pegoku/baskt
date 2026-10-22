@@ -22,8 +22,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.basket.BasketScreen
-import nl.baskt.ui.compare.CompareScreen
-import nl.baskt.ui.compare.OrderScreen
+import nl.baskt.ui.compare.PlanScreen
 import nl.baskt.ui.orders.OrdersScreen
 import kotlin.math.absoluteValue
 
@@ -36,7 +35,7 @@ private const val CommitHysteresis = 0.1f
 private const val BasketPage = 1
 
 /**
- * Orders ← Basket → Review → Order as four pages of one pager. The pages lie side by side and follow the finger
+ * Orders ← Basket → Plan as three pages of one pager. The pages lie side by side and follow the finger
  * 1:1 with the stock pager fling, like the order days inside Orders: per-frame scaling, clipping and shadows on
  * whole screens, and composing a neighbour mid-gesture, made this swipe drop most of its frames. A single light
  * tick marks the point where letting go would navigate.
@@ -58,8 +57,8 @@ fun HomePager(
     onChat: () -> Unit = {},
     onTidy: () -> Unit = {},
 ) {
-    // `startPage` counts from the basket (0 = basket, 1 = review); the orders page sits before it.
-    val pager = rememberPagerState(initialPage = startPage + BasketPage) { 4 }
+    // `startPage` counts from the basket (0 = basket, 1 = plan); the orders page sits before it.
+    val pager = rememberPagerState(initialPage = startPage + BasketPage) { 3 }
     val scope = rememberCoroutineScope()
     fun go(page: Int) = scope.launch { pager.animateScrollToPage(page) }
     // The first frame composes only the basket; neighbours follow once it is up, so a swipe never has to build one.
@@ -114,7 +113,7 @@ fun HomePager(
                     onOrders = { go(0) },
                     onOpenItem = onOpenItem,
                     onOpenGroup = onOpenGroup,
-                    onCompare = { go(2) },
+                    onPlan = { go(2) },
                     onSettings = onSettings,
                     onStock = onStock,
                     onSearch = onSearch,
@@ -126,8 +125,7 @@ fun HomePager(
                     onChat = onChat,
                     onTidy = onTidy,
                 )
-                2 -> CompareScreen(viewModel, active = pager.currentPage == 2 || pager.targetPage == 2, onBack = { go(BasketPage) }, onOpenItem = onOpenItem, onOrder = { go(3) }, onPickStore = { viewModel.assign("store:$it"); go(3) })
-                else -> OrderScreen(viewModel, onBack = { go(2) }, onShop = onShop)
+                else -> PlanScreen(viewModel, active = pager.currentPage == 2 || pager.targetPage == 2, onBack = { go(BasketPage) }, onOpenItem = onOpenItem, onShop = onShop)
             }
         }
     }

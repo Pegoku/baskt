@@ -11,8 +11,6 @@ import androidx.navigation3.ui.NavDisplay
 import androidx.compose.animation.togetherWith
 import kotlinx.serialization.Serializable
 import nl.baskt.ui.basket.BasketScreen
-import nl.baskt.ui.compare.CompareScreen
-import nl.baskt.ui.compare.OrderScreen
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxSize

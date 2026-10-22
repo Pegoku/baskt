@@ -49,7 +49,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.ui.zIndex
-import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.CallMerge
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Delete
@@ -118,7 +117,7 @@ import nl.baskt.ui.common.StoreBadge
 import nl.baskt.ui.common.storeName
 
 @Composable
-fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onCompare: () -> Unit, onSettings: () -> Unit, onStock: () -> Unit, onSearch: () -> Unit, onDeals: () -> Unit, onRecipes: () -> Unit, onShop: (String) -> Unit, onPurchases: () -> Unit, onScan: () -> Unit = {}, onChat: () -> Unit = {}, onTidy: () -> Unit = {}, onOrders: () -> Unit = {}) {
+fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGroup: (String) -> Unit, onPlan: () -> Unit, onSettings: () -> Unit, onStock: () -> Unit, onSearch: () -> Unit, onDeals: () -> Unit, onRecipes: () -> Unit, onShop: (String) -> Unit, onPurchases: () -> Unit, onScan: () -> Unit = {}, onChat: () -> Unit = {}, onTidy: () -> Unit = {}, onOrders: () -> Unit = {}) {
     // Items bought in the store live on the orders page now; the list only shows what is still to decide on.
     val allItems by viewModel.basket.items.collectAsState()
     val items = allItems.filter { !it.isBought }
@@ -237,35 +236,41 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                     )
                 },
                 actions = {
+                    val openItems = items.any { !it.checked && !it.isGroup }
                     IconButton(onClick = onOrders) { Icon(Icons.Default.History, contentDescription = "Previous orders") }
-                    IconButton(onClick = onScan) { Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan barcodes") }
                     IconButton(onClick = onRecipes) { Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = "Recipes") }
-                    if (items.any { !it.checked && !it.isGroup }) IconButton(onClick = onDeals) { Icon(Icons.Default.LocalOffer, contentDescription = "Find deals") }
-                    if (items.any { !it.checked && !it.isGroup }) IconButton(onClick = { viewModel.dismissTidy(); onTidy() }) { Icon(Icons.Default.AutoFixHigh, contentDescription = "Tidy up") }
+                    if (openItems) IconButton(onClick = onDeals) { Icon(Icons.Default.LocalOffer, contentDescription = "Find deals") }
+                    if (openItems) IconButton(onClick = { viewModel.dismissTidy(); onTidy() }) { Icon(Icons.Default.AutoFixHigh, contentDescription = "Tidy up") }
                     var menu by remember { mutableStateOf(false) }
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            for (store in enabledStores) {
-                                DropdownMenuItem(text = { Text("Shop at ${store.name}") }, leadingIcon = { Icon(Icons.Default.ShoppingCart, contentDescription = null) }, onClick = { menu = false; onShop(store.code) })
-                            }
-                            if (whatsapp?.enabled == true) {
-                                DropdownMenuItem(text = { Text("Send items to WhatsApp bot") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; sendBot() })
-                            }
-                            DropdownMenuItem(text = { Text("Share link (live list)") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareLink(whatsApp = false) })
-                            DropdownMenuItem(text = { Text("Send link to WhatsApp") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareLink(whatsApp = true) })
-                            DropdownMenuItem(text = { Text("Share as text") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareText(context, buildShareText(baskets.firstOrNull { it.id == currentBasketId }, items, enabledStores), whatsApp = false) })
+                            MenuHeader("Go to")
                             DropdownMenuItem(text = { Text("Search products") }, leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }, onClick = { menu = false; onSearch() })
                             DropdownMenuItem(text = { Text("Stock") }, leadingIcon = { Icon(Icons.Default.Kitchen, contentDescription = null) }, onClick = { menu = false; onStock() })
                             DropdownMenuItem(text = { Text("Receipts & spending") }, leadingIcon = { Icon(Icons.Default.Receipt, contentDescription = null) }, onClick = { menu = false; onPurchases() })
+                            for (store in enabledStores) {
+                                DropdownMenuItem(text = { Text("Shop at ${store.name}") }, leadingIcon = { Icon(Icons.Default.ShoppingCart, contentDescription = null) }, onClick = { menu = false; onShop(store.code) })
+                            }
+                            androidx.compose.material3.HorizontalDivider()
+                            MenuHeader("Share")
+                            DropdownMenuItem(text = { Text("Share link (live list)") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareLink(whatsApp = false) })
+                            DropdownMenuItem(text = { Text("Send link to WhatsApp") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareLink(whatsApp = true) })
+                            DropdownMenuItem(text = { Text("Share as text") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; shareText(context, buildShareText(baskets.firstOrNull { it.id == currentBasketId }, items, enabledStores), whatsApp = false) })
+                            if (whatsapp?.enabled == true) {
+                                DropdownMenuItem(text = { Text("Send items to WhatsApp bot") }, leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }, onClick = { menu = false; sendBot() })
+                            }
+                            androidx.compose.material3.HorizontalDivider()
+                            MenuHeader("This list")
                             if (items.count { !it.checked && !it.isGroup } >= 2) {
                                 DropdownMenuItem(text = { Text("Find duplicates") }, leadingIcon = { Icon(Icons.Default.CallMerge, contentDescription = null) }, onClick = { menu = false; viewModel.findDuplicates() })
                             }
-                            DropdownMenuItem(text = { Text("Refresh") }, leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }, onClick = { menu = false; viewModel.reload() })
                             if (items.any { it.isSkipped }) {
                                 DropdownMenuItem(text = { Text("Unskip all") }, leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null) }, onClick = { menu = false; viewModel.unskipAll() })
                                 DropdownMenuItem(text = { Text("Delete skipped items") }, leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }, onClick = { menu = false; viewModel.clearChecked() })
                             }
+                            DropdownMenuItem(text = { Text("Refresh") }, leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }, onClick = { menu = false; viewModel.reload() })
+                            androidx.compose.material3.HorizontalDivider()
                             DropdownMenuItem(text = { Text("Settings") }, leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) }, onClick = { menu = false; onSettings() })
                         }
                     }
@@ -273,17 +278,17 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
             )
         },
         floatingActionButton = {
-            if (items.any { !it.checked }) {
-                ExtendedFloatingActionButton(
-                    onClick = onCompare,
-                    icon = { Icon(Icons.Default.Balance, contentDescription = null) },
-                    text = { Text("Compare") },
-                )
-            }
+            if (!selectionMode) ExtendedFloatingActionButton(
+                onClick = onScan,
+                icon = { Icon(Icons.Default.QrCodeScanner, contentDescription = null) },
+                text = { Text("Scan") },
+            )
         },
         bottomBar = {
             val suggestions by viewModel.suggestions.collectAsState()
             val recipe by viewModel.recipeSuggestion.collectAsState()
+            Column {
+            TripStrip(items, enabledStores, onPlan)
             AddIdeaBar(
                 suggestions = suggestions,
                 recipe = recipe,
@@ -294,13 +299,14 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                 onVoice = { startDictation() },
                 focusRequest = viewModel.focusInputRequest,
             )
+            }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
         nl.baskt.ui.common.OfflineBanner(viewModel)
         Box(modifier = Modifier.fillMaxSize()) {
-            // Assistant button: bottom-left, level with the Compare button.
+            // Assistant button: bottom-left, level with the Scan button.
             androidx.compose.material3.FloatingActionButton(
                 onClick = onChat,
                 containerColor = MaterialTheme.colorScheme.tertiaryContainer,
@@ -578,6 +584,11 @@ fun GroupCard(group: BasketItem, children: List<BasketItem>, stores: List<StoreI
             trailing?.invoke()
         }
     }
+}
+
+@Composable
+private fun MenuHeader(text: String) {
+    Text(text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
 }
 
 @Composable
