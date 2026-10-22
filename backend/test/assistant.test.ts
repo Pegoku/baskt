@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { db, now, resetDbForTests } from "@/db";
-import { linkedProducts, runTool, sanitizeProposal, toolResultText } from "@/assistant";
+import { linkedProducts, runTool, withoutProductIds, sanitizeProposal, toolResultText } from "@/assistant";
 import { basketItems, DEFAULT_BASKET_ID, type ItemKind } from "@/db/schema";
 import { upsertProducts } from "@/stores/search";
 
@@ -84,5 +84,10 @@ describe("assistant", () => {
     expect(linkedProducts(answer, null, ["AH:rice1", "AH:rice2", "AH:rice3"])).toEqual(["AH:rice2", "AH:rice1"]);
     // Listed ids count even when the answer paraphrases them; invented ids are dropped.
     expect(linkedProducts("Prueba el risotto.", ["AH:rice3", "AH:made-up", 7], [])).toEqual(["AH:rice3"]);
+  });
+
+  test("product ids quoted in the answer are dropped", () => {
+    expect(withoutProductIds("Compraste arroz para risotto de AH, 1 kg (productId AH:525399).")).toBe("Compraste arroz para risotto de AH, 1 kg.");
+    expect(withoutProductIds("Bought AH:525399 rice at 12:30.")).toBe("Bought rice at 12:30.");
   });
 });

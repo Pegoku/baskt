@@ -683,6 +683,14 @@ function normalized(text: string) {
  * Products to show under the answer: the ones the model listed, plus any product it looked at whose title the
  * answer quotes (the model often names products without listing them). Only real products, at most six.
  */
+/** The model sometimes quotes ids ("rice, 1 kg (productId AH:525399)"); the cards already link them. */
+export function withoutProductIds(answer: string): string {
+  return answer
+    .replace(/\s*\([^()]*\b[A-Z]+:[\w-]+\)/g, "")
+    .replace(/\s*\b[A-Z]+:\d[\w-]*\b/g, "")
+    .trim();
+}
+
 export function linkedProducts(
   answer: string,
   named: unknown,
@@ -861,6 +869,7 @@ export async function chat(
   if (!recipes && lastRecipeHits.length)
     recipes = sanitizeRecipes(lastRecipeHits);
   const productIds = linkedProducts(reply, namedProducts, seenProducts);
+  reply = withoutProductIds(reply);
   // A proposal card (with its summary as title) is a complete message on its own; only fill text when there is nothing else.
   if (!reply && !proposal) reply = recipes ? "Here are some recipes." : "Done.";
   return [
