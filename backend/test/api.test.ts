@@ -51,6 +51,9 @@ const ah = fake("AH", "Albert Heijn", {
     sp("AH", "4", "Arla Halfvolle melk", 159),
   ],
   chocolade: [sp("AH", "9", "AH Chocolademelk", 199)],
+  // Stores without a GTIN endpoint are searched with the code itself.
+  cacaodrank: [sp("AH", "20", "Fristi Cacaodrank", 229)],
+  "8710400099999": [sp("AH", "20", "Fristi Cacaodrank", 229)],
 });
 const jumbo = fake("JUMBO", "Jumbo", {
   melk: [sp("JUMBO", "a", "Jumbo Verse Halfvolle Melk 1 L", 129), sp("JUMBO", "b", "Campina Langlekker Halfvolle Melk 1 L", 179)],
@@ -437,6 +440,34 @@ describe("api", () => {
     expect(after.purchases.find((entry: any) => entry.purchase.id === body.purchase.id).lines).toHaveLength(1);
     expect((await api(`/purchases/${body.purchase.id}`, { method: "DELETE" })).status).toBe(204);
     expect((await api(`/basket/items/${id}`, { method: "DELETE" })).status).toBe(204);
+    for (const row of ((await (await api("/stock")).json()) as any).items) expect((await api(`/stock/${row.id}`, { method: "DELETE" })).status).toBe(204);
+  });
+
+  test("scanning something on the list ticks that item off instead of adding a line", async () => {
+    const created = await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "cacaodrank" }) });
+    const id = ((await created.json()) as { id: string }).id;
+    await waitForMatched(id);
+    const scanned = await api("/purchases/scan-item", { method: "POST", body: JSON.stringify({ store: "AH", barcode: "8710400099999", basketId: "default" }) });
+    expect(scanned.status).toBe(201);
+    const scan = (await scanned.json()) as any;
+    expect(scan.matchedItemId).toBe(id);
+    expect(scan.item.checked).toBe(true);
+    expect(scan.line.itemId).toBe(id);
+    expect(scan.line.barcode).toBe("8710400099999");
+    // Scanned again: the item is already bought, so this one is an extra.
+    const again = (await (await api("/purchases/scan-item", { method: "POST", body: JSON.stringify({ store: "AH", barcode: "8710400099999" }) })).json()) as any;
+    expect(again.matchedItemId).toBeNull();
+    expect(again.line.itemId).toBeNull();
+    expect((await api(`/purchases/${scan.purchase.id}`, { method: "DELETE" })).status).toBe(204);
+    expect((await api(`/basket/items/${id}`, { method: "DELETE" })).status).toBe(204);
+    for (const row of ((await (await api("/stock")).json()) as any).items) expect((await api(`/stock/${row.id}`, { method: "DELETE" })).status).toBe(204);
+  });
+
+  test("a weighed product's label is recorded with its printed price", async () => {
+    const scanned = (await (await api("/purchases/scan-item", { method: "POST", body: JSON.stringify({ store: "AH", barcode: "]d2010871000000000031030004523922000699" }) })).json()) as any;
+    expect(scanned.line.name).toBe("Weighed product");
+    expect(scanned.line.totalPriceCents).toBe(699);
+    expect((await api(`/purchases/${scanned.purchase.id}`, { method: "DELETE" })).status).toBe(204);
     for (const row of ((await (await api("/stock")).json()) as any).items) expect((await api(`/stock/${row.id}`, { method: "DELETE" })).status).toBe(204);
   });
 

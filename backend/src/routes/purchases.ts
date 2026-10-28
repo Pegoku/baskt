@@ -1,5 +1,10 @@
 import { Hono } from "hono";
 import { deletePurchase, listPurchases, matchReceiptLine, matchReceiptLineToBasket, openItemsAt, purchaseWithLines, savePurchase, scanReceiptUploads, spendSummary, updatePurchase, type ReceiptLine } from "@/receipts";
+import { eq, inArray } from "drizzle-orm";
+import { db } from "@/db";
+import { basketItems, basketMatches, type ProductRow } from "@/db/schema";
+import { parseScannedCode } from "@/lib/gs1";
+import { markItemBought } from "@/routes/basket";
 import { hasStore } from "@/stores/registry";
 import { lookupBarcode, productsByIds } from "@/stores/search";
 import { enabledStoreCodes } from "@/db/settings";
@@ -65,33 +70,63 @@ purchasesRoute.get("/history", (c) => c.json(purchaseHistory(Math.min(Number(c.r
  * Something picked up in the store that was not on the list: the barcode is looked up at that store (then the
  * others); the line carries the product when found and just the number otherwise. Either way it goes into stock.
  */
+/**
+ * A barcode scanned in the store. When it is something on the list (the same product, or one the list item's
+ * words describe) that item is ticked off; otherwise it is recorded as an extra purchase.
+ */
 purchasesRoute.post("/scan-item", async (c) => {
-  {
-    const body = (await c.req.json().catch(() => ({}))) as { store?: string; barcode?: string; purchasedAt?: number | null };
-    const gtin = (body.barcode ?? "").replace(/\D/g, "");
-    if (!body.store || !hasStore(body.store)) return c.json({ error: { code: "BAD_REQUEST", message: "store is required" } }, 400);
-    if (gtin.length < 8 || gtin.length > 14) return c.json({ error: { code: "BAD_REQUEST", message: "barcode must be 8-14 digits" } }, 400);
-    const store = body.store;
-    const stores = [store, ...enabledStoreCodes().filter((code) => code !== store)];
-    const results = await lookupBarcode(stores, gtin);
-    const product = results.find((entry) => entry.store === store)?.product ?? results.find((entry) => entry.product)?.product ?? null;
-    const at = typeof body.purchasedAt === "number" && body.purchasedAt > 0 ? body.purchasedAt : undefined;
-    const { purchase, line } = recordBought({
-      store,
-      name: product?.title ?? gtin,
-      quantity: 1,
-      unitPriceCents: product?.priceCents ?? null,
-      totalPriceCents: product?.priceCents ?? null,
-      productId: product?.id ?? null,
-      itemId: null,
-      barcode: gtin,
-      dealText: product?.dealText ?? null,
-      purchasedAt: at,
-    });
-    addStock({ text: product?.title ?? gtin, quantityText: product?.quantityText ?? null, productId: product?.id ?? null, imageUrl: product?.imageUrl ?? null, barcode: gtin });
-    return c.json({ purchase, line, product }, 201);
+  const body = (await c.req.json().catch(() => ({}))) as { store?: string; barcode?: string; purchasedAt?: number | null; basketId?: string | null };
+  if (!body.store || !hasStore(body.store)) return c.json({ error: { code: "BAD_REQUEST", message: "store is required" } }, 400);
+  const code = parseScannedCode(body.barcode ?? "");
+  if (!code) return c.json({ error: { code: "BAD_REQUEST", message: "not a product barcode" } }, 400);
+  const store = body.store;
+  const gtin = code.gtin;
+  const stores = [store, ...enabledStoreCodes().filter((entry) => entry !== store)];
+  const results = await lookupBarcode(stores, gtin);
+  const product = results.find((entry) => entry.store === store)?.product ?? results.find((entry) => entry.product)?.product ?? null;
+  const at = typeof body.purchasedAt === "number" && body.purchasedAt > 0 ? body.purchasedAt : undefined;
+  const scanned = { barcode: gtin, priceCents: code.priceCents };
+
+  const listItem = product ? listItemFor(store, product, body.basketId ?? null) : null;
+  if (listItem) {
+    const ticked = markItemBought(listItem, store, product!.id, at ?? Date.now(), scanned);
+    return c.json({ ...ticked, product, matchedItemId: listItem }, 201);
   }
+
+  const weighed = code.weightGrams != null ? `${code.weightGrams} g` : null;
+  const name = product?.title ?? (code.variable || code.priceCents != null ? "Weighed product" : gtin);
+  const price = code.priceCents ?? product?.priceCents ?? null;
+  const { purchase, line } = recordBought({
+    store,
+    name,
+    quantity: 1,
+    unitPriceCents: price,
+    totalPriceCents: price,
+    productId: product?.id ?? null,
+    itemId: null,
+    barcode: gtin,
+    dealText: product?.dealText ?? null,
+    purchasedAt: at,
+  });
+  addStock({ text: product?.title ?? name, quantityText: weighed ?? product?.quantityText ?? null, productId: product?.id ?? null, imageUrl: product?.imageUrl ?? null, barcode: gtin });
+  return c.json({ purchase, line, product, item: null, matchedItemId: null }, 201);
 });
+
+/** The open list item a scanned product stands for: the very product first, then a list entry that describes it. */
+function listItemFor(store: string, product: ProductRow, basketId: string | null): string | null {
+  let open = openItemsAt(store);
+  if (basketId) {
+    const inBasket = new Set(db().select({ id: basketItems.id }).from(basketItems).where(eq(basketItems.basketId, basketId)).all().map((row) => row.id));
+    open = open.filter((entry) => inBasket.has(entry.itemId));
+  }
+  if (!open.length) return null;
+  const exact = open.find((entry) => entry.product?.id === product.id);
+  if (exact) return exact.itemId;
+  const candidates = db().select().from(basketMatches).where(inArray(basketMatches.itemId, open.map((entry) => entry.itemId))).all();
+  const listed = candidates.find((match) => match.chosenProductId === product.id || match.candidateIds.includes(product.id));
+  if (listed) return listed.itemId;
+  return matchReceiptLineToBasket(store, product.title, open)?.itemId ?? null;
+}
 
 purchasesRoute.get("/summary", (c) => c.json(spendSummary(Math.min(Number(c.req.query("months") ?? 6) || 6, 24))));
 

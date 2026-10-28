@@ -598,31 +598,41 @@ basket.patch("/items/:id", async (c) => {
  * Ticked off in the store: the item is recorded on today's trip at that store (with the product it was bought
  * as, when known), put in stock, and leaves the open list. Unticking (`/unbuy`) takes all of that back.
  */
+/**
+ * Ticks an item off in the store: a purchase line, the item into stock, the item checked. [scanned] carries
+ * what a barcode scan knew (its code, and the price printed on a weighed product's label).
+ */
+export function markItemBought(itemId: string, store: string, productId: string | null, at: number, scanned: { barcode: string; priceCents: number | null } | null = null) {
+  const item = getItem(itemId)!;
+  const view = viewOf(item.id)!;
+  const match = view.matches.find((entry) => entry.store === store);
+  const product = (productId ? productsByIds([productId])[0] : null) ?? match?.chosen ?? match?.provisional ?? null;
+  if (item.boughtAt) forgetBought(item.id);
+  const unit = scanned?.priceCents ?? product?.priceCents ?? null;
+  const { purchase, line } = recordBought({
+    store,
+    name: product?.title ?? item.text,
+    quantity: item.quantity,
+    unitPriceCents: unit,
+    totalPriceCents: unit != null ? unit * (scanned?.priceCents != null ? 1 : item.quantity) : null,
+    productId: product?.id ?? null,
+    itemId: item.id,
+    barcode: scanned?.barcode ?? null,
+    dealText: product?.dealText ?? null,
+    purchasedAt: at,
+  });
+  addStock({ text: item.parsedJson?.canonicalName ?? item.text, quantityText: product?.quantityText ?? null, productId: product?.id ?? null, imageUrl: product?.imageUrl ?? null, barcode: scanned?.barcode ?? null });
+  db().update(basketItems).set({ checked: true, boughtAt: at, assignedStore: store, updatedAt: now() }).where(eq(basketItems.id, item.id)).run();
+  return { item: viewOf(item.id), purchase, line };
+}
+
 basket.post("/items/:id/bought", async (c) => {
   const item = getItem(c.req.param("id"));
   if (!item || item.kind !== "item") return c.json({ error: { code: "NOT_FOUND", message: "item not found" } }, 404);
   const body = (await c.req.json().catch(() => ({}))) as { store?: string; productId?: string | null; purchasedAt?: number | null };
   if (!body.store || !hasStore(body.store)) return c.json({ error: { code: "BAD_REQUEST", message: "store is required" } }, 400);
-  const view = viewOf(item.id)!;
-  const match = view.matches.find((entry) => entry.store === body.store);
-  const product = (body.productId ? productsByIds([body.productId])[0] : null) ?? match?.chosen ?? match?.provisional ?? null;
-  if (item.boughtAt) forgetBought(item.id);
   const at = typeof body.purchasedAt === "number" && body.purchasedAt > 0 ? body.purchasedAt : now();
-  const { purchase, line } = recordBought({
-    store: body.store,
-    name: product?.title ?? item.text,
-    quantity: item.quantity,
-    unitPriceCents: product?.priceCents ?? null,
-    totalPriceCents: product ? product.priceCents * item.quantity : null,
-    productId: product?.id ?? null,
-    itemId: item.id,
-    barcode: null,
-    dealText: product?.dealText ?? null,
-    purchasedAt: at,
-  });
-  addStock({ text: item.parsedJson?.canonicalName ?? item.text, quantityText: product?.quantityText ?? null, productId: product?.id ?? null, imageUrl: product?.imageUrl ?? null });
-  db().update(basketItems).set({ checked: true, boughtAt: at, assignedStore: body.store, updatedAt: now() }).where(eq(basketItems.id, item.id)).run();
-  return c.json({ item: viewOf(item.id), purchase, line });
+  return c.json(markItemBought(item.id, body.store, body.productId ?? null, at));
 });
 
 basket.post("/items/:id/unbuy", (c) => {
