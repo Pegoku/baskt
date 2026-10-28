@@ -35,6 +35,19 @@ fun Product.dealPricing(): DealPricing? {
     return DealPricing(count, bundleCents, each, perUnit, if (perUnit != null) unit else null)
 }
 
+/**
+ * Packs that come free on top of [quantity] with an "N+M gratis" deal: wanting 1 with 1+1 gratis means a
+ * second one costs nothing. Null when topping up would cost money (2+1 with one wanted) or nothing is left over.
+ */
+fun Product.freeExtra(quantity: Int): Int? {
+    val match = N_PLUS_M_FREE.find(dealText ?: return null) ?: return null
+    val paid = match.groupValues[1].toInt()
+    val free = match.groupValues[2].toInt()
+    if (paid < 1 || free < 1) return null
+    val leftover = quantity.coerceAtLeast(1) % (paid + free)
+    return if (leftover >= paid) paid + free - leftover else null
+}
+
 fun String.shortUnit(): String = if (this == "piece") "st" else this
 
 /**

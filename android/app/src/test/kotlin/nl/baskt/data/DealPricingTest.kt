@@ -149,4 +149,13 @@ class DealSavingTest {
         assertEquals("When you take 3", saving.detail())
         assertEquals("When you take 3 · €1,32 for 2", saving.detail(quantity = 2))
     }
+
+    @Test fun freeExtraOnlyWhenTheTopUpCostsNothing() {
+        assertEquals(1, Product("AH:1", "AH", "1", "Tissues", quantityText = "10 st", priceCents = 250, dealText = "1+1 gratis").freeExtra(1))
+        assertNull(Product("AH:1", "AH", "1", "Tissues", quantityText = "10 st", priceCents = 250, dealText = "1+1 gratis").freeExtra(2))
+        assertEquals(1, Product("AH:1", "AH", "1", "Tissues", quantityText = "10 st", priceCents = 250, dealText = "1 + 1 GRATIS").freeExtra(3))
+        assertEquals(1, Product("AH:1", "AH", "1", "Tissues", quantityText = "10 st", priceCents = 300, dealText = "2+1 gratis").freeExtra(2))
+        assertNull(Product("AH:1", "AH", "1", "Tissues", quantityText = "10 st", priceCents = 300, dealText = "2+1 gratis").freeExtra(1))
+        assertNull(Product("AH:1", "AH", "1", "Tissues", quantityText = "10 st", priceCents = 300, dealText = "3 voor 7.00").freeExtra(1))
+    }
 }

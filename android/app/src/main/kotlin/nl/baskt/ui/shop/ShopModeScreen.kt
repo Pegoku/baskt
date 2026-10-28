@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import nl.baskt.data.BasketItem
 import nl.baskt.data.euros
+import nl.baskt.data.freeExtra
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.ProductThumb
 import nl.baskt.ui.common.StoreBadge
@@ -234,6 +235,11 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                                     },
                                                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
+                                            val free = if (item.isBought) null else product?.freeExtra(item.quantity)
+                                            if (free != null) Text(
+                                                "${product!!.dealText} · grab $free more, ${if (free == 1) "it's" else "they're"} free",
+                                                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
+                                            )
                                         }
                                         if (product != null) Text((product.priceCents * item.quantity).euros(), fontWeight = FontWeight.SemiBold)
                                     }
