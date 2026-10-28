@@ -179,7 +179,15 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             TopAppBar(
                 title = { Text("Previous orders") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to the list") } },
-                actions = { IconButton(onClick = { picking = true }, enabled = day != null) { Icon(Icons.Default.CalendarMonth, contentDescription = "Pick a day") } },
+                actions = {
+                    val account by viewModel.ahAccount.collectAsState()
+                    LaunchedEffect(Unit) { if (account == null) viewModel.loadAhAccount() }
+                    val importing by viewModel.importingReceipts.collectAsState()
+                    if (account?.connected == true) IconButton(onClick = { viewModel.importAhReceipts() }, enabled = !importing) {
+                        Icon(Icons.Default.Sync, contentDescription = "Get receipts from your AH account")
+                    }
+                    IconButton(onClick = { picking = true }, enabled = day != null) { Icon(Icons.Default.CalendarMonth, contentDescription = "Pick a day") }
+                },
             )
         },
     ) { padding ->
@@ -266,7 +274,7 @@ private fun PurchaseCard(entry: PurchaseWithLines, products: Map<String, nl.bask
                     Text(stores.firstOrNull { it.code == purchase.store }?.name ?: purchase.store, style = MaterialTheme.typography.titleMedium)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(if (purchase.source == "shop") Icons.Default.ShoppingBag else Icons.Default.Receipt, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text((if (purchase.source == "shop") "In store" else "Receipt") + " · $time · ${entry.lines.size} items", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text((when (purchase.source) { "shop" -> "In store"; "ah" -> "AH receipt"; else -> "Receipt" }) + " · $time · ${entry.lines.size} items", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 Text(purchase.totalCents.euros(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

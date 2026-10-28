@@ -562,6 +562,21 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         _loadingAhOffers.value = false
     }
 
+    private val _importingReceipts = MutableStateFlow(false)
+    val importingReceipts: StateFlow<Boolean> = _importingReceipts
+
+    /** Pulls new AH digital receipts into the orders (the server also does this hourly). */
+    fun importAhReceipts() = viewModelScope.launch {
+        _importingReceipts.value = true
+        runCatching { container.api.ahImportReceipts() }
+            .onSuccess { result ->
+                notify(if (result.imported == 0) "No new AH receipts" else "Added ${result.imported} AH receipt" + (if (result.imported == 1) "" else "s"))
+                if (result.imported > 0) { loadHistory(); basket.refresh() }
+            }
+            .onFailure { notify("Could not get AH receipts: ${it.message}") }
+        _importingReceipts.value = false
+    }
+
     fun activateOffer(offer: nl.baskt.data.PersonalOffer) = viewModelScope.launch {
         _activating.value = _activating.value + offer.id
         runCatching { container.api.ahActivate(offer.id) }

@@ -80,6 +80,9 @@ data class PersonalOffersResponse(
 )
 
 @Serializable
+data class ReceiptImportResult(val imported: Int = 0, val replacedTrips: Int = 0)
+
+@Serializable
 data class ActivateOfferResponse(val status: String? = null, val message: String? = null, val offers: PersonalOffersResponse)
 
 @Serializable
