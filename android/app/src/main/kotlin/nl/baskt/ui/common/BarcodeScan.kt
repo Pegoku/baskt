@@ -11,8 +11,14 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 
-/** The retail formats a product barcode comes in; loyalty cards use [Barcode.FORMAT_ALL_FORMATS] instead. */
-val ProductBarcodeFormats = intArrayOf(Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8, Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E)
+/**
+ * The formats a product code comes in: the usual EAN/UPC, plus the GS1 DataMatrix and QR (and GS1-128) printed
+ * on labels of meat and cheese weighed in the store. Loyalty cards use [Barcode.FORMAT_ALL_FORMATS] instead.
+ */
+val ProductBarcodeFormats = intArrayOf(
+    Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8, Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E,
+    Barcode.FORMAT_DATA_MATRIX, Barcode.FORMAT_QR_CODE, Barcode.FORMAT_CODE_128,
+)
 
 /**
  * Google's one-shot code scanner: opens its own full-screen camera and hands back a single code. Cancelling

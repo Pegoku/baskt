@@ -204,8 +204,8 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
     suspend fun unbuy(id: String): BasketItem = client.post(url("/basket/items/$id/unbuy")) { auth() }.expect()
 
     /** Something picked up that was not on the list; the server resolves the barcode when it can. */
-    suspend fun scanItem(store: String, barcode: String, purchasedAt: Long): ScanItemResponse =
-        client.post(url("/purchases/scan-item")) { auth(); contentType(ContentType.Application.Json); setBody(ScanItemRequest(store, barcode, purchasedAt)) }.expect()
+    suspend fun scanItem(store: String, barcode: String, purchasedAt: Long, basketId: String? = null): ScanItemResponse =
+        client.post(url("/purchases/scan-item")) { auth(); contentType(ContentType.Application.Json); setBody(ScanItemRequest(store, barcode, purchasedAt, basketId)) }.expect()
 
     suspend fun purchaseHistory(): PurchaseHistory = client.get(url("/purchases/history")) { auth() }.expect()
 
@@ -504,7 +504,7 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
 @Serializable private data class SaveRecipeRequest(val title: String, val description: String?, val servings: String?, val ingredientLines: List<String>, val steps: List<String>, val origin: String?, val fromUrl: String?)
 @Serializable private data class GenerateRequest(val description: String, val draft: Boolean)
 @Serializable private data class BoughtRequest(val store: String, val productId: String?, val purchasedAt: Long)
-@Serializable private data class ScanItemRequest(val store: String, val barcode: String, val purchasedAt: Long)
+@Serializable private data class ScanItemRequest(val store: String, val barcode: String, val purchasedAt: Long, val basketId: String? = null)
 @Serializable private data class SavePurchaseRequest(val store: String, val purchasedAt: String?, val totalCents: Int?, val lines: List<ReceiptLine>)
 @Serializable private data class TransferRequest(val basketId: String, val copy: Boolean)
 @Serializable private data class GroupFromItemsRequest(val text: String, val itemIds: List<String>)

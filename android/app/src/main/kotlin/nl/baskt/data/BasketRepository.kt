@@ -50,6 +50,9 @@ class BasketRepository(
     private fun cacheItems() { offline?.save("items-${_currentBasketId.value}", _items.value) }
     private fun loadCachedItems() { offline?.load<List<BasketItem>>("items-${_currentBasketId.value}")?.let { _items.value = it } }
 
+    /** Things worth telling the user that happen while queued changes are sent (e.g. a scan ticked an item off). */
+    val notices = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 8)
+
     /** Network-level failures (no route, timeout, DNS) mean "offline"; HTTP errors do not. */
     private fun isConnectivityError(e: Throwable): Boolean =
         e is java.io.IOException || e is io.ktor.client.plugins.HttpRequestTimeoutException || e is io.ktor.client.network.sockets.ConnectTimeoutException ||
@@ -134,11 +137,19 @@ class BasketRepository(
                         "bought" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.markBought(it, op.store!!, op.productId, op.at) }
                         "unbuy" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.unbuy(it) }
                         "scanItem" -> {
-                            val result = api.scanItem(op.store!!, op.text!!, op.at)
-                            tripScans.update { list -> list.map { if (it.id == op.itemId) it.copy(product = result.product ?: it.product, synced = true) else it } }
+                            val result = api.scanItem(op.store!!, op.text!!, op.at, real(op.basketId))
+                            val ticked = result.item
+                            if (ticked != null) {
+                                // It was on the list: the item is ticked off and the scan is not an extra line.
+                                tripScans.update { list -> list.filterNot { it.id == op.itemId } }
+                                patchLocal(ticked.id) { ticked }
+                                notices.tryEmit("Ticked off “${ticked.text}”")
+                            } else {
+                                tripScans.update { list -> list.map { if (it.id == op.itemId) it.copy(product = result.product ?: it.product, synced = true) else it } }
+                                // No store sells this code: the phone still says what it is, rather than showing digits.
+                                if (result.product == null) productGtin(op.text)?.let { gtin -> op.itemId?.let { id -> scope.launch { labelScan(id, gtin) } } }
+                            }
                             offline?.save("trip-scans", tripScans.value)
-                            // No store sells this code: the phone still says what it is, rather than showing digits.
-                            if (result.product == null) op.itemId?.let { id -> scope.launch { labelScan(id, op.text) } }
                         }
                         "quantity" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, quantity = op.quantity) }
                         "rename" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, text = op.text, keepMatches = op.keepMatches == true) }
@@ -616,13 +627,14 @@ class BasketRepository(
     suspend fun scanItem(store: String, barcode: String) {
         // Show a name and a picture straight away when the phone has seen the code before; a bare number tells
         // the user nothing about what they just scanned.
-        val scan = TripScan(id = localId(), store = store, barcode = barcode, at = System.currentTimeMillis(), label = knownLabel(barcode))
-        queued(PendingOp(type = "scanItem", itemId = scan.id, store = store, text = barcode, at = scan.at), optimistic = {
+        val gtin = productGtin(barcode) ?: barcode
+        val scan = TripScan(id = localId(), store = store, barcode = gtin, at = System.currentTimeMillis(), label = knownLabel(gtin))
+        queued(PendingOp(type = "scanItem", itemId = scan.id, store = store, text = barcode, at = scan.at, basketId = _currentBasketId.value), optimistic = {
             tripScans.update { list -> list.filter { System.currentTimeMillis() - it.at < 24 * 60 * 60 * 1000 } + scan }
             offline?.save("trip-scans", tripScans.value)
         })
         // Only ask elsewhere when the backend is out of reach; when it answers, its product wins anyway.
-        if (scan.label == null && !online.value) scope.launch { labelScan(scan.id, barcode) }
+        if (scan.label == null && !online.value) scope.launch { labelScan(scan.id, gtin) }
     }
 
     /** Fills in a scan's name and picture from Open Food Facts when the backend is unreachable. */

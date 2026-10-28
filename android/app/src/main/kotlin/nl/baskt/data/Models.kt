@@ -590,7 +590,14 @@ data class PurchaseHistory(val purchases: List<PurchaseWithLines> = emptyList(),
 data class BoughtResponse(val item: BasketItem, val purchase: Purchase, val line: PurchaseLine)
 
 @Serializable
-data class ScanItemResponse(val purchase: Purchase, val line: PurchaseLine, val product: Product? = null)
+data class ScanItemResponse(
+    val purchase: Purchase,
+    val line: PurchaseLine,
+    val product: Product? = null,
+    /** Set when the scan was something on the list: that item, now ticked off, instead of an extra line. */
+    val item: BasketItem? = null,
+    val matchedItemId: String? = null,
+)
 
 /** Something scanned in the store during this trip; kept locally until the server has recorded it. */
 @Serializable

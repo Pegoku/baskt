@@ -123,7 +123,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         _searching.value = false
     }
 
-    fun lookupBarcode(gtin: String) = viewModelScope.launch {
+    fun lookupBarcode(code: String) = viewModelScope.launch {
+        val gtin = nl.baskt.data.productGtin(code) ?: return@launch notify("That is not a product barcode")
         _searching.value = true
         _searchResults.value = null
         _scanResult.value = basket.barcode(gtin)
@@ -187,6 +188,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     /** One-line messages for the user (failures, outcomes), shown by a global snackbar. */
     val notices = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 8)
     fun notify(message: String) { notices.tryEmit(message) }
+    init { viewModelScope.launch { basket.notices.collect { notify(it) } } }
 
     /** Runs a server call and turns any failure into a visible message instead of silence. */
     private suspend fun <T> attempt(what: String, block: suspend () -> T): T? = try {
@@ -872,7 +874,11 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun markBought(item: BasketItem, store: String, product: Product?) = viewModelScope.launch { basket.markBought(item, store, product) }
     fun unbuy(item: BasketItem) = viewModelScope.launch { basket.unbuy(item) }
     /** Picked up in the store without being on the list. */
-    fun scanItem(store: String, barcode: String) = viewModelScope.launch { basket.scanItem(store, barcode.filter { it.isDigit() }) }
+    /** The whole code goes to the server: a weighed product's label also carries its weight and price. */
+    fun scanItem(store: String, code: String) = viewModelScope.launch {
+        if (nl.baskt.data.productGtin(code) == null) return@launch notify("That is not a product barcode")
+        basket.scanItem(store, code.trim())
+    }
     val tripScans: StateFlow<List<TripScan>> = basket.tripScans
 
     /** Day-by-day orders: purchases recorded in the store plus scanned receipts. */
