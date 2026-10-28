@@ -236,18 +236,19 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                                     },
                                                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
-                                            // The deal on the shelf label (1+1 gratis, 15% korting, personal Bonus), so it is taken at the till.
-                                            val dealText = product?.dealText?.takeIf { !item.isBought }
+                                            // The deal on the shelf label (1+1 gratis, 15% korting), so it is taken at the till: one line, in the app's language.
+                                            val dealText = product?.dealText?.substringBefore("•")?.trim()?.takeIf { it.isNotEmpty() && !item.isBought && !it.matches(PRICE_ONLY_DEAL) }
                                             if (dealText != null) {
+                                                val shown = nl.baskt.ui.common.rememberTranslation(listOf(dealText))?.takeIf { it.translated }?.texts?.firstOrNull() ?: dealText
                                                 val free = product.freeExtra(item.quantity)
-                                                val line = listOfNotNull(
-                                                    dealText,
-                                                    product.dealPricing()?.label(),
-                                                    free?.let { "grab $it more, ${if (it == 1) "it's" else "they're"} free" },
-                                                    "your Bonus".takeIf { product.personal?.status == "ACTIVATED" },
-                                                ).joinToString(" · ")
+                                                val extra = if (free != null) "+$free free" else product.dealPricing()?.let { "${it.eachCents.euros()} each" }
                                                 Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-                                                    Text(line, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+                                                    Text(
+                                                        listOfNotNull(shown, extra).joinToString(" · "),
+                                                        style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                                    )
                                                 }
                                             }
                                         }
@@ -310,3 +311,6 @@ private fun ArchiveBackground(direction: SwipeToDismissBoxValue) {
         }
     }
 }
+
+/** "VOOR 0.99": the deal price is already the price on the row, so the label would only repeat it. */
+private val PRICE_ONLY_DEAL = Regex("""(?i)^(nu\s+)?voor\s*€?\s*\d+([.,]\d{2})?$""")
