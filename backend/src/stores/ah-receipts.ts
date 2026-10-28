@@ -106,6 +106,11 @@ export function receiptLines(detail: ReceiptDetail, products: Map<number, Produc
   return [...lines.map(({ receiptName: _, ...line }) => line), ...extra];
 }
 
+function sameDay(a: number, b: number) {
+  const day = (at: number) => new Date(at).toLocaleDateString("en-CA", { timeZone: "Europe/Amsterdam" });
+  return day(a) === day(b);
+}
+
 export type ReceiptImport = { imported: number; replacedTrips: number; receipts: Array<{ id: string; purchaseId: string; at: number; totalCents: number }> };
 
 let running: Promise<ReceiptImport> | null = null;
@@ -137,9 +142,14 @@ async function runImport(): Promise<ReceiptImport> {
     const lines = receiptLines(detail, products);
     const totalCents = eurosToCents(detail.total?.amount ?? summary.totalAmount?.amount) ?? lines.reduce((sum, line) => sum + line.totalPriceCents, 0);
 
-    // A trip ticked off in shopping mode around this time is the same shop: its ticks link the receipt lines to
-    // list items, then the receipt takes its place.
-    const trips = db().select().from(purchases).where(and(eq(purchases.store, "AH"), eq(purchases.source, "shop"), gt(purchases.purchasedAt, at - TRIP_WINDOW_MS), lt(purchases.purchasedAt, at + TRIP_WINDOW_MS))).all();
+    // A trip ticked off in shopping mode around this time (or the paper receipt scanned before) is the same shop:
+    // its ticks link the receipt lines to list items, then the receipt takes its place.
+    const trips = [
+      ...db().select().from(purchases).where(and(eq(purchases.store, "AH"), eq(purchases.source, "shop"), gt(purchases.purchasedAt, at - TRIP_WINDOW_MS), lt(purchases.purchasedAt, at + TRIP_WINDOW_MS))).all(),
+      // The same receipt scanned from paper earlier: same day, same total.
+      ...db().select().from(purchases).where(and(eq(purchases.store, "AH"), eq(purchases.source, "receipt"), gt(purchases.purchasedAt, at - 24 * 60 * 60 * 1000), lt(purchases.purchasedAt, at + 24 * 60 * 60 * 1000))).all()
+        .filter((row) => Math.abs(row.totalCents - totalCents) <= 1 && sameDay(row.purchasedAt, at)),
+    ];
     const ticked = trips.flatMap((trip) => db().select().from(purchaseLines).where(eq(purchaseLines.purchaseId, trip.id)).all()).filter((line) => line.itemId);
     const open = openItemsAt("AH");
     for (const line of lines) {
