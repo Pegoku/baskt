@@ -417,7 +417,7 @@ data class GenerateResponse(val dish: String? = null, val matches: List<RecipeSu
 data class RecipeStep(val text: String, val imageUrl: String? = null)
 
 @Serializable
-data class RecipeSearchResponse(val query: String = "", val dish: String? = null, val results: List<RecipeSummary> = emptyList(), val errors: List<SourceError> = emptyList(), val message: String? = null)
+data class RecipeSearchResponse(val query: String = "", val dish: String? = null, val results: List<RecipeSummary> = emptyList(), val errors: List<SourceError> = emptyList(), val message: String? = null, val page: Int = 1, val hasMore: Boolean = false)
 
 @Serializable
 data class SourceError(val source: String, val message: String)

@@ -255,7 +255,8 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
 
     suspend fun refreshPrices(): JsonObject = client.post(url("/admin/refresh")) { auth() }.expect()
 
-    suspend fun searchRecipes(query: String): RecipeSearchResponse = client.get(url("/recipes/search")) { auth(); parameter("q", query) }.expect()
+    suspend fun searchRecipes(query: String, page: Int = 1): RecipeSearchResponse =
+        client.get(url("/recipes/search")) { auth(); parameter("q", query); if (page > 1) parameter("page", page) }.expect()
 
     suspend fun fetchRecipe(recipeUrl: String): RecipeDetail = client.get(url("/recipes/fetch")) { auth(); parameter("url", recipeUrl) }.expect()
 

@@ -209,7 +209,42 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
      * Searches the recipe sites. [pinned] is a recipe the user already chose (a Discover photo): it is shown
      * at once as the first result and kept on top when the other sites answer.
      */
+    private var recipeQuery: String? = null
+    private var recipePage = 1
+    private var moreJob: kotlinx.coroutines.Job? = null
+    private val _recipesHasMore = MutableStateFlow(false)
+    val recipesHasMore: StateFlow<Boolean> = _recipesHasMore
+    private val _recipesLoadingMore = MutableStateFlow(false)
+    val recipesLoadingMore: StateFlow<Boolean> = _recipesLoadingMore
+
+    /** The next page of the current search, appended; asked for by the list before the user reaches its end. */
+    fun loadMoreRecipes() {
+        val query = recipeQuery ?: return
+        if (_recipesBusy.value || _recipesLoadingMore.value || !_recipesHasMore.value || !online.value) return
+        moreJob = viewModelScope.launch {
+            _recipesLoadingMore.value = true
+            try {
+                val response = runCatching { container.api.searchRecipes(query, recipePage + 1) }.getOrNull()
+                if (recipeQuery != query) return@launch
+                if (response == null) { _recipesHasMore.value = false; return@launch }
+                recipePage = response.page
+                val known = _recipeResults.value.map { it.url }.toSet()
+                val fresh = response.results.filter { it.url !in known }
+                _recipeResults.value = _recipeResults.value + fresh
+                // A site that ignores the page number repeats itself: nothing new means the end.
+                _recipesHasMore.value = response.hasMore && fresh.isNotEmpty()
+            } finally {
+                _recipesLoadingMore.value = false
+            }
+        }
+    }
+
     fun searchRecipes(query: String, pinned: RecipeSummary? = null) = viewModelScope.launch {
+        moreJob?.cancel()
+        recipeQuery = query
+        recipePage = 1
+        _recipesHasMore.value = false
+        _recipesLoadingMore.value = false
         _recipesBusy.value = true
         _recipeMessage.value = null
         _recipeResults.value = listOfNotNull(pinned)
@@ -217,6 +252,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         val found = response?.results ?: emptyList()
         _recipeResults.value = if (pinned == null) found else listOf(pinned) + found.filter { it.url != pinned.url }
         _recipeMessage.value = response?.message ?: if (response == null) "The search could not be completed." else null
+        _recipesHasMore.value = response?.hasMore == true
         if (response != null && response.errors.isNotEmpty() && response.results.isNotEmpty()) notify("Some sites did not answer: ${response.errors.joinToString { it.source }}")
         _recipesBusy.value = false
     }

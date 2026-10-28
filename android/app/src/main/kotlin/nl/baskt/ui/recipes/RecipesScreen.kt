@@ -152,6 +152,9 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
             when (tab) {
                 0 -> RecipeList(
                     list = results,
+                    loadingMore = viewModel.recipesLoadingMore.collectAsState().value,
+                    hasMore = viewModel.recipesHasMore.collectAsState().value,
+                    onLoadMore = { viewModel.loadMoreRecipes() },
                     empty = searchMessage ?: "Type a dish, e.g. \"arroz cubano\" or \"iets met kip\". baskt understands it, searches Allerhande, Leuke Recepten, BBC Good Food, RecetasGratis, Cookpad and TheMealDB, and shows results in your language.",
                     busy = busy,
                     isFavourite = ::isFavourite,
@@ -198,12 +201,18 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
 }
 
 @Composable
-private fun RecipeList(list: List<RecipeSummary>, empty: String, busy: Boolean, isFavourite: (RecipeSummary) -> Boolean, onOpen: (RecipeSummary) -> Unit, onFavourite: (RecipeSummary) -> Unit, onFolder: (RecipeSummary) -> Unit) {
+private fun RecipeList(list: List<RecipeSummary>, loadingMore: Boolean, hasMore: Boolean, onLoadMore: () -> Unit, empty: String, busy: Boolean, isFavourite: (RecipeSummary) -> Boolean, onOpen: (RecipeSummary) -> Unit, onFavourite: (RecipeSummary) -> Unit, onFolder: (RecipeSummary) -> Unit) {
     if (list.isEmpty() && !busy) {
         Text(empty, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(20.dp))
         return
     }
-    LazyColumn(contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 128.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val state = androidx.compose.foundation.lazy.rememberLazyListState()
+    // Ask for the next page while a few screens of results are still ahead, so a steady scroll never waits.
+    val nearEnd by remember(list.size) {
+        androidx.compose.runtime.derivedStateOf { (state.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= list.size - 8 }
+    }
+    LaunchedEffect(nearEnd, hasMore, list.size) { if (nearEnd && hasMore && list.isNotEmpty()) onLoadMore() }
+    LazyColumn(state = state, contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 128.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(list, key = { it.url }) { recipe ->
             Card(onClick = { onOpen(recipe) }) {
                 Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -216,6 +225,10 @@ private fun RecipeList(list: List<RecipeSummary>, empty: String, busy: Boolean, 
                     IconButton(onClick = { onFolder(recipe) }) { Icon(Icons.Default.CreateNewFolder, contentDescription = "Add as folder") }
                 }
             }
+        }
+        if (loadingMore || (hasMore && list.isNotEmpty())) item("more") {
+            // Shown when the scroll outruns the next page.
+            androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { LoadingIndicator() }
         }
     }
 }
