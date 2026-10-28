@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -94,6 +96,7 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
     val steps by viewModel.chatSteps.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
     val recipeDetail by viewModel.recipeDetail.collectAsState()
+    val favourites by viewModel.recipeFavourites.collectAsState()
     val items by viewModel.basket.items.collectAsState()
     // Products already picked for an item in this basket show as added instead of offering a second copy.
     val inBasket = remember(items) { items.flatMap { item -> item.matches.mapNotNull { it.chosen?.id } }.toSet() }
@@ -103,7 +106,7 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
     }
     var openRecipe by remember { mutableStateOf<RecipeCard?>(null) }
     val listState = rememberLazyListState()
-    LaunchedEffect(Unit) { viewModel.loadChat() }
+    LaunchedEffect(Unit) { viewModel.loadChat(); viewModel.loadRecipeFavourites() }
     LaunchedEffect(messages.size, busy, steps.size) { if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size + (if (busy) 1 else 0), scrollOffset = Int.MAX_VALUE / 2) }
     fun send() {
         val text = input.trim()
@@ -187,10 +190,17 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
         }
     }
     openRecipe?.let { card ->
+        val recipe = nl.baskt.data.RecipeSummary(card.title, card.url, card.imageUrl, source = card.source)
         RecipeSheet(title = card.title, detail = recipeDetail, onDismiss = { openRecipe = null; viewModel.closeRecipe() }) {
-            Button(onClick = { viewModel.addRecipeFolder(card.url); openRecipe = null; viewModel.closeRecipe(); onFolderAdded() }) {
-                Icon(Icons.Default.CreateNewFolder, contentDescription = null)
-                Text("  Add as folder")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = { viewModel.addRecipeFolder(card.url); openRecipe = null; viewModel.closeRecipe(); onFolderAdded() }) {
+                    Icon(Icons.Default.CreateNewFolder, contentDescription = null)
+                    Text("  Add as folder")
+                }
+                if (!card.url.startsWith("baskt://")) {
+                    val favourite = favourites.any { it.url == card.url }
+                    IconButton(onClick = { viewModel.toggleRecipeFavourite(recipe) }) { Icon(if (favourite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = if (favourite) "Remove favourite" else "Favourite") }
+                }
             }
         }
     }
