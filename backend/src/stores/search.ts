@@ -4,6 +4,7 @@ import { db, now } from "@/db";
 import { priceHistory, products, searchCache, type ProductRow } from "@/db/schema";
 import { env } from "@/env";
 import { normalizeText } from "@/lib/text";
+import { withPersonal } from "@/stores/personal-overlay";
 import { getAdapter } from "@/stores/registry";
 import { productKey, type StoreCode, type StoreProduct } from "@/stores/types";
 
@@ -40,9 +41,10 @@ export function upsertProducts(list: StoreProduct[]): ProductRow[] {
   return rows;
 }
 
+/** Catalogue rows by id, priced for the logged-in AH account (see personal-overlay). */
 export function productsByIds(ids: string[]): ProductRow[] {
   if (!ids.length) return [];
-  const rows = db().select().from(products).where(inArray(products.id, ids)).all();
+  const rows = withPersonal(db().select().from(products).where(inArray(products.id, ids)).all());
   const byId = new Map(rows.map((row) => [row.id, row]));
   return ids.map((id) => byId.get(id)).filter((row): row is ProductRow => Boolean(row));
 }
@@ -84,7 +86,7 @@ export async function searchStore(store: StoreCode, query: string, options: { fo
   }
 
   try {
-    return { products: await pending, source: "live" };
+    return { products: withPersonal(await pending), source: "live" };
   } catch (error) {
     if (cached) {
       console.warn(`[search] ${store} "${query}" failed, serving stale cache: ${error instanceof Error ? error.message : error}`);

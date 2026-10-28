@@ -13,6 +13,7 @@ import { splitShoppingText } from "@/matching/parse";
 import { suggest } from "@/matching/suggest";
 import { buildRecipeGroup, itemsForServings, looksLikeRecipe, type RecipeItem } from "@/matching/recipes";
 import { expandDealQuery, findDeals } from "@/matching/deals";
+import { autoActivate } from "@/matching/personal-deals";
 import { termRelevance } from "@/stores/promotions";
 import { interpretVoice } from "@/matching/voice";
 import { findDuplicates } from "@/matching/dedupe";
@@ -819,6 +820,8 @@ basket.get("/deals", async (c) => {
   const basketId = requestedBasket(c);
   if (!basketId) return c.json({ error: { code: "NOT_FOUND", message: "basket not found" } }, 404);
   const deals = await findDeals(basketId, { live: c.req.query("live") === "true" });
+  // New items may match a Bonus Box offer; activation runs in the background (rate-limited inside).
+  void autoActivate().catch(() => {});
   return c.json({ deals, computedAt: now() });
 });
 

@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { basketItems, basketMatches, type ProductRow } from "@/db/schema";
 import { enabledStoreCodes } from "@/db/settings";
 import { lexicalScore } from "@/matching/rank";
+import { allPersonalOffers, personalOfferFor, personalPrice, type PricedRow } from "@/stores/personal-overlay";
 import { productsByIds, searchStore } from "@/stores/search";
 import { cachedChatJson } from "@/ai/client";
 import { aiConfigured } from "@/env";
@@ -72,6 +73,18 @@ async function judgeDeals(item: { text: string; canonical: string; current: stri
   return new Set(deals.filter((_, i) => picked.has(i + 1)).map((deal) => deal.id));
 }
 
+function personalProductIds() {
+  return Array.from(new Set(allPersonalOffers().filter((offer) => offer.status === "ACTIVATED" || offer.status === "ACTIVATABLE").flatMap((offer) => offer.productIds.slice(0, 12))));
+}
+
+/** What one pack of a deal product costs once its offer is in use (activatable personal offers counted as if activated). */
+function dealPriceCents(product: PricedRow) {
+  if (product.personal?.status !== "ACTIVATABLE") return product.priceCents;
+  const offer = personalOfferFor(product.id);
+  const price = offer ? personalPrice(product, offer) : null;
+  return price != null && price > 0 && price < product.priceCents ? price : product.priceCents;
+}
+
 export type Deal = {
   itemId: string;
   itemText: string;
@@ -100,6 +113,8 @@ export async function findDeals(basketId: string, options: { live?: boolean } = 
     .all();
   if (!items.length) return [];
   const matches = db().select().from(basketMatches).where(inArray(basketMatches.itemId, items.map((item) => item.id))).all();
+  // Products on the AH account's personal offers are candidates for every item, like a store-wide promotion.
+  const personalPool = stores.includes("AH") ? (productsByIds(personalProductIds()) as PricedRow[]) : [];
   const deals: Deal[] = [];
   const judgements: Array<Promise<void>> = [];
   for (const item of items) {
@@ -120,17 +135,22 @@ export async function findDeals(basketId: string, options: { live?: boolean } = 
           // keep what we have
         }
       }
+      if (store === "AH") {
+        const seen = new Set(pool.map((product) => product.id));
+        pool = [...pool, ...personalPool.filter((product) => !seen.has(product.id))];
+      }
       const current = currentId ? productsByIds([currentId])[0] : undefined;
       const seenIds = new Set<string>();
-      for (const product of pool) {
-        if (!product.isDeal || seenIds.has(product.id) || !product.available) continue;
+      for (const product of pool as PricedRow[]) {
+        // Personal offers count even before activation: activating one is part of taking the deal.
+        if (!(product.isDeal || product.personal) || seenIds.has(product.id) || !product.available) continue;
         // Must still be the same kind of product as the idea.
         const lexical = lexicalScore(item.text, parsed, product);
         if (lexical < 2) continue;
         seenIds.add(product.id);
         const equivalence = match?.equivalences[product.id] ?? "EQUIVALENT";
         const currentLine = current ? current.priceCents * item.quantity : null;
-        const dealLine = product.priceCents * item.quantity;
+        const dealLine = dealPriceCents(product) * item.quantity;
         own.push({
           itemId: item.id,
           itemText: item.text,

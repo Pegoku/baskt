@@ -13,6 +13,7 @@ import { deleteChoice, listChoices } from "@/matching/memory";
 import { deleteName, listNames } from "@/matching/naming";
 import { allStores, hasStore, storeHealth } from "@/stores/registry";
 import { lookupBarcode, searchStore } from "@/stores/search";
+import { withPersonal } from "@/stores/personal-overlay";
 import { priceHistoryFor, recentPriceChanges, runPriceScan, scanStatus } from "@/prices";
 
 export const meta = new Hono();
@@ -126,13 +127,13 @@ meta.post("/products/:id/similar/feedback", async (c) => {
 meta.get("/products/:id/details", async (c) => {
   const product = db().select().from(products).where(eq(products.id, c.req.param("id"))).get();
   if (!product) return c.json({ error: { code: "NOT_FOUND", message: "product not found" } }, 404);
-  return c.json({ product, ...await productDetails(product) });
+  return c.json({ product: withPersonal([product])[0], ...await productDetails(product) });
 });
 
 meta.get("/products/:id", (c) => {
   const product = db().select().from(products).where(eq(products.id, c.req.param("id"))).get();
   if (!product) return c.json({ error: { code: "NOT_FOUND", message: "product not found" } }, 404);
-  return c.json(product);
+  return c.json(withPersonal([product])[0]);
 });
 
 meta.get("/products/:id/price-history", (c) => {

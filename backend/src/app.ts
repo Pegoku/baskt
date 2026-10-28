@@ -11,6 +11,7 @@ import { share } from "@/routes/share";
 import { whatsapp } from "@/routes/whatsapp";
 import { chatRoute } from "@/routes/chat";
 import { meta } from "@/routes/meta";
+import { ahRoute } from "@/routes/ah";
 
 function constantTimeEqual(a: string, b: string) {
   if (a.length !== b.length) return false;
@@ -46,6 +47,7 @@ export function createApp(options: { token?: string; log?: boolean } = {}) {
   app.route("/api/v1/whatsapp", whatsapp);
   app.route("/api/v1/chat", chatRoute);
   app.route("/api/v1/tts", tts);
+  app.route("/api/v1/ah", ahRoute);
 
   app.notFound((c) => c.json({ error: { code: "NOT_FOUND", message: `no route for ${c.req.method} ${c.req.path}` } }, 404));
   app.onError((error, c) => {

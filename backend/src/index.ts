@@ -2,6 +2,7 @@ import { createApp } from "@/app";
 import { db } from "@/db";
 import { aiConfigured, env } from "@/env";
 import { startPriceScheduler } from "@/prices";
+import { startPersonalOffersScheduler } from "@/matching/personal-deals";
 
 db();
 if (!env.apiToken) console.warn("[baskt] APP_API_TOKEN is empty: the API is unauthenticated");
@@ -9,6 +10,7 @@ if (!aiConfigured()) console.warn("[baskt] AI_API_KEY/AI_MODEL not set: matching
 
 const app = createApp();
 startPriceScheduler();
+startPersonalOffersScheduler();
 
 export default {
   port: env.port,
