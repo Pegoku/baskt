@@ -1,5 +1,5 @@
 import { cachedUpstream } from "@/lib/cache";
-import { fetchWithRetry } from "@/lib/http";
+import { fetchWithRetry, HttpError } from "@/lib/http";
 import { extractRecipe, type Recipe } from "@/matching/recipes";
 
 const BROWSER_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36";
@@ -11,7 +11,8 @@ export type SiteSource = {
   id: string;
   name: string;
   language: "en" | "nl" | "es";
-  searchUrl: (query: string) => string;
+  /** Search page URL; null when the site has no further pages (only page 1 is supported there). */
+  searchUrl: (query: string, page: number) => string | null;
   /** Matches recipe URLs (absolute or relative) in the search page HTML; group 1 = slug used for the title. */
   linkPattern: RegExp;
   base: string;
@@ -26,7 +27,7 @@ export const SITE_SOURCES: SiteSource[] = [
     name: "Allerhande",
     language: "nl",
     base: "https://www.ah.nl",
-    searchUrl: (query) => `https://www.ah.nl/allerhande/recepten-zoeken?query=${encodeURIComponent(query)}`,
+    searchUrl: (query, page) => (page > 1 ? null : `https://www.ah.nl/allerhande/recepten-zoeken?query=${encodeURIComponent(query)}`),
     linkPattern: /\/allerhande\/recept\/R-R\d+\/([a-z0-9-]+)/g,
   },
   {
@@ -34,7 +35,7 @@ export const SITE_SOURCES: SiteSource[] = [
     name: "Leuke Recepten",
     language: "nl",
     base: "https://www.leukerecepten.nl",
-    searchUrl: (query) => `https://www.leukerecepten.nl/?s=${encodeURIComponent(query)}`,
+    searchUrl: (query, page) => `https://www.leukerecepten.nl/${page > 1 ? `page/${page}/` : ""}?s=${encodeURIComponent(query)}`,
     linkPattern: /https:\/\/www\.leukerecepten\.nl\/recepten\/([a-z0-9-]+)\//g,
   },
   {
@@ -42,7 +43,7 @@ export const SITE_SOURCES: SiteSource[] = [
     name: "BBC Good Food",
     language: "en",
     base: "https://www.bbcgoodfood.com",
-    searchUrl: (query) => `https://www.bbcgoodfood.com/search?q=${encodeURIComponent(query)}`,
+    searchUrl: (query, page) => `https://www.bbcgoodfood.com/search?q=${encodeURIComponent(query)}${page > 1 ? `&page=${page}` : ""}`,
     linkPattern: /https:\/\/www\.bbcgoodfood\.com\/recipes\/([a-z0-9-]+)/g,
   },
   {
@@ -50,7 +51,7 @@ export const SITE_SOURCES: SiteSource[] = [
     name: "RecetasGratis",
     language: "es",
     base: "https://recetas.elperiodico.com",
-    searchUrl: (query) => `https://recetas.elperiodico.com/busqueda/q/${encodeURIComponent(query)}`,
+    searchUrl: (query, page) => `https://recetas.elperiodico.com/busqueda/q/${encodeURIComponent(query)}${page > 1 ? `/pag/${page}` : ""}`,
     linkPattern: /(?:https:\/\/recetas\.elperiodico\.com)?\/receta-de-([a-z0-9-]+)-\d+\.html/g,
     imageBeforeLink: true,
   },
@@ -59,7 +60,7 @@ export const SITE_SOURCES: SiteSource[] = [
     name: "Cookpad",
     language: "es",
     base: "https://cookpad.com",
-    searchUrl: (query) => `https://cookpad.com/es/buscar/${encodeURIComponent(query)}`,
+    searchUrl: (query, page) => `https://cookpad.com/es/buscar/${encodeURIComponent(query)}${page > 1 ? `?page=${page}` : ""}`,
     linkPattern: /\/es\/recetas\/(\d{5,})(?![\d-])/g,
   },
 ];
@@ -105,12 +106,23 @@ function cardImage(html: string, links: { match: RegExpMatchArray; url: string }
   return html.slice(at, end).match(IMAGE_URL)?.[0] ?? null;
 }
 
-export async function searchSite(site: SiteSource, query: string, limit = 8): Promise<RecipeHit[]> {
-  return cachedUpstream(`recipe-search:v2:${site.id}:${query.trim().toLowerCase()}:${limit}`, 60 * 60 * 1000, () => searchSiteLive(site, query, limit));
+export async function searchSite(site: SiteSource, query: string, limit = 8, page = 1): Promise<RecipeHit[]> {
+  const url = site.searchUrl(query, page);
+  if (!url) return [];
+  const key = `recipe-search:v2:${site.id}:${query.trim().toLowerCase()}:${limit}${page > 1 ? `:p${page}` : ""}`;
+  return cachedUpstream(key, 60 * 60 * 1000, async () => {
+    try {
+      return await searchSiteLive(site, url, query, limit);
+    } catch (error) {
+      // Past the last page some sites answer 404: that is the end of the list, not a failure.
+      if (page > 1 && error instanceof HttpError && error.status === 404) return [];
+      throw error;
+    }
+  });
 }
 
-async function searchSiteLive(site: SiteSource, query: string, limit: number): Promise<RecipeHit[]> {
-  const html = await fetchHtml(site.searchUrl(query));
+async function searchSiteLive(site: SiteSource, searchUrl: string, query: string, limit: number): Promise<RecipeHit[]> {
+  const html = await fetchHtml(searchUrl);
   const seen = new Set<string>();
   const hits: RecipeHit[] = [];
   const links = Array.from(html.matchAll(site.linkPattern), (match) => ({ match, url: match[0].startsWith("http") ? match[0] : `${site.base}${match[0]}` }));
@@ -169,8 +181,9 @@ export type SourceError = { source: string; message: string };
 
 export async function searchAllSources(
   queries: { en: string; nl: string; es: string },
-  options: { sources?: string[] } = {},
+  options: { sources?: string[]; page?: number } = {},
 ): Promise<{ hits: RecipeHit[]; errors: SourceError[] }> {
+  const page = Math.max(1, options.page ?? 1);
   const wanted = options.sources;
   const errors: SourceError[] = [];
   const tasks: Array<Promise<RecipeHit[]>> = [];
@@ -181,9 +194,10 @@ export async function searchAllSources(
     });
   for (const site of SITE_SOURCES) {
     if (wanted && !wanted.includes(site.id)) continue;
-    tasks.push(guard(site.name, searchSite(site, queries[site.language])));
+    tasks.push(guard(site.name, searchSite(site, queries[site.language], 8, page)));
   }
-  if (!wanted || wanted.includes("themealdb")) tasks.push(guard("TheMealDB", searchMealDb(queries.en)));
+  // TheMealDB answers everything at once, so it only takes part in the first page.
+  if (page === 1 && (!wanted || wanted.includes("themealdb"))) tasks.push(guard("TheMealDB", searchMealDb(queries.en)));
   const results = await Promise.all(tasks);
   const seen = new Set<string>();
   const merged: RecipeHit[] = [];

@@ -50,21 +50,23 @@ export function userRecipeAsRecipe(row: UserRecipeRow): Recipe {
 recipes.get("/sources", (c) => c.json({ sources: [...SITE_SOURCES.map((site) => ({ id: site.id, name: site.name, language: site.language })), { id: "themealdb", name: "TheMealDB", language: "en" }] }));
 
 /** Multi-site search: the dish is translated into English/Dutch/Spanish queries first, results are interleaved. */
+/** `page` (1-based) asks for the next page of every site that has one; `hasMore` says whether to ask again. */
 recipes.get("/search", async (c) => {
   const query = c.req.query("q")?.trim();
   if (!query) return c.json({ error: { code: "BAD_REQUEST", message: "q is required" } }, 400);
+  const page = Math.min(Math.max(Number(c.req.query("page") ?? 1) || 1, 1), 20);
   const understood = await dishQueries(query);
-  const { hits, errors } = await searchAllSources(understood.queries);
+  const { hits, errors } = await searchAllSources(understood.queries, { page });
   const localized = await localizeTitles(hits.map((hit) => hit.title));
   // Always say why a list is empty: nothing matched, or the sites could not be reached.
-  const message = hits.length
+  const message = hits.length || page > 1
     ? null
     : errors.length
       ? `Recipe sites did not answer (${errors.map((entry) => entry.source).join(", ")}). Try again in a moment.`
       : `No recipes found for “${understood.dish}” on any site.`;
   // Warm the first results while the user is still reading the list.
   prefetchRecipes(hits.slice(0, 8).map((hit) => hit.url));
-  return c.json({ query, dish: understood.dish, queries: understood.queries, results: hits.map((hit, index) => ({ ...hit, titleLocalized: localized[index], slug: "" })), errors, message });
+  return c.json({ query, dish: understood.dish, queries: understood.queries, page, hasMore: hits.length > 0, results: hits.map((hit, index) => ({ ...hit, titleLocalized: localized[index], slug: "" })), errors, message });
 });
 
 /** Full recipe (ingredients, steps) for a URL from any supported site, in the app language. */
