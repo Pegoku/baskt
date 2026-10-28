@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { baskets } from "@/db/schema";
 import { findDeals } from "@/matching/deals";
 import { activateOffer, AhAccountError, autoActivateEnabled, loadPersistedOffers, personalOffers } from "@/stores/ah-account";
+import { importAhReceipts } from "@/stores/ah-receipts";
 import type { PricedRow } from "@/stores/personal-overlay";
 
 export type AutoActivation = { offerId: string; title: string; itemText: string; ok: boolean; error: string | null };
@@ -56,12 +57,16 @@ async function run(): Promise<AutoActivation[]> {
   return results;
 }
 
-/** Keeps personal prices warm and auto-activation going without the app open. */
+/** Keeps personal prices warm, receipts imported and auto-activation going without the app open. */
 export function startPersonalOffersScheduler() {
   loadPersistedOffers();
   const tick = () =>
     personalOffers()
-      .then((view) => (view.connected ? autoActivate() : []))
+      .then(async (view) => {
+        if (!view.connected) return;
+        await importAhReceipts().catch((error) => console.warn(`[ah-receipts] scheduled import failed: ${error instanceof Error ? error.message : error}`));
+        await autoActivate();
+      })
       .catch((error) => console.warn(`[ah-account] scheduled refresh failed: ${error instanceof Error ? error.message : error}`));
   setTimeout(tick, 30_000).unref();
   setInterval(tick, 60 * 60 * 1000).unref();

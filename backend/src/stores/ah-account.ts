@@ -143,7 +143,7 @@ async function authorized<T>(path: string, init: RequestInit = {}, retryAuth = t
 
 type GraphqlResponse<T> = { data?: T; errors?: Array<{ message?: string }> };
 
-async function graphql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
+export async function graphql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
   const body = await authorized<GraphqlResponse<T>>("/graphql", { method: "POST", body: JSON.stringify({ query, variables }) });
   if (!body.data) throw new AhAccountError("AH_ERROR", body.errors?.map((error) => error.message).join("; ") || "empty GraphQL reply");
   if (body.errors?.length) console.warn(`[ah-account] GraphQL partial errors: ${body.errors.map((error) => error.message).join("; ")}`);

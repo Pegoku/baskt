@@ -83,3 +83,25 @@ describe("ah account helpers", () => {
     expect(products).toHaveLength(2);
   });
 });
+
+describe("ah receipts", () => {
+  test("discounts land on the product they name; unknown ones stay a line of their own", async () => {
+    const { receiptLines } = await import("@/stores/ah-receipts");
+    const tissues = { id: "AH:632", title: "AH Tissues zacht & sterk" } as ProductRow;
+    const lines = receiptLines(
+      {
+        products: [
+          { id: 10636, quantity: 2, name: "AH TISSUES", price: { amount: 1.19 }, amount: { amount: 2.38 } },
+          { id: 1, quantity: 1, name: "STOKBROOD", price: null, amount: { amount: 1.39 } },
+        ],
+        discounts: [{ type: "BBOX", name: "AH Tissues", amount: { amount: -0.6 } }, { type: "BONUS", name: "MBSPECIALITE", amount: { amount: -0.58 } }],
+      },
+      new Map([[10636, tissues]]),
+    );
+    expect(lines.map((line) => [line.name, line.totalPriceCents, line.dealText, line.productId])).toEqual([
+      ["AH Tissues zacht & sterk", 178, "Bonus Box", "AH:632"],
+      ["STOKBROOD", 139, null, null],
+      ["Bonus: MBSPECIALITE", -58, "Bonus", null],
+    ]);
+  });
+});

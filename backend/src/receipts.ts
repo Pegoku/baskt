@@ -164,7 +164,7 @@ export async function scanReceipt(images: string[]): Promise<ReceiptScan> {
 const NOISE = /^(\d+([.,]\d+)?(l|ml|cl|g|kg|gr|st|stuks|x)?|ah|jumbo|lidl|aldi|plus|dirk|bonus)$/;
 
 /** How much of the receipt line's words show up in a title (0..1). */
-function lineScore(name: string, title: string): number {
+export function lineScore(name: string, title: string): number {
   const all = tokenize(name);
   const tokens = all.filter((token) => token.length > 2 && !NOISE.test(token));
   if (!tokens.length) return 0;
