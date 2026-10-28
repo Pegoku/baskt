@@ -65,6 +65,7 @@ import kotlinx.coroutines.launch
 import nl.baskt.data.BasketItem
 import nl.baskt.data.euros
 import nl.baskt.data.freeExtra
+import nl.baskt.data.dealPricing
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.ProductThumb
 import nl.baskt.ui.common.StoreBadge
@@ -235,11 +236,20 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                                     },
                                                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
-                                            val free = if (item.isBought) null else product?.freeExtra(item.quantity)
-                                            if (free != null) Text(
-                                                "${product!!.dealText} · grab $free more, ${if (free == 1) "it's" else "they're"} free",
-                                                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
-                                            )
+                                            // The deal on the shelf label (1+1 gratis, 15% korting, personal Bonus), so it is taken at the till.
+                                            val dealText = product?.dealText?.takeIf { !item.isBought }
+                                            if (dealText != null) {
+                                                val free = product.freeExtra(item.quantity)
+                                                val line = listOfNotNull(
+                                                    dealText,
+                                                    product.dealPricing()?.label(),
+                                                    free?.let { "grab $it more, ${if (it == 1) "it's" else "they're"} free" },
+                                                    "your Bonus".takeIf { product.personal?.status == "ACTIVATED" },
+                                                ).joinToString(" · ")
+                                                Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                                                    Text(line, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+                                                }
+                                            }
                                         }
                                         if (product != null) Text((product.priceCents * item.quantity).euros(), fontWeight = FontWeight.SemiBold)
                                     }
