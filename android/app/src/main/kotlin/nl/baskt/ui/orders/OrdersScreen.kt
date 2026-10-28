@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
@@ -60,6 +61,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import nl.baskt.data.BasketItem
 import nl.baskt.data.PurchaseLine
 import nl.baskt.data.PurchaseWithLines
 import nl.baskt.data.euros
@@ -101,6 +103,12 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val previous = days.getOrNull(index - 1)
     val next = if (index >= 0) days.getOrNull(index + 1) else null
     var picking by remember { mutableStateOf(false) }
+    // Lines waiting on the "already in the basket" question, with the items they would land on.
+    var duplicateAsk by remember { mutableStateOf<Pair<List<PurchaseLine>, List<Pair<PurchaseLine, BasketItem>>>?>(null) }
+    fun addLines(lines: List<PurchaseLine>) {
+        val already = lines.mapNotNull { line -> viewModel.basketItemFor(line, products)?.let { line to it } }
+        if (already.isEmpty()) viewModel.addPurchaseLines(lines, products) else duplicateAsk = lines to already
+    }
 
     // One page per order day. Past the newest day the swipe carries on to the basket, as before.
     val pager = rememberPagerState(initialPage = (days.size - 1).coerceAtLeast(0)) { days.size }
@@ -141,6 +149,29 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             confirmButton = { TextButton(onClick = { state.selectedDateMillis?.let { selected = LocalDate.ofEpochDay(it / 86_400_000L) }; picking = false }) { Text("Show") } },
             dismissButton = { TextButton(onClick = { picking = false }) { Text("Cancel") } },
         ) { DatePicker(state = state, title = { Text("Days with orders", modifier = Modifier.padding(start = 24.dp, top = 16.dp)) }) }
+    }
+
+    duplicateAsk?.let { (lines, already) ->
+        val single = already.singleOrNull()?.takeIf { lines.size == 1 }
+        AlertDialog(
+            onDismissRequest = { duplicateAsk = null },
+            title = { Text(if (single != null) "Already in the basket" else "Some are already in the basket") },
+            text = {
+                Text(
+                    if (single != null) "${single.second.text} is already on the list (×${single.second.quantity}). Add ${viewModel.purchaseQuantity(lines.single()).let { if (it == 1) "one" else "$it" }} more to it, or put it on the list as a new item?"
+                    else "${already.size} of these ${lines.size} items are already on the list: ${already.joinToString { it.second.text }}. Raise their quantity, or add them as new items?",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { duplicateAsk = null; viewModel.addPurchaseLines(lines, products, bumpExisting = true) }) { Text(if (single != null) "+${viewModel.purchaseQuantity(lines.single())}" else "Raise quantity") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { duplicateAsk = null }) { Text("Cancel") }
+                    TextButton(onClick = { duplicateAsk = null; viewModel.addPurchaseLines(lines, products) }) { Text(if (single != null) "New item" else "New items") }
+                }
+            },
+        )
     }
 
     Scaffold(
@@ -197,7 +228,7 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                     val pageScans = scansOn(pageDay)
                     LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         for (entry in purchasesOn(pageDay)) {
-                            item(entry.purchase.id) { PurchaseCard(entry, products, stores, onAdd = { lines -> viewModel.addPurchaseLines(lines, products) }) }
+                            item(entry.purchase.id) { PurchaseCard(entry, products, stores, onAdd = { lines -> addLines(lines) }) }
                         }
                         if (pageScans.isNotEmpty()) {
                             item("pending") {

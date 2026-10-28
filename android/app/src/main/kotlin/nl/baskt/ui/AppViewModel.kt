@@ -141,13 +141,37 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
      * Puts a line from a previous order back on the list: the same product when the line still knows it, otherwise
      * just the name, so it gets matched again. Weighed lines (1.5 kg) come back as one entry.
      */
-    fun addPurchaseLines(lines: List<PurchaseLine>, products: Map<String, Product>) = viewModelScope.launch {
+    fun addPurchaseLines(lines: List<PurchaseLine>, products: Map<String, Product>, bumpExisting: Boolean = false) = viewModelScope.launch {
+        var bumped = 0
         for (line in lines) {
-            val quantity = if (line.quantity % 1.0 == 0.0) line.quantity.toInt().coerceAtLeast(1) else 1
+            val quantity = purchaseQuantity(line)
+            val existing = if (bumpExisting) basketItemFor(line, products) else null
+            if (existing != null) { basket.setQuantity(existing, existing.quantity + quantity); bumped++; continue }
             val product = line.productId?.let { products[it] }
             if (product != null) basket.addFromProduct(product, quantity = quantity) else basket.add(line.name, quantity)
         }
-        notify(if (lines.size == 1) "Added ${lines.single().name} to the basket" else "Added ${lines.size} items to the basket")
+        notify(when {
+            lines.size == 1 && bumped == 1 -> "Added ${purchaseQuantity(lines.single())} more ${lines.single().name} to the basket"
+            lines.size == 1 -> "Added ${lines.single().name} to the basket"
+            bumped > 0 -> "Added ${lines.size} items to the basket ($bumped already there, quantity raised)"
+            else -> "Added ${lines.size} items to the basket"
+        })
+    }
+
+    fun purchaseQuantity(line: PurchaseLine) = if (line.quantity % 1.0 == 0.0) line.quantity.toInt().coerceAtLeast(1) else 1
+
+    /**
+     * The open item on the current list that a previous-order line is already there as: the same product at any
+     * store, the same barcode, or the same name.
+     */
+    fun basketItemFor(line: PurchaseLine, products: Map<String, Product>): BasketItem? {
+        val product = line.productId?.let { products[it] }
+        val names = listOfNotNull(line.name, product?.title).map { it.trim().lowercase() }.toSet()
+        return basket.items.value.filter { it.isOpen && !it.isGroup && !it.isBought }.firstOrNull { item ->
+            (line.productId != null && item.matches.any { it.chosen?.id == line.productId || it.provisional?.id == line.productId }) ||
+                (line.barcode != null && item.barcode == line.barcode) ||
+                listOfNotNull(item.text, item.parsed?.canonicalName, item.anyProduct?.title).any { it.trim().lowercase() in names }
+        }
     }
 
     private val _recipeResults = MutableStateFlow<List<RecipeSummary>>(emptyList())
