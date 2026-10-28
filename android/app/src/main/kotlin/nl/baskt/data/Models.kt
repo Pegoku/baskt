@@ -26,7 +26,61 @@ data class Product(
     val category: String? = null,
     val available: Boolean = true,
     val fetchedAt: Long = 0,
+    /** Set when the logged-in AH account has a personal offer on this product. */
+    val personal: PersonalTag? = null,
 )
+
+/** status ACTIVATED (price already lowered) or ACTIVATABLE (Bonus Box offer still to activate). */
+@Serializable
+data class PersonalTag(val offerId: String, val status: String, val source: String, val dealText: String? = null)
+
+@Serializable
+data class AhAccountStatus(
+    val connected: Boolean = false,
+    val memberName: String? = null,
+    val connectedAt: Long? = null,
+    val error: String? = null,
+    val autoActivate: Boolean = true,
+    val loginUrl: String = "",
+    val redirectPrefix: String = "appie://login-exit",
+)
+
+@Serializable
+data class PersonalOffer(
+    val id: String,
+    val hqId: Long? = null,
+    /** BONUS_BOX (choose and activate) or PERSONAL (AH's own picks for the card). */
+    val source: String,
+    val title: String,
+    val subtitle: String? = null,
+    val dealText: String? = null,
+    val imageUrl: String? = null,
+    val priceCents: Int? = null,
+    val regularPriceCents: Int? = null,
+    val status: String,
+    val periodStart: String? = null,
+    val periodEnd: String? = null,
+    val productIds: List<String> = emptyList(),
+    val autoActivated: Boolean = false,
+)
+
+@Serializable
+data class BonusPeriod(val start: String, val end: String)
+
+@Serializable
+data class PersonalOffersResponse(
+    val connected: Boolean = false,
+    val period: BonusPeriod? = null,
+    val maximumActivations: Int? = null,
+    val activatedCount: Int = 0,
+    val bonusBoxError: String? = null,
+    val offers: List<PersonalOffer> = emptyList(),
+    val products: Map<String, Product> = emptyMap(),
+    val fetchedAt: Long = 0,
+)
+
+@Serializable
+data class ActivateOfferResponse(val status: String? = null, val message: String? = null, val offers: PersonalOffersResponse)
 
 @Serializable
 data class SizeHint(val amount: Double, val unit: String)

@@ -505,6 +505,51 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         _loadingDeals.value = false
     }
 
+    private val _ahAccount = MutableStateFlow<nl.baskt.data.AhAccountStatus?>(null)
+    val ahAccount: StateFlow<nl.baskt.data.AhAccountStatus?> = _ahAccount
+    private val _ahOffers = MutableStateFlow<nl.baskt.data.PersonalOffersResponse?>(null)
+    val ahOffers: StateFlow<nl.baskt.data.PersonalOffersResponse?> = _ahOffers
+    private val _loadingAhOffers = MutableStateFlow(false)
+    val loadingAhOffers: StateFlow<Boolean> = _loadingAhOffers
+    /** Offer ids with an activation in flight. */
+    private val _activating = MutableStateFlow<Set<String>>(emptySet())
+    val activating: StateFlow<Set<String>> = _activating
+
+    fun loadAhAccount() = viewModelScope.launch { runCatching { container.api.ahAccount() }.onSuccess { _ahAccount.value = it } }
+
+    /** Called by the login WebView with the appie://login-exit URL it intercepted. */
+    suspend fun connectAh(redirect: String): Result<nl.baskt.data.AhAccountStatus> =
+        runCatching { container.api.ahConnect(redirect) }.onSuccess { _ahAccount.value = it; _ahOffers.value = null; loadAhOffers(force = true) }
+
+    fun disconnectAh() = viewModelScope.launch {
+        runCatching { container.api.ahDisconnect() }.onSuccess { _ahAccount.value = it; _ahOffers.value = null }.onFailure { notify("Could not log out: ${it.message}") }
+    }
+
+    fun setAhAutoActivate(enabled: Boolean) = viewModelScope.launch {
+        runCatching { container.api.ahSetAutoActivate(enabled) }.onSuccess { _ahAccount.value = it }.onFailure { notify("Could not save: ${it.message}") }
+    }
+
+    fun loadAhOffers(force: Boolean = false) = viewModelScope.launch {
+        _loadingAhOffers.value = true
+        _ahOffers.value = cachedLoad<nl.baskt.data.PersonalOffersResponse?>("ah-offers", _ahOffers.value) { container.api.ahOffers(force) }
+        if (_ahAccount.value == null) loadAhAccount()
+        _loadingAhOffers.value = false
+    }
+
+    fun activateOffer(offer: nl.baskt.data.PersonalOffer) = viewModelScope.launch {
+        _activating.value = _activating.value + offer.id
+        runCatching { container.api.ahActivate(offer.id) }
+            .onSuccess {
+                _ahOffers.value = it.offers
+                notify("Activated “${offer.title}”")
+                // Prices and deals now include the offer.
+                _deals.value = null
+                basket.refresh()
+            }
+            .onFailure { notify("Could not activate “${offer.title}”: ${it.message}") }
+        _activating.value = _activating.value - offer.id
+    }
+
     private val _whatsapp = MutableStateFlow<WhatsAppStatus?>(null)
     val whatsapp: StateFlow<WhatsAppStatus?> = _whatsapp
     private val _whatsappQr = MutableStateFlow<String?>(null)

@@ -33,6 +33,7 @@ import nl.baskt.ui.recipes.RecipesScreen
 import nl.baskt.ui.shop.ShopModeScreen
 import nl.baskt.ui.purchases.PurchasesScreen
 import nl.baskt.ui.recipes.RecipeEditorScreen
+import nl.baskt.ui.ah.AhLoginScreen
 
 @Serializable data object BasketRoute : NavKey
 @Serializable data class ItemRoute(val itemId: String) : NavKey
@@ -51,6 +52,7 @@ import nl.baskt.ui.recipes.RecipeEditorScreen
 @Serializable data object OrderRoute : NavKey
 @Serializable data object ScannerRoute : NavKey
 @Serializable data object TidyRoute : NavKey
+@Serializable data object AhLoginRoute : NavKey
 
 @Composable
 fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
@@ -120,10 +122,11 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
             entry<ShopRoute> { route -> ShopModeScreen(viewModel, route.store, onBack = { backStack.removeLastOrNull() }) }
             entry<RecipesRoute> { RecipesScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onFolderAdded = { backStack.removeLastOrNull() }, onCreate = { backStack.add(RecipeEditorRoute(it)) }) }
             entry<RecipeEditorRoute> { route -> RecipeEditorScreen(viewModel, route.recipeId, onBack = { backStack.removeLastOrNull() }) }
-            entry<DealsRoute> { DealsScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) }) }
+            entry<DealsRoute> { DealsScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) }, onAhLogin = { backStack.add(AhLoginRoute) }) }
+            entry<AhLoginRoute> { AhLoginScreen(viewModel, onDone = { backStack.removeLastOrNull() }) }
             entry<SearchRoute> { SearchScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) }) }
             entry<StockRoute> { StockScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
-            entry<SettingsRoute> { SettingsScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onMemory = { backStack.add(MemoryRoute) }) }
+            entry<SettingsRoute> { SettingsScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onMemory = { backStack.add(MemoryRoute) }, onAhLogin = { backStack.add(AhLoginRoute) }) }
             entry<MemoryRoute> { MemoryScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
         },
     )

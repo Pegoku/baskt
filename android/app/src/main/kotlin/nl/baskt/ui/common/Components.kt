@@ -106,6 +106,10 @@ fun ProductRow(product: Product, modifier: Modifier = Modifier, dealMath: Boolea
                     color = MaterialTheme.colorScheme.tertiary,
                 )
             }
+            when (product.personal?.status) {
+                "ACTIVATED" -> Text("Your personal Bonus", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                "ACTIVATABLE" -> Text("Bonus Box: " + (product.personal.dealText ?: "offer") + " (activate in Deals)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+            }
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(product.priceCents.euros(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

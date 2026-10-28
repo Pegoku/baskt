@@ -51,7 +51,7 @@ import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.StoreBadge
 
 @Composable
-fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> Unit = {}) {
+fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> Unit = {}, onAhLogin: () -> Unit = {}) {
     val settings by viewModel.settings.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
     val scope = rememberCoroutineScope()
@@ -229,6 +229,8 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
                 }
             }
             HorizontalDivider()
+            AhAccountSettings(viewModel, onAhLogin)
+            HorizontalDivider()
             Text("Loyalty cards", style = MaterialTheme.typography.titleMedium)
             Text("Shown as a barcode from the in-store checklist for the checkout scanner. Cards stay on this phone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             var editingCard by remember { mutableStateOf<String?>(null) }
@@ -254,5 +256,42 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/** The server-side AH login behind personal Bonus offers, and whether matching offers activate themselves. */
+@Composable
+private fun AhAccountSettings(viewModel: AppViewModel, onLogin: () -> Unit) {
+    val account by viewModel.ahAccount.collectAsState()
+    LaunchedEffect(Unit) { viewModel.loadAhAccount() }
+    var confirmLogout by remember { mutableStateOf(false) }
+    Text("Albert Heijn account", style = MaterialTheme.typography.titleMedium)
+    val current = account
+    when {
+        current == null -> Text("Connect to the server to see the account.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        current.connected -> {
+            Text("Logged in" + (current.memberName?.let { " as $it" } ?: "") + ". Your personal Bonus and Bonus Box offers show under Deals → My Bonus, and activated ones count in prices.", style = MaterialTheme.typography.bodySmall)
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Auto-activate matching offers")
+                    Text("Bonus Box offers for something on a basket are activated for you, best saving first, until the weekly limit. AH does not let you undo an activation.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = current.autoActivate, onCheckedChange = { viewModel.setAhAutoActivate(it) })
+            }
+            OutlinedButton(onClick = { confirmLogout = true }) { Text("Log out") }
+        }
+        else -> {
+            Text(current.error ?: "Log in with your AH account to see and activate your personal Bonus offers. The server keeps the session; your password is only typed into AH's own page.", style = MaterialTheme.typography.bodySmall, color = if (current.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = onLogin) { Text(if (current.error != null) "Log in again" else "Log in to Albert Heijn") }
+        }
+    }
+    if (confirmLogout) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmLogout = false },
+            title = { Text("Log out of Albert Heijn?") },
+            text = { Text("Personal offers stop showing and prices go back to the regular Bonus.") },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { confirmLogout = false; viewModel.disconnectAh() }) { Text("Log out") } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmLogout = false }) { Text("Cancel") } },
+        )
     }
 }

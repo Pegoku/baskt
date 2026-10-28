@@ -452,6 +452,22 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
     suspend fun deals(basketId: String, live: Boolean): DealsResponse =
         client.get(url("/basket/deals")) { auth(); parameter("basketId", basketId); if (live) parameter("live", "true") }.expect()
 
+    suspend fun ahAccount(): AhAccountStatus = client.get(url("/ah/account")) { auth() }.expect()
+
+    suspend fun ahConnect(code: String): AhAccountStatus =
+        client.post(url("/ah/account/connect")) { auth(); contentType(ContentType.Application.Json); setBody(JsonObject(mapOf("code" to JsonPrimitive(code)))) }.expect()
+
+    suspend fun ahSetAutoActivate(enabled: Boolean): AhAccountStatus =
+        client.patch(url("/ah/account")) { auth(); contentType(ContentType.Application.Json); setBody(JsonObject(mapOf("autoActivate" to JsonPrimitive(enabled)))) }.expect()
+
+    suspend fun ahDisconnect(): AhAccountStatus = client.delete(url("/ah/account")) { auth() }.expect()
+
+    suspend fun ahOffers(force: Boolean): PersonalOffersResponse =
+        client.get(url("/ah/offers")) { auth(); if (force) parameter("force", "true") }.expect()
+
+    suspend fun ahActivate(offerId: String): ActivateOfferResponse =
+        client.post(url("/ah/offers/$offerId/activate")) { auth() }.expect()
+
     suspend fun searchProducts(query: String, store: String? = null, force: Boolean = false): ProductSearchResponse =
         client.get(url("/products/search")) {
             auth(); parameter("q", query); if (store != null) parameter("store", store); if (force) parameter("force", "true")

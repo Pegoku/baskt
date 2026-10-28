@@ -49,7 +49,7 @@ import nl.baskt.ui.common.StoreBadge
 
 /** Promotions (bonus, 1+1, x%) for the items in the current basket, with one-tap switching. */
 @Composable
-fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String) -> Unit) {
+fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String) -> Unit, onAhLogin: () -> Unit = {}) {
     val deals by viewModel.deals.collectAsState()
     val loading by viewModel.loadingDeals.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
@@ -66,22 +66,30 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
             TopAppBar(
                 title = { Text("Deals") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
-                actions = { if (tab == 0) IconButton(onClick = { viewModel.findDeals(live = true) }) { Icon(Icons.Default.Refresh, contentDescription = "Search the stores again") } },
+                actions = {
+                    if (tab == 0) IconButton(onClick = { viewModel.findDeals(live = true) }) { Icon(Icons.Default.Refresh, contentDescription = "Search the stores again") }
+                    if (tab == 2) IconButton(onClick = { viewModel.loadAhOffers(force = true) }) { Icon(Icons.Default.Refresh, contentDescription = "Reload my offers") }
+                },
             )
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             nl.baskt.ui.common.OfflineBanner(viewModel)
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 3)) { Text("My items") }
-                SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 3)) { Text("All deals") }
-                SegmentedButton(selected = tab == 2, onClick = { tab = 2 }, shape = SegmentedButtonDefaults.itemShape(2, 3)) { Text("Prices") }
+                SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 4)) { Text("My items", maxLines = 1) }
+                SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 4)) { Text("All", maxLines = 1) }
+                SegmentedButton(selected = tab == 2, onClick = { tab = 2 }, shape = SegmentedButtonDefaults.itemShape(2, 4)) { Text("My Bonus", maxLines = 1) }
+                SegmentedButton(selected = tab == 3, onClick = { tab = 3 }, shape = SegmentedButtonDefaults.itemShape(3, 4)) { Text("Prices", maxLines = 1) }
+            }
+            if (tab == 2) {
+                MyBonusTab(viewModel, stores, onLogin = onAhLogin, onAdded = { notify(it) })
+                return@Column
             }
             if (tab == 1) {
                 AllDealsTab(viewModel, stores, onAdded = { notify(it) })
                 return@Column
             }
-            if (tab == 2) {
+            if (tab == 3) {
                 val data = changes
                 val format = java.text.SimpleDateFormat("d MMM HH:mm", java.util.Locale.getDefault())
                 Text(
@@ -138,6 +146,16 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
                                 if (saving != null && saving > 0) Text("save ${saving.euros()}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                             }
                             ProductRow(deal.product)
+                            val personal = deal.product.personal
+                            if (personal?.status == "ACTIVATABLE") {
+                                val offer = viewModel.ahOffers.collectAsState().value?.offers?.firstOrNull { it.id == personal.offerId }
+                                val busy = personal.offerId in viewModel.activating.collectAsState().value
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Bonus Box offer, not active yet", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f))
+                                    androidx.compose.material3.OutlinedButton(enabled = !busy && offer != null, onClick = { offer?.let { viewModel.activateOffer(it) } }) { Text(if (busy) "Activating…" else "Activate") }
+                                }
+                                LaunchedEffect(Unit) { if (viewModel.ahOffers.value == null) viewModel.loadAhOffers() }
+                            }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                                 if (deal.currentProductId != deal.product.id) {
                                     Button(onClick = { viewModel.takeDeal(deal); notify("Switched “${deal.itemText}” to ${deal.product.title}") }) { Text("Use this deal") }
