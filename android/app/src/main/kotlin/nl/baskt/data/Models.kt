@@ -345,6 +345,10 @@ data class DealCard(
     val productId: String? = null,
     val validFrom: String? = null,
     val validUntil: String? = null,
+    /** "week" = this bonus week only, "season" = runs for several weeks (Sinterklaas, Christmas, Jumbo "Seizoen"). */
+    val period: String? = null,
+    /** Highlighted by the store this week (AH Bonus folder, Jumbo "Nu in de aanbieding"). */
+    val featured: Boolean = false,
 )
 
 @Serializable

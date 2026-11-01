@@ -172,13 +172,22 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
     }
 }
 
-/** Store-wide promotions with a store filter and keyword search; each card can be added to the basket. */
+/** Which store-wide deals the All tab shows: everything, only this bonus week's, or the seasonal ones. */
+private enum class DealPeriodFilter(val label: String, val period: String?) { All("All deals", null), Week("This week", "week"), Season("Seasonal", "season") }
+
+/** "2026-12-27" as "27 Dec"; anything unparsable is shown as is. */
+private fun shortDate(value: String): String = runCatching {
+    java.time.LocalDate.parse(value.take(10)).format(java.time.format.DateTimeFormatter.ofPattern("d MMM", java.util.Locale.getDefault()))
+}.getOrDefault(value)
+
+/** Store-wide promotions with period and store filters and keyword search; each card can be added to the basket. */
 @Composable
 private fun AllDealsTab(viewModel: AppViewModel, stores: List<nl.baskt.data.StoreInfo>, onAdded: (String) -> Unit) {
     val data by viewModel.allDeals.collectAsState()
     val loading by viewModel.loadingAllDeals.collectAsState()
     var query by remember { androidx.compose.runtime.mutableStateOf("") }
     var store by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var period by remember { androidx.compose.runtime.mutableStateOf(DealPeriodFilter.All) }
     val enabled = stores.filter { it.enabled }
     LaunchedEffect(store) { viewModel.loadAllDeals(query, store) }
     Column(modifier = Modifier.fillMaxSize()) {
@@ -192,15 +201,23 @@ private fun AllDealsTab(viewModel: AppViewModel, stores: List<nl.baskt.data.Stor
             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { viewModel.loadAllDeals(query.trim(), store) }),
             trailingIcon = { IconButton(onClick = { viewModel.loadAllDeals(query.trim(), store) }) { Icon(Icons.Default.Search, contentDescription = "Search") } },
         )
+        val all = data?.results?.flatMap { result -> result.deals } ?: emptyList()
+        Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (option in DealPeriodFilter.entries) {
+                val count = if (option.period == null) all.size else all.count { it.period == option.period }
+                androidx.compose.material3.FilterChip(selected = period == option, onClick = { period = option }, label = { Text(if (data != null) "${option.label} ($count)" else option.label) })
+            }
+        }
         Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             androidx.compose.material3.FilterChip(selected = store == null, onClick = { store = null }, label = { Text("All stores") })
             for (info in enabled) androidx.compose.material3.FilterChip(selected = store == info.code, onClick = { store = info.code }, label = { Text(info.name) })
         }
         if (loading) LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
-        val cards = data?.results?.flatMap { result -> result.deals } ?: emptyList()
+        // The store's own highlights of the week first; the sort is stable so relevance order stays within each part.
+        val cards = all.filter { period.period == null || it.period == period.period }.sortedByDescending { it.featured }
         val errors = data?.results?.mapNotNull { it.error } ?: emptyList()
         if (errors.isNotEmpty()) Text(errors.joinToString("; "), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp))
-        if (!loading && data != null && cards.isEmpty()) Text("No deals found.", modifier = Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!loading && data != null && cards.isEmpty()) Text(if (period == DealPeriodFilter.Season && all.isNotEmpty()) "No seasonal deals running right now." else "No deals found.", modifier = Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (!loading && data != null && cards.isNotEmpty() && query.isNotBlank()) Text("${cards.size} deals for “$query”" + (data?.terms?.takeIf { it.size > 1 }?.let { "  (also searched: ${it.drop(1).joinToString(", ")})" } ?: ""), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
         LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(cards, key = { "${it.store}-${it.id}" }) { card ->
@@ -216,7 +233,9 @@ private fun AllDealsTab(viewModel: AppViewModel, stores: List<nl.baskt.data.Stor
                             }
                             Text(card.title, style = MaterialTheme.typography.titleSmall)
                             if (card.subtitle != null) Text(card.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            val price = listOfNotNull(card.priceCents?.euros(), card.regularPriceCents?.let { "was ${it.euros()}" }, card.validUntil?.let { "until $it" }).joinToString(" · ")
+                            val tags = listOfNotNull("In the folder".takeIf { card.featured }, "Seasonal".takeIf { card.period == "season" })
+                            if (tags.isNotEmpty()) Text(tags.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+                            val price = listOfNotNull(card.priceCents?.euros(), card.regularPriceCents?.let { "was ${it.euros()}" }, card.validUntil?.let { "until ${shortDate(it)}" }).joinToString(" · ")
                             if (price.isNotEmpty()) Text(price, style = MaterialTheme.typography.bodySmall)
                         }
                         TextButton(onClick = { viewModel.addDeal(card); onAdded("Added “${card.title}” to your basket") }) { Text("Add") }
