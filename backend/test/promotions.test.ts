@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { decodeDevalue, findDevalueObjects, matchesQuery, periodOf, realDate, termRelevance } from "@/stores/promotions";
+import { classifyDeal, dealKind, decodeDevalue, findDevalueObjects, matchesQuery, periodOf, realDate, termRelevance } from "@/stores/promotions";
 import { mapJumboPromotions } from "@/stores/jumbo";
 import { mapAhBonusGroup } from "@/stores/ah";
 
@@ -79,6 +79,34 @@ describe("deal periods", () => {
   test("AH bonus groups become seasonal group cards", () => {
     const card = mapAhBonusGroup({ id: "819728", title: "Sinterklaas accessoires", periodStart: "2026-10-19", periodEnd: "2026-12-06", productIds: [1, 2, 3], webPath: "/bonus/groep/819728", images: [{ url: "small", width: 200 }, { url: "big", width: 708 }], rawPromotionLabels: [{ defaultDescription: "Feestfavoriet" }] }, false);
     expect(card).toMatchObject({ store: "AH", id: "group-819728", subtitle: "3 products", dealText: "Feestfavoriet", imageUrl: "big", url: "https://www.ah.nl/bonus/groep/819728", productId: null, period: "season", featured: false });
+  });
+});
+
+describe("deal kinds", () => {
+  test("reads the mechanism from AH and Jumbo deal texts", () => {
+    const cases: Array<[string | null, string]> = [
+      ["13.5% volume voordeel", "volume"],
+      ["2e gratis", "free"],
+      ["1 + 1 gratis", "free"],
+      ["2+3 gratis", "free"],
+      ["2e Halve Prijs", "half"],
+      ["2 voor 5.00", "multibuy"],
+      ["3 voor 0,99", "multibuy"],
+      ["25% KORTING", "percent"],
+      ["VOOR 2.29", "price"],
+      ["100 GRAM VOOR 1.99", "price"],
+      ["1,00 korting", "price"],
+      ["Gratis ontbijtblik - Voeg toe · Bij 2 Jumbo's ontbijtgranen", "gift"],
+      ["Bonus", "other"],
+      ["Feestfavoriet", "other"],
+      [null, "other"],
+    ];
+    for (const [text, kind] of cases) expect([text, dealKind(text)]).toEqual([text, kind]);
+  });
+
+  test("flags online-only deals", () => {
+    const card = classifyDeal({ store: "JUMBO", id: "1", title: "Koffiemachine", subtitle: null, dealText: "20% korting · Alleen online", imageUrl: null, url: null, priceCents: null, regularPriceCents: null, productId: null, validFrom: null, validUntil: null });
+    expect(card).toMatchObject({ kind: "percent", onlineOnly: true });
   });
 });
 

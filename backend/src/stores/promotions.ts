@@ -19,7 +19,37 @@ export type DealCard = {
   period?: DealPeriod | null;
   /** Highlighted by the store this week (AH "Uit de Bonusfolder", Jumbo "Nu in de aanbieding"). */
   featured?: boolean;
+  /** The deal mechanism, read from the deal text (see `classifyDeal`). */
+  kind?: DealKind;
+  /** Only valid in the webshop ("Alleen online"). */
+  onlineOnly?: boolean;
 };
+
+/**
+ * volume = AH multi-pack "x% volume voordeel", free = 1+1 / 2e gratis, half = 2e halve prijs, multibuy = "2 voor 5,00",
+ * percent = "25% korting", price = "voor 1,99" or "1,00 korting", gift = a free extra, other = plain "Bonus" and the rest.
+ */
+export type DealKind = "volume" | "free" | "half" | "multibuy" | "percent" | "price" | "gift" | "other";
+
+const DEAL_KINDS: Array<[DealKind, RegExp]> = [
+  ["volume", /volume\s*voordeel/],
+  ["gift", /^gratis\b/],
+  ["half", /halve\s*prijs/],
+  ["free", /\d+\s*\+\s*\d+\s*gratis|\d+e\s*gratis/],
+  ["multibuy", /^\d+\s*voor\s/],
+  ["percent", /%\s*korting/],
+  ["price", /\bvoor\s*\d|\d\s*korting/],
+];
+
+export function dealKind(dealText: string | null | undefined): DealKind {
+  const text = (dealText ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  return DEAL_KINDS.find(([, pattern]) => pattern.test(text))?.[0] ?? "other";
+}
+
+/** Adds the deal mechanism and the online-only flag, so the app can hide kinds of deals. */
+export function classifyDeal(card: DealCard): DealCard {
+  return { ...card, kind: dealKind(card.dealText), onlineOnly: /alleen online/i.test(card.dealText ?? "") };
+}
 
 export type DealPeriod = "week" | "season";
 

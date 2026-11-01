@@ -14,7 +14,7 @@ import { suggest } from "@/matching/suggest";
 import { buildRecipeGroup, itemsForServings, looksLikeRecipe, type RecipeItem } from "@/matching/recipes";
 import { expandDealQuery, findDeals } from "@/matching/deals";
 import { autoActivate } from "@/matching/personal-deals";
-import { termRelevance } from "@/stores/promotions";
+import { classifyDeal, termRelevance } from "@/stores/promotions";
 import { interpretVoice } from "@/matching/voice";
 import { findDuplicates } from "@/matching/dedupe";
 import { planTidy, reviseTidy, toCandidate, type TidyPlan, type TidySelection } from "@/matching/tidy";
@@ -787,7 +787,7 @@ basket.get("/deals/all", async (c) => {
         const filtered = query
           ? deals.map((card) => ({ card, score: termRelevance(card, terms) })).filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score).map((entry) => entry.card)
           : deals;
-        return { store: code, deals: filtered, error: null };
+        return { store: code, deals: filtered.map(classifyDeal), error: null };
       } catch (error) {
         return { store: code, deals: [], error: error instanceof Error ? error.message : String(error) };
       }
