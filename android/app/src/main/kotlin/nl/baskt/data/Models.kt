@@ -349,6 +349,9 @@ data class DealCard(
     val period: String? = null,
     /** Highlighted by the store this week (AH Bonus folder, Jumbo "Nu in de aanbieding"). */
     val featured: Boolean = false,
+    /** volume, free, half, multibuy, percent, price, gift or other. */
+    val kind: String = "other",
+    val onlineOnly: Boolean = false,
 )
 
 @Serializable

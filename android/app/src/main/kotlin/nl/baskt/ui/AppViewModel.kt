@@ -963,6 +963,11 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         basket.assignItem(item, store)
         compare(force = true)
     }
+    fun setDealKindHidden(kind: String, hidden: Boolean) = viewModelScope.launch {
+        val current = settings.value?.hiddenDealKinds ?: emptySet()
+        container.settingsStore.saveHiddenDealKinds(if (hidden) current + kind else current - kind)
+    }
+
     fun saveLoyaltyCard(store: String, number: String?) = viewModelScope.launch { container.settingsStore.saveLoyaltyCard(store, number) }
     val lastAdded get() = basket.lastAdded
     fun consumeLastAdded() { basket.lastAdded.value = null }

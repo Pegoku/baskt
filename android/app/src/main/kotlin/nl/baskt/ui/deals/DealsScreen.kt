@@ -1,5 +1,6 @@
 package nl.baskt.ui.deals
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.LinearWavyProgressIndicator
@@ -42,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import nl.baskt.data.DealCard
 import nl.baskt.data.euros
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.ProductRow
@@ -175,6 +178,23 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
 /** Which store-wide deals the All tab shows: everything, only this bonus week's, or the seasonal ones. */
 private enum class DealPeriodFilter(val label: String, val period: String?) { All("All deals", null), Week("This week", "week"), Season("Seasonal", "season") }
 
+/** Deal kinds the user can hide, in the order the sheet lists them; "online" is matched on the online-only flag. */
+private val DEAL_KINDS = listOf(
+    "volume" to "Volume deals (multi-packs)",
+    "free" to "Free items (1+1, 2e gratis)",
+    "half" to "Second item half price",
+    "multibuy" to "Multi-buy (2 voor 5,00)",
+    "percent" to "Percentage off",
+    "price" to "Fixed price or amount off",
+    "gift" to "Free gifts",
+    "other" to "Plain Bonus and other",
+    "online" to "Online only",
+)
+
+private fun DealCard.hiddenBy(hidden: Set<String>) = kind in hidden || (onlineOnly && "online" in hidden)
+
+private fun DealCard.hasKind(key: String) = if (key == "online") onlineOnly else kind == key
+
 /** "2026-12-27" as "27 Dec"; anything unparsable is shown as is. */
 private fun shortDate(value: String): String = runCatching {
     java.time.LocalDate.parse(value.take(10)).format(java.time.format.DateTimeFormatter.ofPattern("d MMM", java.util.Locale.getDefault()))
@@ -188,6 +208,8 @@ private fun AllDealsTab(viewModel: AppViewModel, stores: List<nl.baskt.data.Stor
     var query by remember { androidx.compose.runtime.mutableStateOf("") }
     var store by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     var period by remember { androidx.compose.runtime.mutableStateOf(DealPeriodFilter.All) }
+    var showKinds by remember { androidx.compose.runtime.mutableStateOf(false) }
+    val hidden = viewModel.settings.collectAsState().value?.hiddenDealKinds ?: emptySet()
     val enabled = stores.filter { it.enabled }
     LaunchedEffect(store) { viewModel.loadAllDeals(query, store) }
     Column(modifier = Modifier.fillMaxSize()) {
@@ -201,11 +223,34 @@ private fun AllDealsTab(viewModel: AppViewModel, stores: List<nl.baskt.data.Stor
             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { viewModel.loadAllDeals(query.trim(), store) }),
             trailingIcon = { IconButton(onClick = { viewModel.loadAllDeals(query.trim(), store) }) { Icon(Icons.Default.Search, contentDescription = "Search") } },
         )
-        val all = data?.results?.flatMap { result -> result.deals } ?: emptyList()
+        val loaded = data?.results?.flatMap { result -> result.deals } ?: emptyList()
+        val all = loaded.filterNot { it.hiddenBy(hidden) }
         Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (option in DealPeriodFilter.entries) {
                 val count = if (option.period == null) all.size else all.count { it.period == option.period }
                 androidx.compose.material3.FilterChip(selected = period == option, onClick = { period = option }, label = { Text(if (data != null) "${option.label} ($count)" else option.label) })
+            }
+            androidx.compose.material3.FilterChip(
+                selected = hidden.isNotEmpty(),
+                onClick = { showKinds = true },
+                label = { Text(if (hidden.isEmpty()) "Hide types" else "${hidden.size} hidden") },
+                leadingIcon = { Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            )
+        }
+        if (showKinds) {
+            androidx.compose.material3.ModalBottomSheet(onDismissRequest = { showKinds = false }) {
+                Column(modifier = Modifier.padding(bottom = 24.dp)) {
+                    Text("Show these deals", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+                    for ((key, label) in DEAL_KINDS) {
+                        val count = loaded.count { it.hasKind(key) }
+                        androidx.compose.material3.ListItem(
+                            headlineContent = { Text(label) },
+                            supportingContent = { Text(if (data != null) "$count in this list" else "") },
+                            trailingContent = { androidx.compose.material3.Switch(checked = key !in hidden, onCheckedChange = { viewModel.setDealKindHidden(key, !it) }) },
+                            modifier = Modifier.clickable { viewModel.setDealKindHidden(key, key !in hidden) },
+                        )
+                    }
+                }
             }
         }
         Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -217,7 +262,7 @@ private fun AllDealsTab(viewModel: AppViewModel, stores: List<nl.baskt.data.Stor
         val cards = all.filter { period.period == null || it.period == period.period }.sortedByDescending { it.featured }
         val errors = data?.results?.mapNotNull { it.error } ?: emptyList()
         if (errors.isNotEmpty()) Text(errors.joinToString("; "), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp))
-        if (!loading && data != null && cards.isEmpty()) Text(if (period == DealPeriodFilter.Season && all.isNotEmpty()) "No seasonal deals running right now." else "No deals found.", modifier = Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!loading && data != null && cards.isEmpty()) Text(if (loaded.isNotEmpty() && all.isEmpty()) "All deals here are of a hidden type." else if (period == DealPeriodFilter.Season && all.isNotEmpty()) "No seasonal deals running right now." else "No deals found.", modifier = Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (!loading && data != null && cards.isNotEmpty() && query.isNotBlank()) Text("${cards.size} deals for “$query”" + (data?.terms?.takeIf { it.size > 1 }?.let { "  (also searched: ${it.drop(1).joinToString(", ")})" } ?: ""), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
         LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(cards, key = { "${it.store}-${it.id}" }) { card ->
