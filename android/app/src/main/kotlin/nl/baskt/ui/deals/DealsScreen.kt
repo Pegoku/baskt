@@ -296,6 +296,9 @@ private fun DealCardView(card: DealCard, stores: List<nl.baskt.data.StoreInfo>, 
     var open by remember { androidx.compose.runtime.mutableStateOf<DealCard?>(null) }
     var expanded by remember { androidx.compose.runtime.mutableStateOf(false) }
     val variants = card.variants.filterNot { it.hiddenBy(hidden) }
+    // Title, subtitle and deal text in the app language, plus each pack's deal text; the store's wording until it arrives.
+    val texts = listOf(card.title, card.subtitle.orEmpty(), card.dealText.orEmpty()) + variants.map { it.dealText.orEmpty() }
+    val shown = nl.baskt.ui.common.rememberTranslation(texts)?.takeIf { it.translated && it.texts.size == texts.size }?.texts ?: texts
     Card(onClick = { open = card }) {
         Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             val image = card.imageUrl ?: card.product?.imageUrl
@@ -303,10 +306,10 @@ private fun DealCardView(card: DealCard, stores: List<nl.baskt.data.StoreInfo>, 
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     StoreBadge(card.store, stores)
-                    if (card.dealText != null) Text(card.dealText, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    if (card.dealText != null) Text(shown[2], style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 }
-                Text(card.title, style = MaterialTheme.typography.titleSmall)
-                if (card.subtitle != null) Text(card.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(shown[0], style = MaterialTheme.typography.titleSmall)
+                if (card.subtitle != null) Text(shown[1], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 val tags = listOfNotNull("In the folder".takeIf { card.featured }, "Seasonal".takeIf { card.period == "season" })
                 if (tags.isNotEmpty()) Text(tags.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
                 val price = card.priceLine()
@@ -319,10 +322,10 @@ private fun DealCardView(card: DealCard, stores: List<nl.baskt.data.StoreInfo>, 
                 Text(if (expanded) "Hide pack deals" else "More pack deals of this item (${variants.size})")
             }
             if (expanded) Column(modifier = Modifier.padding(start = 12.dp, end = 4.dp, bottom = 8.dp)) {
-                for (variant in variants) {
+                for ((index, variant) in variants.withIndex()) {
                     Row(modifier = Modifier.fillMaxWidth().clickable { open = variant }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("${variant.packCount}× pack" + (variant.dealText?.let { " · $it" } ?: ""), style = MaterialTheme.typography.labelLarge)
+                            Text("${variant.packCount}× pack" + (variant.dealText?.let { " · ${shown[3 + index]}" } ?: ""), style = MaterialTheme.typography.labelLarge)
                             Text(listOfNotNull(variant.priceCents?.euros(), variant.eachCents?.let { "${it.euros()} each" }, variant.regularPriceCents?.let { "was ${it.euros()}" }).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         TextButton(onClick = { onAdd(variant) }) { Text("Add") }
@@ -342,12 +345,20 @@ private fun DealCardView(card: DealCard, stores: List<nl.baskt.data.StoreInfo>, 
 @Composable
 private fun DealSheet(card: DealCard, onAdd: () -> Unit, onDismiss: () -> Unit) {
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
+    var original by androidx.compose.runtime.saveable.rememberSaveable(card.id) { androidx.compose.runtime.mutableStateOf(false) }
+    val texts = listOf(card.title, card.subtitle.orEmpty(), card.dealText.orEmpty())
+    val translation = nl.baskt.ui.common.rememberTranslation(texts, !original)
+    val shown = translation?.takeIf { !original && it.translated && it.texts.size == texts.size }?.texts ?: texts
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (card.imageUrl != null) nl.baskt.ui.common.ZoomableImage(card.imageUrl, card.title, Modifier.fillMaxWidth().height(220.dp))
-            if (card.dealText != null) Text(card.dealText, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            Text(card.title, style = MaterialTheme.typography.headlineSmall)
-            if (card.subtitle != null) Text(card.subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (original) "Original" else if (translation?.translated == true) "Translated" else if (translation == null) "Translating…" else "Translation unavailable · showing original", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                nl.baskt.ui.common.OriginalToggle(original) { original = !original }
+            }
+            if (card.imageUrl != null) nl.baskt.ui.common.ZoomableImage(card.imageUrl, shown[0], Modifier.fillMaxWidth().height(220.dp))
+            if (card.dealText != null) Text(shown[2], style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            Text(shown[0], style = MaterialTheme.typography.headlineSmall)
+            if (card.subtitle != null) Text(shown[1], color = MaterialTheme.colorScheme.onSurfaceVariant)
             val period = listOfNotNull(card.validFrom?.let { "from ${shortDate(it)}" }, card.validUntil?.let { "until ${shortDate(it)}" }).joinToString(" ")
             val price = listOfNotNull(card.priceCents?.euros(), card.regularPriceCents?.let { "was ${it.euros()}" }).joinToString(" · ")
             if (price.isNotEmpty()) Text(price)
