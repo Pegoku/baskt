@@ -873,7 +873,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     /** Adds a store-wide deal to the basket: known products are pinned, promotion groups become an idea. */
     fun addDeal(card: DealCard) = viewModelScope.launch {
-        val product = card.productId?.let { id -> runCatching { container.api.searchProducts(card.title, card.store) }.getOrNull()?.results?.firstOrNull()?.products?.firstOrNull { it.id == id } }
+        val product = card.product ?: card.productId?.let { id -> runCatching { container.api.searchProducts(card.title, card.store) }.getOrNull()?.results?.firstOrNull()?.products?.firstOrNull { it.id == id } }
         if (product != null) basket.addFromProduct(product) else basket.add(card.title, 1)
     }
 

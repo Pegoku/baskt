@@ -352,6 +352,13 @@ data class DealCard(
     /** volume, free, half, multibuy, percent, price, gift or other. */
     val kind: String = "other",
     val onlineOnly: Boolean = false,
+    /** The catalogue product behind a single-product deal; tapping the card opens it. */
+    val product: Product? = null,
+    /** What one item comes to with the deal, and how many you have to take for that price. */
+    val eachCents: Int? = null,
+    val packCount: Int = 1,
+    /** Multi-packs of the same item, folded under it. */
+    val variants: List<DealCard> = emptyList(),
 )
 
 @Serializable

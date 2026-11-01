@@ -10,6 +10,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -266,26 +267,94 @@ private fun AllDealsTab(viewModel: AppViewModel, stores: List<nl.baskt.data.Stor
         if (!loading && data != null && cards.isNotEmpty() && query.isNotBlank()) Text("${cards.size} deals for “$query”" + (data?.terms?.takeIf { it.size > 1 }?.let { "  (also searched: ${it.drop(1).joinToString(", ")})" } ?: ""), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
         LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(cards, key = { "${it.store}-${it.id}" }) { card ->
-                Card {
-                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        if (card.imageUrl != null) {
-                            coil3.compose.AsyncImage(model = card.imageUrl, contentDescription = null, modifier = Modifier.padding(2.dp).then(Modifier.size(64.dp)))
-                        }
+                DealCardView(card, stores, hidden, onAdd = { deal -> viewModel.addDeal(deal); onAdded("Added “${deal.title}” to your basket") })
+            }
+        }
+    }
+}
+
+/**
+ * "€2,50 each · €3,19 single · until 8 Nov" for a multi-buy, "€2,73 each · €8,19 for 3" for a multi-pack:
+ * the per-item price leads whenever the deal means taking more than one.
+ */
+private fun DealCard.priceLine(): String {
+    val each = eachCents?.takeIf { packCount > 1 }
+    val price = priceCents
+    // A multi-pack lists the price of the whole pack; a multi-buy lists the single item's price.
+    val isPack = each != null && price != null && kotlin.math.abs(each * packCount - price) <= packCount
+    return listOfNotNull(
+        each?.let { "${it.euros()} each" } ?: price?.euros(),
+        if (each != null && price != null) (if (isPack) "${price.euros()} for $packCount" else "${price.euros()} single") else null,
+        regularPriceCents?.let { "was ${it.euros()}" },
+        validUntil?.let { "until ${shortDate(it)}" },
+    ).joinToString(" · ")
+}
+
+/** One store-wide deal: tap opens the product (or the deal itself), and multi-packs of the same item fold out below. */
+@Composable
+private fun DealCardView(card: DealCard, stores: List<nl.baskt.data.StoreInfo>, hidden: Set<String>, onAdd: (DealCard) -> Unit) {
+    var open by remember { androidx.compose.runtime.mutableStateOf<DealCard?>(null) }
+    var expanded by remember { androidx.compose.runtime.mutableStateOf(false) }
+    val variants = card.variants.filterNot { it.hiddenBy(hidden) }
+    Card(onClick = { open = card }) {
+        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val image = card.imageUrl ?: card.product?.imageUrl
+            if (image != null) coil3.compose.AsyncImage(model = image, contentDescription = null, modifier = Modifier.padding(2.dp).size(64.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    StoreBadge(card.store, stores)
+                    if (card.dealText != null) Text(card.dealText, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                }
+                Text(card.title, style = MaterialTheme.typography.titleSmall)
+                if (card.subtitle != null) Text(card.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val tags = listOfNotNull("In the folder".takeIf { card.featured }, "Seasonal".takeIf { card.period == "season" })
+                if (tags.isNotEmpty()) Text(tags.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+                val price = card.priceLine()
+                if (price.isNotEmpty()) Text(price, style = MaterialTheme.typography.bodySmall)
+            }
+            TextButton(onClick = { onAdd(card) }) { Text("Add") }
+        }
+        if (variants.isNotEmpty()) {
+            TextButton(onClick = { expanded = !expanded }, modifier = Modifier.padding(start = 4.dp)) {
+                Text(if (expanded) "Hide pack deals" else "More pack deals of this item (${variants.size})")
+            }
+            if (expanded) Column(modifier = Modifier.padding(start = 12.dp, end = 4.dp, bottom = 8.dp)) {
+                for (variant in variants) {
+                    Row(modifier = Modifier.fillMaxWidth().clickable { open = variant }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                StoreBadge(card.store, stores)
-                                if (card.dealText != null) Text(card.dealText, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                            }
-                            Text(card.title, style = MaterialTheme.typography.titleSmall)
-                            if (card.subtitle != null) Text(card.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            val tags = listOfNotNull("In the folder".takeIf { card.featured }, "Seasonal".takeIf { card.period == "season" })
-                            if (tags.isNotEmpty()) Text(tags.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
-                            val price = listOfNotNull(card.priceCents?.euros(), card.regularPriceCents?.let { "was ${it.euros()}" }, card.validUntil?.let { "until ${shortDate(it)}" }).joinToString(" · ")
-                            if (price.isNotEmpty()) Text(price, style = MaterialTheme.typography.bodySmall)
+                            Text("${variant.packCount}× pack" + (variant.dealText?.let { " · $it" } ?: ""), style = MaterialTheme.typography.labelLarge)
+                            Text(listOfNotNull(variant.priceCents?.euros(), variant.eachCents?.let { "${it.euros()} each" }, variant.regularPriceCents?.let { "was ${it.euros()}" }).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        TextButton(onClick = { viewModel.addDeal(card); onAdded("Added “${card.title}” to your basket") }) { Text("Add") }
+                        TextButton(onClick = { onAdd(variant) }) { Text("Add") }
                     }
                 }
+            }
+        }
+    }
+    open?.let { shown ->
+        val product = shown.product
+        if (product != null) nl.baskt.ui.common.ProductSheet(product) { open = null }
+        else DealSheet(shown, onAdd = { onAdd(shown); open = null }) { open = null }
+    }
+}
+
+/** Details of a promotion that is not a single product (Jumbo promotions, AH bonus groups). */
+@Composable
+private fun DealSheet(card: DealCard, onAdd: () -> Unit, onDismiss: () -> Unit) {
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (card.imageUrl != null) nl.baskt.ui.common.ZoomableImage(card.imageUrl, card.title, Modifier.fillMaxWidth().height(220.dp))
+            if (card.dealText != null) Text(card.dealText, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            Text(card.title, style = MaterialTheme.typography.headlineSmall)
+            if (card.subtitle != null) Text(card.subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val period = listOfNotNull(card.validFrom?.let { "from ${shortDate(it)}" }, card.validUntil?.let { "until ${shortDate(it)}" }).joinToString(" ")
+            val price = listOfNotNull(card.priceCents?.euros(), card.regularPriceCents?.let { "was ${it.euros()}" }).joinToString(" · ")
+            if (price.isNotEmpty()) Text(price)
+            if (period.isNotEmpty()) Text((if (card.period == "season") "Seasonal, " else "") + period, style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onAdd) { Text("Add to basket") }
+                if (card.url != null) androidx.compose.material3.OutlinedButton(onClick = { uri.openUri(card.url) }) { Text("Open at the store") }
             }
         }
     }
