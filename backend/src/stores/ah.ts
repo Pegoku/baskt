@@ -2,7 +2,7 @@ import { fetchWithRetry, HttpError } from "@/lib/http";
 import { eurosToCents, parseQuantity, parseUnitPriceDescription, quantityTextFromTitle, unitPriceFrom } from "@/lib/units";
 import { StoreThrottle } from "@/stores/throttle";
 import type { StoreAdapter, StoreProduct } from "@/stores/types";
-import { realDate, type DealCard } from "@/stores/promotions";
+import { matchesQuery, periodOf, realDate, type DealCard } from "@/stores/promotions";
 import { productKey } from "@/stores/types";
 
 const BASE = "https://api.ah.nl";
@@ -31,6 +31,7 @@ export type AhProduct = {
   availableOnline?: boolean | null;
   bonusStartDate?: string | null;
   bonusEndDate?: string | null;
+  bonusSegmentId?: number | null;
 };
 
 export type AhSearchResponse = {
@@ -132,10 +133,58 @@ export function mapAhDetails(body: Record<string, unknown>): { description: stri
     return { description: [...new Set(text)].join("\n\n") || null, imageUrls: (card.images ?? []).filter((image) => !!image.url).sort((a, b) => (b.width ?? 0) - (a.width ?? 0)).slice(0, 1).map((image) => image.url!) };
 }
 
+/** One promotion group of the national bonus ("Alle Oreo koek", "Sinterklaas accessoires"). */
+export type AhBonusGroup = {
+  id?: string | null;
+  title?: string | null;
+  subtitle?: string | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  productIds?: Array<number | string> | null;
+  webPath?: string | null;
+  images?: Array<{ url?: string | null; width?: number | null }> | null;
+  price?: { now?: { amount?: number | null } | null; was?: { amount?: number | null } | null } | null;
+  rawPromotionLabels?: Array<{ defaultDescription?: string | null }> | null;
+};
+
+const BONUS_GROUPS_QUERY = `query BonusGroups {
+  bonusCategories { type promotions { id title subtitle periodStart periodEnd productIds webPath images { url width } price { now { amount } was { amount } } rawPromotionLabels { defaultDescription } } }
+}`;
+
+export function mapAhBonusGroup(group: AhBonusGroup, featured: boolean): DealCard | null {
+  if (!group.id || !group.title) return null;
+  const images = (group.images ?? []).filter((image) => image.url);
+  const image = images.find((entry) => entry.width === 708) ?? images.sort((a, b) => (b.width ?? 0) - (a.width ?? 0))[0];
+  const validFrom = realDate(group.periodStart);
+  const validUntil = realDate(group.periodEnd);
+  const count = group.productIds?.length ?? 0;
+  return {
+    store: "AH",
+    id: `group-${group.id}`,
+    title: group.title.trim(),
+    subtitle: group.subtitle?.trim() || (count > 1 ? `${count} products` : null),
+    dealText: group.rawPromotionLabels?.find((label) => label.defaultDescription)?.defaultDescription ?? null,
+    imageUrl: image?.url ?? null,
+    url: group.webPath ? `https://www.ah.nl${group.webPath}` : null,
+    priceCents: group.price?.now?.amount != null ? eurosToCents(group.price.now.amount) : null,
+    regularPriceCents: group.price?.was?.amount != null ? eurosToCents(group.price.was.amount) : null,
+    productId: null,
+    validFrom,
+    validUntil,
+    period: periodOf(validFrom, validUntil),
+    featured,
+  };
+}
+
+function amsterdamToday() {
+  return new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Amsterdam" });
+}
+
 export class AhAdapter implements StoreAdapter {
   readonly info = { code: "AH", name: "Albert Heijn", color: "#00ADE6", coverage: "full" as const, logoUrl: "https://www.google.com/s2/favicons?domain=ah.nl&sz=128" };
   private token: Token | null = null;
   private readonly throttle = new StoreThrottle("AH");
+  private bonusCache: { at: number; groups: AhBonusGroup[]; spotlight: Set<string> } | null = null;
 
   health() {
     return this.throttle.health();
@@ -201,9 +250,53 @@ export class AhAdapter implements StoreAdapter {
     return (body.products ?? []).map(mapAhProduct).filter((product): product is StoreProduct => product !== null);
   }
 
-  /** Bonus products via the search endpoint's bonus filter (empty query = the whole bonus). */
+  private async post<T>(path: string, body: unknown, retryAuth = true): Promise<T> {
+    const token = await this.accessToken();
+    try {
+      const response = await fetchWithRetry(
+        `${BASE}${path}`,
+        { method: "POST", headers: { ...HEADERS, "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify(body) },
+        { onRateLimited: () => this.throttle.noteRateLimited() },
+      );
+      return (await response.json()) as T;
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 401 && retryAuth) {
+        await this.accessToken(true);
+        return this.post<T>(path, body, false);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * The week's national bonus groups (with their run dates) and the ids AH features "Uit de Bonusfolder".
+   * Two requests, cached for an hour; a failure leaves the deals list without the extra tagging.
+   */
+  private async bonusOverview() {
+    if (this.bonusCache && Date.now() - this.bonusCache.at < 60 * 60 * 1000) return this.bonusCache;
+    const [groups, spotlight] = await Promise.all([
+      this.throttle
+        .run(() => this.post<{ data?: { bonusCategories?: Array<{ type?: string | null; promotions?: AhBonusGroup[] | null }> | null } }>("/graphql", { query: BONUS_GROUPS_QUERY }))
+        .then((body) => (body.data?.bonusCategories ?? []).filter((category) => category.type === "NATIONAL").flatMap((category) => category.promotions ?? []))
+        .catch((error) => (console.warn(`[AH] bonus groups failed: ${error instanceof Error ? error.message : error}`), null)),
+      this.throttle
+        .run(() => this.get<{ bonusGroupOrProducts?: Array<{ bonusGroup?: { id?: string | number | null } | null }> }>(`/mobile-services/bonuspage/v2/section/spotlight?application=AHWEBSHOP&date=${amsterdamToday()}`))
+        .then((body) => new Set((body.bonusGroupOrProducts ?? []).map((entry) => String(entry.bonusGroup?.id ?? "")).filter(Boolean)))
+        .catch((error) => (console.warn(`[AH] bonus spotlight failed: ${error instanceof Error ? error.message : error}`), null)),
+    ]);
+    if (!groups && !spotlight) return this.bonusCache ?? { at: 0, groups: [], spotlight: new Set<string>() };
+    this.bonusCache = { at: Date.now(), groups: groups ?? [], spotlight: spotlight ?? new Set() };
+    return this.bonusCache;
+  }
+
+  /**
+   * Bonus products via the search endpoint's bonus filter (empty query = the whole bonus), tagged as this week's
+   * or seasonal. Seasonal and featured bonus groups the product pages did not reach are added as group cards.
+   */
   async promotions(query: string): Promise<DealCard[]> {
+    const overview = await this.bonusOverview();
     const cards: DealCard[] = [];
+    const segments = new Set<string>();
     const pages = query ? 2 : 4;
     for (let page = 0; page < pages; page += 1) {
       const params = new URLSearchParams({ query, sortOn: "RELEVANCE", size: "40", page: String(page), filters: "bonus=true" });
@@ -211,6 +304,10 @@ export class AhAdapter implements StoreAdapter {
       for (const raw of body.products ?? []) {
         const product = mapAhProduct(raw);
         if (!product) continue;
+        const segment = raw.bonusSegmentId != null ? String(raw.bonusSegmentId) : null;
+        if (segment) segments.add(segment);
+        const validFrom = realDate(raw.bonusStartDate);
+        const validUntil = realDate(raw.bonusEndDate);
         cards.push({
           store: "AH",
           id: product.sourceId,
@@ -222,11 +319,18 @@ export class AhAdapter implements StoreAdapter {
           priceCents: product.priceCents,
           regularPriceCents: product.regularPriceCents,
           productId: productKey("AH", product.sourceId),
-          validFrom: realDate(raw.bonusStartDate),
-          validUntil: realDate(raw.bonusEndDate),
+          validFrom,
+          validUntil,
+          period: periodOf(validFrom, validUntil),
+          featured: segment !== null && overview.spotlight.has(segment),
         });
       }
       if ((body.page?.totalPages ?? 1) <= page + 1) break;
+    }
+    for (const group of overview.groups) {
+      if (!group.id || segments.has(group.id)) continue;
+      const card = mapAhBonusGroup(group, overview.spotlight.has(group.id));
+      if (card && (card.period === "season" || card.featured) && matchesQuery(card, query)) cards.push(card);
     }
     return cards;
   }

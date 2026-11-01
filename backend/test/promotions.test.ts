@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { decodeDevalue, findDevalueObjects, matchesQuery, realDate, termRelevance } from "@/stores/promotions";
+import { decodeDevalue, findDevalueObjects, matchesQuery, periodOf, realDate, termRelevance } from "@/stores/promotions";
 import { mapJumboPromotions } from "@/stores/jumbo";
+import { mapAhBonusGroup } from "@/stores/ah";
 
 // Mimics Nuxt's devalue layout: objects/arrays reference other entries by index.
 const payload = [
@@ -50,3 +51,48 @@ describe("devalue decoding", () => {
     expect(realDate("2026-09-13")).toBe("2026-09-13");
   });
 });
+
+describe("deal periods", () => {
+  test("one bonus week is weekly, longer runs are seasonal, open-ended ones are neither", () => {
+    expect(periodOf("2026-11-02", "2026-11-08")).toBe("week");
+    expect(periodOf("2026-10-28", "2026-11-03")).toBe("week");
+    expect(periodOf("2026-10-19", "2026-12-06")).toBe("season");
+    expect(periodOf("2026-11-01", null)).toBeNull();
+  });
+
+  test("Jumbo keeps only the running week's sections and reads Week/Seizoen and the featured section", () => {
+    const promo = (id: string, title: string, group: string) => ({ id, title, tags: [], durationTexts: {}, group, start: { iso: "2026-10-28T00:01:00+01:00" }, end: { iso: "2026-11-03T23:59:59+01:00" } });
+    const page = {
+      sections: [
+        { id: "Nu in de aanbieding_20261028-20261103", title: "Nu in de aanbieding", promotions: [promo("1", "Maza", "Week")] },
+        { id: "Vlees_20261028-20261103", title: "Vlees", promotions: [promo("1", "Maza", "Week"), promo("2", "Hamburgers", "Seizoen")] },
+        { id: "Vlees_20261104-20261110", title: "Vlees", promotions: [promo("3", "Next week only", "Week")] },
+      ],
+    };
+    const html = `<script type="application/json" id="__NUXT_DATA__">${JSON.stringify(flatten(page))}</script>`;
+    const cards = mapJumboPromotions(html, new Date("2026-11-02T10:00:00Z"));
+    expect(cards.map((card) => card.id).sort()).toEqual(["1", "2"]);
+    expect(cards.find((card) => card.id === "1")).toMatchObject({ period: "week", featured: true, validFrom: "2026-10-28", validUntil: "2026-11-03" });
+    expect(cards.find((card) => card.id === "2")).toMatchObject({ period: "season", featured: false });
+  });
+
+  test("AH bonus groups become seasonal group cards", () => {
+    const card = mapAhBonusGroup({ id: "819728", title: "Sinterklaas accessoires", periodStart: "2026-10-19", periodEnd: "2026-12-06", productIds: [1, 2, 3], webPath: "/bonus/groep/819728", images: [{ url: "small", width: 200 }, { url: "big", width: 708 }], rawPromotionLabels: [{ defaultDescription: "Feestfavoriet" }] }, false);
+    expect(card).toMatchObject({ store: "AH", id: "group-819728", subtitle: "3 products", dealText: "Feestfavoriet", imageUrl: "big", url: "https://www.ah.nl/bonus/groep/819728", productId: null, period: "season", featured: false });
+  });
+});
+
+/** Turns a plain value into Nuxt's devalue layout (every object, array and string referenced by index). */
+function flatten(root: unknown) {
+  const out: unknown[] = [];
+  const visit = (value: unknown): number => {
+    const index = out.length;
+    out.push(null);
+    if (Array.isArray(value)) out[index] = value.map(visit);
+    else if (value && typeof value === "object") out[index] = Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, visit(entry)]));
+    else out[index] = value;
+    return index;
+  };
+  visit(root);
+  return out;
+}

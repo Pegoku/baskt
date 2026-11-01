@@ -2,7 +2,7 @@ import { fetchWithRetry } from "@/lib/http";
 import { normalizeUnit, parseQuantity, quantityTextFromTitle, unitPriceFrom } from "@/lib/units";
 import { StoreThrottle } from "@/stores/throttle";
 import type { StoreAdapter, StoreProduct } from "@/stores/types";
-import { extractNuxtData, findDevalueObjects, matchesQuery, type DealCard } from "@/stores/promotions";
+import { extractNuxtData, findDevalueObjects, matchesQuery, periodOf, type DealCard } from "@/stores/promotions";
 
 const BASE = "https://www.jumbo.com";
 const GRAPHQL = `${BASE}/api/graphql`;
@@ -103,17 +103,57 @@ export function mapJumboProduct(product: JumboProduct): StoreProduct | null {
   };
 }
 
-export function mapJumboPromotions(html: string): DealCard[] {
+/** Jumbo dates come as plain strings or as `{ iso }` objects; both become YYYY-MM-DD. */
+function jumboDate(value: unknown) {
+  const raw = typeof value === "string" ? value : value && typeof value === "object" && typeof (value as { iso?: unknown }).iso === "string" ? (value as { iso: string }).iso : null;
+  return raw ? raw.slice(0, 10) : null;
+}
+
+function amsterdamDay(at: Date) {
+  return at.toLocaleDateString("sv-SE", { timeZone: "Europe/Amsterdam" }).replaceAll("-", "");
+}
+
+/**
+ * The aanbiedingen page lists this week's and next week's promotions in sections whose ids end in
+ * `_YYYYMMDD-YYYYMMDD`. Returns the promotion ids of the running week and the ones it features on top
+ * ("Nu in de aanbieding"), or null when the page has no dated sections.
+ */
+function currentJumboSections(payload: unknown[], at: Date) {
+  const sections = findDevalueObjects(payload, ["title", "promotions"])
+    .map((section) => ({ section, range: String(section.id ?? "").match(/_(\d{8})-(\d{8})$/) }))
+    .filter((entry): entry is { section: Record<string, unknown>; range: RegExpMatchArray } => entry.range !== null);
+  if (!sections.length) return null;
+  const today = amsterdamDay(at);
+  const ranges = [...new Set(sections.map((entry) => `${entry.range[1]}-${entry.range[2]}`))].sort();
+  const current = ranges.find((range) => range.slice(0, 8) <= today && today <= range.slice(9)) ?? ranges.find((range) => range.slice(9) >= today) ?? ranges[0];
+  const ids = new Set<string>();
+  const featured = new Set<string>();
+  for (const { section, range } of sections) {
+    if (`${range[1]}-${range[2]}` !== current) continue;
+    for (const promotion of Array.isArray(section.promotions) ? (section.promotions as Array<{ id?: unknown }>) : []) {
+      const id = String(promotion?.id ?? "");
+      ids.add(id);
+      if (section.title === "Nu in de aanbieding") featured.add(id);
+    }
+  }
+  return { ids, featured };
+}
+
+export function mapJumboPromotions(html: string, at = new Date()): DealCard[] {
   const payload = extractNuxtData(html);
   if (!payload) return [];
+  const current = currentJumboSections(payload, at);
   const seen = new Set<string>();
   const cards: DealCard[] = [];
   for (const raw of findDevalueObjects(payload, ["durationTexts", "title", "tags"])) {
     const id = String(raw.id ?? raw.uuid ?? "");
     if (!id || seen.has(id) || raw.hidden === true) continue;
+    if (current && !current.ids.has(id)) continue;
     seen.add(id);
     const tags = Array.isArray(raw.tags) ? (raw.tags as Array<{ text?: unknown }>).map((tag) => (typeof tag?.text === "string" ? tag.text : "")).filter(Boolean) : [];
     const duration = raw.durationTexts && typeof raw.durationTexts === "object" ? (raw.durationTexts as { shortTitle?: unknown; description?: unknown }) : null;
+    const validFrom = jumboDate(raw.start);
+    const validUntil = jumboDate(raw.end);
     cards.push({
       store: "JUMBO",
       id,
@@ -125,8 +165,11 @@ export function mapJumboPromotions(html: string): DealCard[] {
       priceCents: null,
       regularPriceCents: null,
       productId: null,
-      validFrom: typeof raw.start === "string" ? raw.start : null,
-      validUntil: typeof raw.end === "string" ? raw.end : null,
+      validFrom,
+      validUntil,
+      // Jumbo labels each promotion "Week" or "Seizoen"; fall back to the dates when it does not.
+      period: raw.group === "Seizoen" ? "season" : raw.group === "Week" ? "week" : periodOf(validFrom, validUntil),
+      featured: current?.featured.has(id) ?? false,
     });
   }
   return cards.filter((card) => card.title);

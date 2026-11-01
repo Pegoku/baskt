@@ -15,7 +15,21 @@ export type DealCard = {
   productId: string | null;
   validFrom: string | null;
   validUntil: string | null;
+  /** "week" = this bonus week only, "season" = runs for several weeks (Sinterklaas, Christmas, Jumbo "Seizoen"). */
+  period?: DealPeriod | null;
+  /** Highlighted by the store this week (AH "Uit de Bonusfolder", Jumbo "Nu in de aanbieding"). */
+  featured?: boolean;
 };
+
+export type DealPeriod = "week" | "season";
+
+/** A deal that runs longer than one bonus week counts as seasonal; open-ended ones (multi-packs) are neither. */
+export function periodOf(validFrom: string | null, validUntil: string | null): DealPeriod | null {
+  if (!validFrom || !validUntil) return null;
+  const days = (Date.parse(validUntil.slice(0, 10)) - Date.parse(validFrom.slice(0, 10))) / 86_400_000;
+  if (!Number.isFinite(days)) return null;
+  return days > 7 ? "season" : "week";
+}
 
 /**
  * Decodes Nuxt 3 "devalue" payloads (`<script id="__NUXT_DATA__">`): a flat array where objects and arrays
