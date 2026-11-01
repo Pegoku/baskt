@@ -14,7 +14,7 @@ import { suggest } from "@/matching/suggest";
 import { buildRecipeGroup, itemsForServings, looksLikeRecipe, type RecipeItem } from "@/matching/recipes";
 import { expandDealQuery, findDeals } from "@/matching/deals";
 import { autoActivate } from "@/matching/personal-deals";
-import { classifyDeal, termRelevance } from "@/stores/promotions";
+import { classifyDeal, collapsePacks, termRelevance, type DealCard } from "@/stores/promotions";
 import { interpretVoice } from "@/matching/voice";
 import { findDuplicates } from "@/matching/dedupe";
 import { planTidy, reviseTidy, toCandidate, type TidyPlan, type TidySelection } from "@/matching/tidy";
@@ -24,7 +24,9 @@ import { localizeRecipe } from "@/matching/localize";
 import { parseServings, scaleLine } from "@/matching/recipes";
 import { collectProductIds, itemView } from "@/serialize";
 import { getAdapter, hasStore } from "@/stores/registry";
-import { productsByIds } from "@/stores/search";
+import { productsByIds, upsertProducts } from "@/stores/search";
+import { withPersonal } from "@/stores/personal-overlay";
+import type { StoreProduct } from "@/stores/types";
 import { genericTitle } from "@/lib/units";
 import { basketMatches as matchesTable } from "@/db/schema";
 
@@ -760,6 +762,17 @@ basket.post("/items/:id/matches/:store/search", async (c) => {
   return c.json(viewOf(c.req.param("id")));
 });
 
+/**
+ * Stores the products behind single-product deal cards (so the app can open and add them like any product)
+ * and swaps the adapter's store product for the stored row, priced for the AH account.
+ */
+function withProducts(cards: DealCard[]): DealCard[] {
+  const all = cards.flatMap((card) => [card, ...(card.variants ?? [])]);
+  const rows = new Map(withPersonal(upsertProducts(all.map((card) => card.product).filter((product): product is StoreProduct => Boolean(product)))).map((row) => [row.id, row]));
+  const attach = (card: DealCard): DealCard => ({ ...card, product: card.productId ? rows.get(card.productId) ?? null : null });
+  return cards.map((card) => ({ ...attach(card), ...(card.variants ? { variants: card.variants.map(attach) } : {}) }));
+}
+
 /** Store-wide promotions (not tied to the basket), optionally narrowed by store and keyword. */
 basket.get("/deals/all", async (c) => {
   const query = c.req.query("q")?.trim() ?? "";
@@ -787,7 +800,7 @@ basket.get("/deals/all", async (c) => {
         const filtered = query
           ? deals.map((card) => ({ card, score: termRelevance(card, terms) })).filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score).map((entry) => entry.card)
           : deals;
-        return { store: code, deals: filtered.map(classifyDeal), error: null };
+        return { store: code, deals: withProducts(collapsePacks(filtered.map(classifyDeal))), error: null };
       } catch (error) {
         return { store: code, deals: [], error: error instanceof Error ? error.message : String(error) };
       }

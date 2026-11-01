@@ -23,6 +23,13 @@ export type DealCard = {
   kind?: DealKind;
   /** Only valid in the webshop ("Alleen online"). */
   onlineOnly?: boolean;
+  /** The catalogue product behind a single-product card (adapters attach the store product, the route the stored row). */
+  product?: unknown;
+  /** What one item comes to with the deal, and how many you have to take for that price. */
+  eachCents?: number | null;
+  packCount?: number;
+  /** Multi-packs of the same item ("2-pk", "3-pack"), nested under the single item. */
+  variants?: DealCard[];
 };
 
 /**
@@ -137,4 +144,84 @@ export function termRelevance(card: DealCard, terms: string[]) {
 export function realDate(value: string | null | undefined) {
   if (!value) return null;
   return /^2[89]\d\d-|^9\d{3}-/.test(value) ? null : value;
+}
+
+const PACK_SUFFIX = /\s+(\d+)\s*-?\s*(?:pack|pk)$/i;
+
+/** "AH Scharrel kipschnitzel 2 stuks 3-pack" → { base: "AH Scharrel kipschnitzel 2 stuks", count: 3 }. */
+export function packOf(title: string): { base: string; count: number } | null {
+  const match = title.match(PACK_SUFFIX);
+  const count = match ? Number(match[1]) : 0;
+  return match && count >= 2 ? { base: title.slice(0, match.index).trim(), count } : null;
+}
+
+function titleTokens(title: string) {
+  return title.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z0-9]+/).filter(Boolean).map((token) => (token === "st" ? "stuks" : token));
+}
+
+/**
+ * Same item despite the store's abbreviations ("krokant kipfiletburger 2 st" = "krokante kipfiletburger 2 stuks"),
+ * word order ("smokey kipburger" = "kipburger smokey") and spacing ("kipsateschnitzel" = "kip sate schnitzel").
+ */
+function sameItem(a: string[], b: string[]) {
+  if (a.join("") === b.join("")) return true;
+  const sortedA = a.slice().sort();
+  const sortedB = b.slice().sort();
+  if (sortedA.join(" ") === sortedB.join(" ")) return true;
+  return a.length === b.length && a.every((token, index) => token === b[index] || (token.length > 3 && b[index].length > 3 && (token.startsWith(b[index]) || b[index].startsWith(token))));
+}
+
+const N_FOR_PRICE = /(?<!\d)(\d+)\s*voor\s*€?\s*(\d+)[.,](\d{2})(?!\d)/i;
+const N_PLUS_M_FREE = /(?<!\d)(\d+)\s*\+\s*(\d+)\s*gratis/i;
+
+/** Per-item price of a card: multi-packs divide by the pack size, multi-buys work out the bundle (mirrors the app's DealPricing). */
+export function eachPrice(card: DealCard): { eachCents: number | null; packCount: number } {
+  const price = card.priceCents;
+  if (price == null || price <= 0) return { eachCents: null, packCount: 1 };
+  const pack = packOf(card.title);
+  if (pack) return { eachCents: Math.round(price / pack.count), packCount: pack.count };
+  const text = card.dealText ?? "";
+  const listed = card.regularPriceCents != null && card.regularPriceCents > price ? card.regularPriceCents : price;
+  let bundle: [number, number] | null = null;
+  const forPrice = text.match(N_FOR_PRICE);
+  const plusFree = text.match(N_PLUS_M_FREE);
+  if (forPrice) bundle = [Number(forPrice[1]), Number(forPrice[2]) * 100 + Number(forPrice[3])];
+  else if (plusFree) bundle = [Number(plusFree[1]) + Number(plusFree[2]), Number(plusFree[1]) * listed];
+  else if (/2e\s*halve\s*prijs/i.test(text)) bundle = [2, Math.round(listed * 1.5)];
+  else if (/2e\s*gratis/i.test(text)) bundle = [2, listed];
+  if (!bundle || bundle[0] < 2) return { eachCents: price, packCount: 1 };
+  const each = Math.round(bundle[1] / bundle[0]);
+  return each < price ? { eachCents: each, packCount: bundle[0] } : { eachCents: price, packCount: 1 };
+}
+
+/**
+ * One card per item: multi-packs of an item that is on the list itself become its variants; packs whose single
+ * item is not on the list are grouped under the smallest pack. Every card gets its per-item price.
+ */
+export function collapsePacks(cards: DealCard[]): DealCard[] {
+  const priced = cards.map((card) => ({ ...card, ...eachPrice(card) }));
+  const singles = priced.filter((card) => !packOf(card.title)).map((card) => ({ card, tokens: titleTokens(card.title), variants: [] as DealCard[] }));
+  const orphans: Array<{ tokens: string[]; packs: DealCard[] }> = [];
+  for (const card of priced) {
+    const pack = packOf(card.title);
+    if (!pack) continue;
+    const tokens = titleTokens(pack.base);
+    const single = singles.find((entry) => entry.card.store === card.store && sameItem(entry.tokens, tokens));
+    if (single) {
+      single.variants.push(card);
+      continue;
+    }
+    const group = orphans.find((entry) => entry.packs[0].store === card.store && sameItem(entry.tokens, tokens));
+    if (group) group.packs.push(card);
+    else orphans.push({ tokens, packs: [card] });
+  }
+  const bySize = (a: DealCard, b: DealCard) => (a.packCount ?? 1) - (b.packCount ?? 1);
+  const mains = new Map<DealCard, DealCard>();
+  for (const single of singles) mains.set(single.card, single.variants.length ? { ...single.card, variants: single.variants.sort(bySize) } : single.card);
+  for (const group of orphans) {
+    const [main, ...rest] = group.packs.slice().sort(bySize);
+    mains.set(main, rest.length ? { ...main, variants: rest } : main);
+  }
+  // Keep the store's order: each item sits where its first card was.
+  return priced.flatMap((card) => (mains.has(card) ? [mains.get(card)!] : []));
 }

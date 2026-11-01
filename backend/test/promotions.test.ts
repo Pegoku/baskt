@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { classifyDeal, dealKind, decodeDevalue, findDevalueObjects, matchesQuery, periodOf, realDate, termRelevance } from "@/stores/promotions";
+import { classifyDeal, collapsePacks, dealKind, eachPrice, packOf, decodeDevalue, findDevalueObjects, matchesQuery, periodOf, realDate, termRelevance } from "@/stores/promotions";
 import { mapJumboPromotions } from "@/stores/jumbo";
 import { mapAhBonusGroup } from "@/stores/ah";
 
@@ -107,6 +107,33 @@ describe("deal kinds", () => {
   test("flags online-only deals", () => {
     const card = classifyDeal({ store: "JUMBO", id: "1", title: "Koffiemachine", subtitle: null, dealText: "20% korting · Alleen online", imageUrl: null, url: null, priceCents: null, regularPriceCents: null, productId: null, validFrom: null, validUntil: null });
     expect(card).toMatchObject({ kind: "percent", onlineOnly: true });
+  });
+});
+
+describe("pack variants", () => {
+  const card = (id: string, title: string, dealText: string, priceCents: number) => ({ store: "AH" as const, id, title, subtitle: null, dealText, imageUrl: null, url: null, priceCents, regularPriceCents: null, productId: `AH:${id}`, validFrom: null, validUntil: null });
+
+  test("reads pack sizes and per-item prices", () => {
+    expect(packOf("AH Scharrel kipschnitzel 2 stuks 3-pack")).toEqual({ base: "AH Scharrel kipschnitzel 2 stuks", count: 3 });
+    expect(packOf("AH Scharrel krokant kipfiletburger 2 st 2pk")).toEqual({ base: "AH Scharrel krokant kipfiletburger 2 st", count: 2 });
+    expect(packOf("AH Scharrel kipschnitzel 2 stuks")).toBeNull();
+    expect(eachPrice(card("1", "AH Scharrel kipschnitzel 2 stuks", "2 voor 5.00", 339))).toEqual({ eachCents: 250, packCount: 2 });
+    expect(eachPrice(card("2", "AH Scharrel kipschnitzel 2 stuks 3-pack", "Bonus", 839))).toEqual({ eachCents: 280, packCount: 3 });
+    expect(eachPrice(card("3", "AH Scharrel kipgehaktballetjes", "2e Halve Prijs", 399))).toEqual({ eachCents: 300, packCount: 2 });
+    expect(eachPrice(card("4", "AH Scharrel kipburger 2 stuks", "2e gratis", 299))).toEqual({ eachCents: 150, packCount: 2 });
+    expect(eachPrice(card("5", "AH Courgette", "25% korting", 89))).toEqual({ eachCents: 89, packCount: 1 });
+  });
+
+  test("nests multi-packs under the single item, or under the smallest pack when the single is missing", () => {
+    const cards = collapsePacks([
+      card("1", "AH Scharrel krokante kipfiletburger 2 stuks", "2 voor 5.00", 349),
+      card("2", "AH Scharrel krokant kipfiletburger 2 st 3pk", "Bonus", 849),
+      card("3", "AH Scharrel kipfilet 4-pack", "10% volume voordeel", 1760),
+      card("4", "AH Scharrel smokey kipburger 2 stuks 2-pack", "Bonus", 299),
+      card("5", "AH Scharrel kipfilet 2-pack", "3% volume voordeel", 716),
+      card("6", "AH Scharrel kipburger smokey 2 stuks", "2e gratis", 299),
+    ]);
+    expect(cards.map((entry) => [entry.id, (entry.variants ?? []).map((variant) => variant.id)])).toEqual([["1", ["2"]], ["5", ["3"]], ["6", ["4"]]]);
   });
 });
 

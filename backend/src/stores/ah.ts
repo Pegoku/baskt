@@ -323,6 +323,7 @@ export class AhAdapter implements StoreAdapter {
           validUntil,
           period: periodOf(validFrom, validUntil),
           featured: segment !== null && overview.spotlight.has(segment),
+          product,
         });
       }
       if ((body.page?.totalPages ?? 1) <= page + 1) break;
