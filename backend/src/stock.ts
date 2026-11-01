@@ -76,12 +76,84 @@ export function removeStock(id: string) {
   );
 }
 
-/** True when a shopping-list text (e.g. "flour 500 g") is covered by something in stock (e.g. "flour"). */
+/** Recipe measures and fillers ("1 chorro de aceite", "2 cloves of garlic") that say nothing about what the item is. */
+const MEASURE_WORDS = new Set([
+  // es
+  "taza", "tazas", "cucharada", "cucharadas", "cucharadita", "cucharaditas", "chorro", "chorrito", "pizca",
+  "pizcas", "pellizco", "unidad", "unidades", "loncha", "lonchas", "rebanada", "rebanadas", "gramo", "gramos",
+  "litro", "litros", "diente", "dientes", "punado", "ramita", "ramitas", "vaso", "vasos", "lata", "latas",
+  "sobre", "sobres", "trozo", "trozos", "gusto", "de", "del", "al", "la", "el", "un", "una",
+  // en
+  "cup", "cups", "tbsp", "tsp", "tablespoon", "tablespoons", "teaspoon", "teaspoons", "pinch", "dash", "splash",
+  "clove", "cloves", "slice", "slices", "piece", "pieces", "gram", "grams", "handful", "can", "of", "a",
+  // nl
+  "eetlepel", "eetlepels", "theelepel", "theelepels", "snufje", "scheutje", "teen", "teentjes", "plak", "plakken",
+  "stuk", "stuks", "blik", "handje", "van",
+  // units
+  "g", "gr", "kg", "ml", "cl", "dl", "l", "tl",
+]);
+
+/** Words after which a stock line names what the product comes in or with ("tonijn in olijfolie", "zout met jodium"). */
+const STOCK_HEAD_BREAKS = new Set(["in", "met", "en", "con", "with", "op", "a"]);
+
+function withoutMeasures(text: string) {
+  const kept = tokenize(text).filter((token) => !MEASURE_WORDS.has(token));
+  return kept.length ? kept.join(" ") : text;
+}
+
+/** The part of a stock line that says what it is: "Tonijn in olijfolie" is tuna, not oil. */
+function stockHead(text: string) {
+  const head: string[] = [];
+  for (const token of tokenize(text)) {
+    if (head.length && STOCK_HEAD_BREAKS.has(token)) break;
+    head.push(token);
+  }
+  return head;
+}
+
+/** True when a shopping-list text (e.g. "flour 500 g", "1 pizca de sal") is covered by something in stock. */
 export function inStock(
   text: string,
   rows: StockRow[] = listStock(),
 ): StockRow | null {
-  return matchByText(text, rows);
+  const heads = rows.map((row) => ({ text: stockHead(row.text).join(" "), row }));
+  return matchByText(withoutMeasures(text), heads)?.row ?? null;
+}
+
+/**
+ * Stock match for a parsed item, using its canonical name and the per-store search terms, so a Spanish
+ * recipe line ("sal") finds Dutch stock ("Keukenzout met jodium"). A search term also matches the end of
+ * a compound stock word (olie → olijfolie), but only in the stock line's head, so "Tonijn in olijfolie"
+ * does not count as oil.
+ */
+export function inStockParsed(
+  parsed: { canonicalName: string; queries?: Record<string, string>; fallbackQuery?: string | null },
+  rows: StockRow[] = listStock(),
+): StockRow | null {
+  const byName = inStock(parsed.canonicalName, rows);
+  if (byName) return byName;
+  const terms = new Set(
+    [...Object.values(parsed.queries ?? {}), parsed.fallbackQuery ?? ""]
+      .map((term) => tokenize(withoutMeasures(term)))
+      .filter((tokens) => tokens.length)
+      .map((tokens) => tokens.join(" ")),
+  );
+  for (const row of rows) {
+    const head = stockHead(row.text);
+    for (const term of terms) {
+      const covered = term
+        .split(" ")
+        .every((token) =>
+          head.some(
+            (word) =>
+              word === token ||
+              (token.length >= 3 && word.length > token.length && word.endsWith(token)),
+          ),
+        );
+      if (covered) return row;
+    }
+  }
+  return null;
 }
 
 /** Finds the row whose text means the same thing as `text` (either one covering the other's words). */

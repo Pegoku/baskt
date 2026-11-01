@@ -639,6 +639,17 @@ describe("api", () => {
     expect(inStock("salt 1 pinch")?.text).toBe("salt");
     expect(inStock("sea salt flakes")?.text).toBe("salt");
     expect(inStock("sugar 100 g")).toBeNull();
+    expect(inStock("1 pinch of salt")?.text).toBe("salt");
+    const { inStockParsed } = await import("@/stock");
+    const rows = [
+      { id: "1", text: "Tonijn in olijfolie", canonical: "", quantityText: null, productId: null, imageUrl: null, barcode: null, addedAt: 0, updatedAt: 0 },
+      { id: "2", text: "Keukenzout met jodium", canonical: "", quantityText: null, productId: null, imageUrl: null, barcode: null, addedAt: 0, updatedAt: 0 },
+      { id: "3", text: "aceite de oliva", canonical: "", quantityText: null, productId: null, imageUrl: null, barcode: null, addedAt: 0, updatedAt: 0 },
+    ];
+    expect(inStock("1 chorro de Aceite", rows)?.text).toBe("aceite de oliva");
+    expect(inStockParsed({ canonicalName: "sal", queries: { AH: "zout" }, fallbackQuery: "zout" }, rows)?.text).toBe("Keukenzout met jodium");
+    expect(inStockParsed({ canonicalName: "olie", queries: { AH: "olie" }, fallbackQuery: "olie" }, rows.slice(0, 2))).toBeNull();
+    expect(inStockParsed({ canonicalName: "zoutjes", queries: { AH: "zoutjes" }, fallbackQuery: null }, rows)).toBeNull();
     const scanned = (await (await api("/stock", { method: "POST", body: JSON.stringify({ text: "Verse Halfvolle Melk", productId: "JUMBO:a", imageUrl: "https://img/x.png", barcode: "8712800147008" }) })).json()) as any;
     expect(scanned.productId).toBe("JUMBO:a");
     const again = (await (await api("/stock", { method: "POST", body: JSON.stringify({ text: "melk", barcode: "8712800147008" }) })).json()) as any;

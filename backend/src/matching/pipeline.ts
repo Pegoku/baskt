@@ -10,7 +10,8 @@ import {
   type ParsedIdea,
   type ProductRow,
 } from "@/db/schema";
-import { enabledStoreCodes } from "@/db/settings";
+import { enabledStoreCodes, skipInStock } from "@/db/settings";
+import { inStockParsed } from "@/stock";
 import { normalizeText } from "@/lib/text";
 import {
   clearRejections,
@@ -201,6 +202,12 @@ export async function processItem(
       parsed.sizeHint = { amount: product.unitAmount, unit: product.unit };
   }
   updateItem(itemId, { status: "MATCHING", parsedJson: parsed });
+  // A recipe ingredient whose wording missed the stock check ("sal" vs "Keukenzout") gets a second look on
+  // its first parse, with the parsed name and search terms. Later reparses leave a user's untick alone.
+  if (item.parentId && !item.parsedJson && !getItem(itemId)?.checked && skipInStock()) {
+    const have = inStockParsed(parsed);
+    if (have) updateItem(itemId, { checked: true, skippedReason: `in stock: ${have.text}` });
+  }
   await Promise.all(
     stores.map(async (store) => {
       const previous = existing.get(store);
