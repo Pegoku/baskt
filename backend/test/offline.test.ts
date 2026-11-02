@@ -63,6 +63,14 @@ test("expired entries refresh, serve bounded stale data on errors and never cach
   expect(calls).toBe(2);
 });
 
+test("null answers are cached like any other value", async () => {
+  let calls = 0;
+  const lookup = () => cachedUpstream("barcode:none", 1000, async () => { calls++; return null; });
+  expect(await lookup()).toBeNull();
+  expect(await lookup()).toBeNull();
+  expect(calls).toBe(1);
+});
+
 test("explicit offline folders preserve recipe instructions and stable child ids when scaling and copying", async () => {
   const { setAdaptersForTests } = await import("@/stores/registry");
   setAdaptersForTests([]);

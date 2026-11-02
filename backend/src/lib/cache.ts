@@ -1,4 +1,4 @@
-import { eq, lt } from "drizzle-orm";
+import { eq, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { upstreamCache } from "@/db/schema";
 
@@ -22,7 +22,8 @@ export async function cachedUpstream<T>(key: string, ttlMs: number, load: () => 
       const value = await load();
       if (options.cacheable?.(value) !== false) {
         const expiresAt = Date.now() + ttlMs;
-        const row = { key, value, expiresAt, staleUntil: expiresAt + (options.staleMs ?? ttlMs) };
+        // Drizzle binds a bare null as SQL NULL, so write the JSON text directly to cache "not found" answers too.
+        const row = { key, value: sql`${JSON.stringify(value ?? null)}`, expiresAt, staleUntil: expiresAt + (options.staleMs ?? ttlMs) };
         database.delete(upstreamCache).where(lt(upstreamCache.staleUntil, Date.now())).run();
         database.insert(upstreamCache).values(row).onConflictDoUpdate({ target: upstreamCache.key, set: row }).run();
       }
