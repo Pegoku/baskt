@@ -312,7 +312,16 @@ data class SimilarFeedbackResponse(val referenceProductId: String, val productId
 data class BarcodeResult(val store: String, val product: Product? = null, val error: String? = null)
 
 @Serializable
-data class BarcodeResponse(val gtin: String, val results: List<BarcodeResult> = emptyList())
+data class BarcodeResponse(
+    val gtin: String,
+    val results: List<BarcodeResult> = emptyList(),
+    /** Only when no store knows the code: what Open Food Facts calls it, and the closest store products by name and size. */
+    val label: BarcodeLabel? = null,
+    val suggestions: List<Product> = emptyList(),
+)
+
+@Serializable
+data class BarcodeLabel(val name: String, val brand: String? = null, val quantityText: String? = null, val imageUrl: String? = null)
 
 @Serializable
 data class Deal(

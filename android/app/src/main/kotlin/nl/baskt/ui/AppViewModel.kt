@@ -651,6 +651,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         val offline: Boolean = false,
         /** Name and picture found by the phone itself, shown while (or when) no store product is available. */
         val label: nl.baskt.data.ScannedLabel? = null,
+        /** No store knows the code: the closest store products to its Open Food Facts name, best first. */
+        val suggestions: List<Product> = emptyList(),
         val at: Long = System.currentTimeMillis(),
     ) {
         /** Can go on the list: either a known product or a code the server will resolve later. */
@@ -685,7 +687,13 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
             val result = basket.barcode(gtin)
             val products = result?.results?.mapNotNull { it.product } ?: cached
             val offline = products.isEmpty() && !basket.online.value
-            scans.update { list -> list.map { if (it.gtin == gtin) it.copy(products = products, loading = false, offline = offline) else it } }
+            val suggestions = if (products.isEmpty()) result?.suggestions.orEmpty() else emptyList()
+            // The server names unknown codes from Open Food Facts too, so the phone does not have to ask again.
+            val serverLabel = result?.label?.let { label ->
+                val brand = label.brand?.takeUnless { label.name.contains(it, ignoreCase = true) }
+                nl.baskt.data.ScannedLabel(listOfNotNull(brand, label.name).joinToString(" "), label.quantityText, label.imageUrl, "openfoodfacts")
+            }
+            scans.update { list -> list.map { if (it.gtin == gtin) it.copy(products = products, loading = false, offline = offline, suggestions = suggestions, label = it.label ?: serverLabel) else it } }
             // No store knows the code (or the server is unreachable): ask Open Food Facts from the phone.
             if (products.isEmpty() && scans.value.firstOrNull { it.gtin == gtin }?.label == null) {
                 val label = runCatching { basket.resolveLabel(gtin) }.getOrNull()
@@ -703,6 +711,11 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun retryScan(gtin: String) {
         scans.update { list -> list.map { if (it.gtin == gtin) it.copy(loading = true) else it } }
         lookupScan(gtin)
+    }
+    /** "This one": the suggestion becomes the scan's product, and the code is remembered as that product. */
+    fun pickSuggestion(gtin: String, product: Product) {
+        scans.update { list -> list.map { if (it.gtin == gtin) it.copy(products = listOf(product), suggestions = emptyList()) else it } }
+        viewModelScope.launch { basket.linkBarcode(gtin, product) }
     }
     fun dismissScan(gtin: String) {
         scanJobs.remove(gtin)?.cancel()

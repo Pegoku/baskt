@@ -862,6 +862,12 @@ class BasketRepository(
     /** What an earlier scan of this code returned, without touching the network. */
     fun cachedBarcode(gtin: String): BarcodeResponse? = offline?.load<BarcodeResponse>("barcode-$gtin")
 
+    /** The user picked which product an unknown code is: remembered on the phone at once, and on the server for next time. */
+    suspend fun linkBarcode(gtin: String, product: Product) {
+        offline?.save("barcode-$gtin", BarcodeResponse(gtin, listOf(BarcodeResult(product.store, product))))
+        guard { api.linkBarcode(gtin, product.id) }
+    }
+
     /** Scanned without a connection: the code sits on the list and becomes the product once the server resolves it. */
     suspend fun addFromBarcode(gtin: String, parentId: String? = null) {
         // A name beats a number on the list, so the item carries whatever the phone could find out about the code.

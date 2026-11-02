@@ -166,6 +166,19 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                                                     Button(onClick = { viewModel.applyScans(listOf(scan.gtin), "list") }, modifier = Modifier.fillMaxWidth()) { Text("Add barcode to list") }
                                                 }
                                             }
+                                            product == null && scan.suggestions.isNotEmpty() -> {
+                                                ScanLabel(scan.label)
+                                                Text("No store knows this code", style = MaterialTheme.typography.titleMedium)
+                                                Text("Closest matches by name and size. Pick yours and the next scan finds it straight away.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                scan.suggestions.forEach { suggestion ->
+                                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                        StoreBadge(suggestion.store, stores)
+                                                        ProductRow(suggestion, trailing = {
+                                                            FilledTonalButton(onClick = { viewModel.pickSuggestion(scan.gtin, suggestion) }) { Text("This one") }
+                                                        })
+                                                    }
+                                                }
+                                            }
                                             product == null -> {
                                                 ScanLabel(scan.label)
                                                 Text(if (scan.label != null) "No store sells it under this code" else "Product not found", style = MaterialTheme.typography.titleMedium)

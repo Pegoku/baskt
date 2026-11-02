@@ -478,6 +478,10 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
 
     suspend fun barcode(gtin: String): BarcodeResponse = client.get(url("/products/barcode/$gtin")) { auth() }.expect()
 
+    suspend fun linkBarcode(gtin: String, productId: String) {
+        client.post(url("/products/barcode/$gtin/link")) { auth(); contentType(ContentType.Application.Json); setBody(ProductIdRequest(productId)) }.expect<Unit>()
+    }
+
     suspend fun addFromProduct(productId: String, basketId: String, parentId: String? = null, quantity: Int = 1): BasketItem =
         client.post(url("/basket/items/from-product")) {
             auth(); contentType(ContentType.Application.Json)
@@ -515,6 +519,7 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
 @Serializable private data class BasketIdRequest(val basketId: String)
 @Serializable private data class ReviseRequest(val plan: TidyPlan, val selected: TidySelection, val comment: String)
 @Serializable private data class QueryRequest(val query: String)
+@Serializable private data class ProductIdRequest(val productId: String)
 @Serializable private data class ItemsResponse(val items: List<BasketItem>)
 @Serializable private data class DeletedResponse(val deleted: Int)
 @Serializable private data class UpdatedResponse(val updated: Int)
