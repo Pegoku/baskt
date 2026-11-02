@@ -275,6 +275,18 @@ export const similarFeedback = sqliteTable(
 );
 export type SimilarFeedbackRow = typeof similarFeedback.$inferSelect;
 
+/** Barcodes the user tied to a store product by hand, for codes the store's own lookup does not know. */
+export const barcodeLinks = sqliteTable(
+  "barcode_links",
+  {
+    gtin: text("gtin").notNull(),
+    store: text("store").notNull(),
+    productId: text("product_id").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.gtin, table.store] })],
+);
+
 export const aiCache = sqliteTable(
   "ai_cache",
   {

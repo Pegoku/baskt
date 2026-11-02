@@ -12,7 +12,8 @@ import { addStock, listStock, removeStock } from "@/stock";
 import { deleteChoice, listChoices } from "@/matching/memory";
 import { deleteName, listNames } from "@/matching/naming";
 import { allStores, hasStore, storeHealth } from "@/stores/registry";
-import { lookupBarcode, searchStore } from "@/stores/search";
+import { linkBarcode, openFoodFactsLabel, suggestForLabel } from "@/stores/barcode-fallback";
+import { lookupBarcode, productsByIds, searchStore } from "@/stores/search";
 import { withPersonal } from "@/stores/personal-overlay";
 import { priceHistoryFor, recentPriceChanges, runPriceScan, scanStatus } from "@/prices";
 
@@ -83,8 +84,24 @@ meta.get("/products/search", async (c) => {
 meta.get("/products/barcode/:gtin", async (c) => {
   const gtin = c.req.param("gtin").replace(/\D/g, "");
   if (gtin.length < 8 || gtin.length > 14) return c.json({ error: { code: "BAD_REQUEST", message: "gtin must be 8-14 digits" } }, 400);
-  const results = await lookupBarcode(enabledStoreCodes(), gtin);
-  return c.json({ gtin, results });
+  const stores = enabledStoreCodes();
+  const results = await lookupBarcode(stores, gtin);
+  if (results.some((result) => result.product)) return c.json({ gtin, results });
+  // No store knows the code: name it from Open Food Facts and offer the closest products by name and size.
+  const label = await openFoodFactsLabel(gtin).catch(() => null);
+  const suggestions = label ? await suggestForLabel(stores, label) : [];
+  return c.json({ gtin, results, label, suggestions });
+});
+
+/** The user confirmed which product an unknown code is; later scans resolve to it at that store. */
+meta.post("/products/barcode/:gtin/link", async (c) => {
+  const gtin = c.req.param("gtin").replace(/\D/g, "");
+  if (gtin.length < 8 || gtin.length > 14) return c.json({ error: { code: "BAD_REQUEST", message: "gtin must be 8-14 digits" } }, 400);
+  const body = (await c.req.json().catch(() => ({}))) as { productId?: string };
+  const product = body.productId ? productsByIds([body.productId])[0] : undefined;
+  if (!product) return c.json({ error: { code: "NOT_FOUND", message: "unknown product" } }, 404);
+  linkBarcode(gtin, product);
+  return c.json({ gtin, product });
 });
 
 meta.post("/transcribe", async (c) => {

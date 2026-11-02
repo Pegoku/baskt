@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { resetDbForTests } from "@/db";
 import { createApp } from "@/app";
+import { labelQuery, parseOpenFoodFacts, setLabelSourceForTests, sizeHint } from "@/stores/barcode-fallback";
 import { setAdaptersForTests } from "@/stores/registry";
 import { StoreThrottle } from "@/stores/throttle";
 import type { StoreAdapter, StoreProduct } from "@/stores/types";
@@ -76,6 +77,7 @@ async function waitForMatched(id: string) {
 beforeAll(() => {
   resetDbForTests(":memory:");
   setAdaptersForTests([ah, jumbo]);
+  setLabelSourceForTests(async (gtin) => (gtin === "8710400165422" ? { name: "Halfvolle melk", brand: "Albert Heijn", quantityText: "1000 ml", imageUrl: null } : null));
 });
 
 describe("api", () => {
@@ -292,6 +294,32 @@ describe("api", () => {
     expect(after.matches.find((m: any) => m.store === "JUMBO").chosen.id).toBe("JUMBO:a");
     expect(after.matches.find((m: any) => m.store === "AH").options.length).toBeGreaterThan(0);
     await api(`/basket/items/${item.id}`, { method: "DELETE" });
+  });
+
+  test("unknown codes suggest the closest products from Open Food Facts' name, and a pick sticks", async () => {
+    const lookup = (await (await api("/products/barcode/8710400165422")).json()) as any;
+    expect(lookup.results.every((r: any) => r.product === null)).toBe(true);
+    expect(lookup.label.name).toBe("Halfvolle melk");
+    // The store's own brand leads at that store, and every store gets a say before runners-up.
+    expect(lookup.suggestions[0].id).toBe("AH:1");
+    expect(lookup.suggestions.slice(0, 2).map((p: any) => p.store).sort()).toEqual(["AH", "JUMBO"]);
+    expect((await api("/products/barcode/8710400165422/link", { method: "POST", body: JSON.stringify({ productId: "nope" }) })).status).toBe(404);
+    expect((await api("/products/barcode/8710400165422/link", { method: "POST", body: JSON.stringify({ productId: "AH:1" }) })).status).toBe(200);
+    const again = (await (await api("/products/barcode/08710400165422")).json()) as any;
+    expect(again.results.find((r: any) => r.store === "AH").product.id).toBe("AH:1");
+    expect(again.suggestions).toBeUndefined();
+  });
+
+  test("Open Food Facts labels become store queries and size hints", () => {
+    expect(parseOpenFoodFacts({ product: { product_name: "Olijfolie", brands: "Albert Heijn, AH", quantity: "1000 gram" } })).toEqual({ name: "Olijfolie", brand: "Albert Heijn", quantityText: "1000 gram", imageUrl: null });
+    expect(parseOpenFoodFacts({ status: 0 })).toBeNull();
+    const label = { name: "Olijfolie", brand: "Albert Heijn", quantityText: "1000 gram", imageUrl: null };
+    expect(labelQuery(label, "AH")).toBe("AH Olijfolie");
+    expect(labelQuery(label, "JUMBO")).toBe("Olijfolie");
+    expect(labelQuery({ ...label, brand: "Bertolli" }, "JUMBO")).toBe("Bertolli Olijfolie");
+    expect(sizeHint("1000 gram")).toEqual({ amount: 1, unit: "kg" });
+    expect(sizeHint("50 cl")).toEqual({ amount: 0.5, unit: "l" });
+    expect(sizeHint("6 x 330 ml")).toBeNull();
   });
 
   test("own recipes: create, list, update, folder from it, delete", async () => {

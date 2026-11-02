@@ -1,4 +1,5 @@
 import { cachedUpstream } from "@/lib/cache";
+import { linkedProduct } from "@/stores/barcode-fallback";
 import { and, eq, inArray } from "drizzle-orm";
 import { db, now } from "@/db";
 import { priceHistory, products, searchCache, type ProductRow } from "@/db/schema";
@@ -96,11 +97,14 @@ export async function searchStore(store: StoreCode, query: string, options: { fo
   }
 }
 
-/** Barcode lookup across stores: native GTIN endpoints where available, otherwise a search with the code. */
+/** Barcode lookup across stores: links the user made, native GTIN endpoints where available, otherwise a search with the code. */
 export async function lookupBarcode(stores: StoreCode[], gtin: string): Promise<Array<{ store: StoreCode; product: ProductRow | null; error: string | null }>> {
   return Promise.all(
     stores.map(async (store) => {
       try {
+        // A code the user tied to a product by hand answers first: the store's own lookup did not know it.
+        const linked = linkedProduct(gtin, store);
+        if (linked) return { store, product: linked, error: null };
         const adapter = getAdapter(store);
         const id = await cachedUpstream(`barcode:v2:${store}:${gtin}`, 6 * 60 * 60 * 1000, async () => {
           const found = adapter.byBarcode ? await adapter.byBarcode(gtin) : (await adapter.search(gtin, 3))[0] ?? null;
