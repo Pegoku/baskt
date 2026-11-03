@@ -482,6 +482,11 @@ describe("api", () => {
     expect(scan.item.checked).toBe(true);
     expect(scan.line.itemId).toBe(id);
     expect(scan.line.barcode).toBe("8710400099999");
+    // The tick teaches the till-code map that this product carries a pack barcode.
+    const map = (await (await api("/purchases/barcode-kinds?store=AH")).json()) as any;
+    const learnt = map.kinds.find((entry: any) => entry.productId === scan.product.id);
+    expect(learnt.kind).toBe("pack");
+    expect(learnt.codes).toEqual(["8710400099999"]);
     // Scanned again: the item is already bought, so this one is an extra.
     const again = (await (await api("/purchases/scan-item", { method: "POST", body: JSON.stringify({ store: "AH", barcode: "8710400099999" }) })).json()) as any;
     expect(again.matchedItemId).toBeNull();
@@ -514,6 +519,18 @@ describe("api", () => {
     expect(scanned.line.totalPriceCents).toBe(699);
     expect((await api(`/purchases/${scanned.purchase.id}`, { method: "DELETE" })).status).toBe(204);
     for (const row of ((await (await api("/stock")).json()) as any).items) expect((await api(`/stock/${row.id}`, { method: "DELETE" })).status).toBe(204);
+  });
+
+  test("the phone can report weighed labels and items keyed in at the till", async () => {
+    const label = await api("/purchases/barcode-kinds", { method: "POST", body: JSON.stringify({ store: "AH", itemText: "Bananen", code: "2112345012345" }) });
+    expect(label.status).toBe(201);
+    expect(((await label.json()) as any).entry.kind).toBe("label");
+    const none = (await (await api("/purchases/barcode-kinds", { method: "POST", body: JSON.stringify({ store: "AH", itemText: "Croissant", kind: "none" }) })).json()) as any;
+    expect(none.entry.kind).toBe("none");
+    const bad = await api("/purchases/barcode-kinds", { method: "POST", body: JSON.stringify({ store: "AH", itemText: "Anything" }) });
+    expect(bad.status).toBe(400);
+    const map = (await (await api("/purchases/barcode-kinds?store=AH")).json()) as any;
+    expect(map.kinds.find((entry: any) => entry.itemText === "Bananen").kind).toBe("label");
   });
 
   test("deals lists promoted candidates of the same kind", async () => {

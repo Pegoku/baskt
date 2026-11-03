@@ -10,6 +10,7 @@ import { lookupBarcode, productsByIds } from "@/stores/search";
 import { enabledStoreCodes } from "@/db/settings";
 import { forgetScan, purchaseHistory, recordBought } from "@/orders";
 import { addStock } from "@/stock";
+import { barcodeKinds, recordBarcodeKind, type BarcodeKind } from "@/barcode-kinds";
 
 export const purchasesRoute = new Hono();
 
@@ -90,6 +91,7 @@ purchasesRoute.post("/scan-item", async (c) => {
   const listItem = product ? listItemFor(store, product, body.basketId ?? null) : null;
   if (listItem) {
     const ticked = markItemBought(listItem, store, product!.id, at ?? Date.now(), scanned);
+    recordBarcodeKind({ store, productId: product!.id, itemText: ticked.item?.text ?? null, code: body.barcode ?? null, at });
     return c.json({ ...ticked, product, matchedItemId: listItem }, 201);
   }
 
@@ -120,6 +122,22 @@ purchasesRoute.post("/unscan", async (c) => {
   if (!code) return c.json({ error: { code: "BAD_REQUEST", message: "not a product barcode" } }, 400);
   const at = typeof body.purchasedAt === "number" && body.purchasedAt > 0 ? body.purchasedAt : Date.now();
   return c.json({ removed: forgetScan(body.store, code.gtin, at) });
+});
+
+/**
+ * The till-code map for a store: which products carry a pack barcode, which a weighed label, and which nothing.
+ * Scans that tick a list item feed it on their own; the phone reports the rest (a label linked to an item by hand,
+ * an item that had to be keyed in at the till).
+ */
+purchasesRoute.get("/barcode-kinds", (c) => c.json({ kinds: barcodeKinds(c.req.query("store") || undefined) }));
+
+purchasesRoute.post("/barcode-kinds", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { store?: string; productId?: string | null; itemText?: string | null; code?: string | null; kind?: string | null; at?: number | null };
+  if (!body.store || !hasStore(body.store)) return c.json({ error: { code: "BAD_REQUEST", message: "store is required" } }, 400);
+  const kind = body.kind === "pack" || body.kind === "label" || body.kind === "none" ? (body.kind as BarcodeKind) : null;
+  const entry = recordBarcodeKind({ store: body.store, productId: body.productId, itemText: body.itemText, code: body.code, kind, at: typeof body.at === "number" && body.at > 0 ? body.at : undefined });
+  if (!entry) return c.json({ error: { code: "BAD_REQUEST", message: "a product or item text and a code or kind are required" } }, 400);
+  return c.json({ entry }, 201);
 });
 
 /** The open list item a scanned product stands for: the very product first, then a list entry that describes it. */
