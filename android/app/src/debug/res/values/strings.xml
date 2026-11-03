@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug build (nl.baskt.debug) labels, so it is told apart from the release installed next to it. -->
+<resources>
+    <string name="app_name">baskt (debug)</string>
+    <string name="widget_basket_label">Basket (debug)</string>
+    <string name="widget_quick_label">Quick add (debug)</string>
+    <string name="share_receipt_label">Add receipt to baskt (debug)</string>
+</resources>

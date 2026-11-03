@@ -24,12 +24,18 @@ android {
     }
 
     buildTypes {
+        // Suffixed so a locally built debug APK installs alongside the CI release instead of replacing it, with its
+        // own data. The launcher and widget names are overridden in src/debug/res.
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
-        // An optimized daily-use APK that can update a locally installed debug build in place.
+        // An optimized daily-use APK, signed with the development key so it installs over the CI release in place.
         // Production release signing stays independent of the development key.
         create("optimized") {
             initWith(getByName("release"))
