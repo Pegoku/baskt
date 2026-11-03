@@ -167,7 +167,32 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
         }
     }
 
-    val openScanner = nl.baskt.ui.common.rememberBarcodeScannerWithFormat { raw, format -> viewModel.scanItem(store, raw, format.takeIf { relay }) }
+    // AH self-scan (experimental): while a trip runs, every scan goes to the AH basket first, then to the list.
+    val selfScanOn = store == "AH" && settings?.selfScan == true
+    val selfScan by viewModel.selfScan.collectAsState()
+    val tickedByBarcode by viewModel.tickedByBarcode.collectAsState()
+    var showSelfScanBasket by remember { mutableStateOf(false) }
+    val openScanner = nl.baskt.ui.common.rememberBarcodeScannerWithFormat { raw, format ->
+        if (selfScanOn && selfScan.active) viewModel.selfScanItem(store, raw, format.takeIf { relay })
+        else viewModel.scanItem(store, raw, format.takeIf { relay })
+    }
+    if (selfScanOn && showSelfScanBasket && selfScan.active) SelfScanBasketSheet(
+        state = selfScan,
+        listItems = items,
+        remaining = remaining.map { it.first },
+        tripScans = tripScans.filter { it.store == store && System.currentTimeMillis() - it.at < tripWindow },
+        tickedByBarcode = tickedByBarcode,
+        onQuantity = { barcode, quantity -> viewModel.setSelfScanQuantity(store, barcode, quantity) },
+        onRescan = { openScanner() },
+        onDismissIssue = { viewModel.dismissSelfScanIssue(it) },
+        onDismissNotice = { viewModel.dismissSelfScanNotice() },
+        onCheckout = { viewModel.selfScanCheckout() },
+        onStop = { showSelfScanBasket = false; viewModel.stopSelfScan() },
+        onDismiss = { showSelfScanBasket = false },
+    )
+    if (selfScanOn) selfScan.checkout?.let { checkout ->
+        SelfScanCheckoutDialog(checkout, card, onRetry = { viewModel.selfScanCheckout() }, onClose = { showSelfScanBasket = false; viewModel.closeSelfScanCheckout() })
+    }
 
     fun removeScan(scan: TripScan) {
         viewModel.removeScan(scan)
@@ -199,6 +224,21 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                         Icon(Icons.Default.CardMembership, contentDescription = if (card != null) "Show loyalty card" else "Add loyalty card", tint = if (card != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
+            )
+        },
+        bottomBar = {
+            if (selfScanOn) SelfScanBar(
+                state = selfScan,
+                hasCard = card != null,
+                onStart = { viewModel.startSelfScan() },
+                onAddCard = { editCard = true },
+                onStop = { viewModel.stopSelfScan() },
+                onWifiSettings = {
+                    val intent = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) android.content.Intent(android.provider.Settings.Panel.ACTION_WIFI)
+                    else android.content.Intent(android.provider.Settings.ACTION_WIFI_SETTINGS)
+                    runCatching { context.startActivity(intent) }
+                },
+                onOpenBasket = { viewModel.refreshSelfScan(); showSelfScanBasket = true },
             )
         },
         floatingActionButton = {
