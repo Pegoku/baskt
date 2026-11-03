@@ -229,8 +229,9 @@ class BasketRepository(
                 } catch (e: Exception) {
                     if (e is kotlinx.coroutines.CancellationException) throw e
                     if (isConnectivityError(e)) { online.value = false; return }
-                    // Deleting an already absent object is successful; every other failure stays reviewable.
-                    if (!(e is ApiException && e.status == 404 && op.type in setOf("delete", "unscan", "stockRemove", "basketDelete", "recipeDelete", "favouriteDelete", "purchaseDelete", "memoryDelete", "nameDelete"))) {
+                    // Deleting an already absent object is successful, and so is a till-code note to a server that
+                    // predates the map (it is a hint, not data); every other failure stays reviewable.
+                    if (!(e is ApiException && e.status == 404 && op.type in setOf("delete", "unscan", "barcodeKind", "stockRemove", "basketDelete", "recipeDelete", "favouriteDelete", "purchaseDelete", "memoryDelete", "nameDelete"))) {
                         pending.update { list -> list.map { if (it.id == op.id) it.copy(failure = e.message ?: "Sync failed") else it } }
                         offline?.saveOps(pending.value)
                         _error.value = "Could not sync ${op.label}: ${e.message}"
