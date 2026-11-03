@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "baskt-settings")
 
-data class AppSettings(val baseUrl: String, val token: String, val language: String = "system", val currentBasketId: String = "default", val speakReplies: Boolean = false, val ttsModel: String = "inworld/realtime-tts-1.5-mini", val ttsVoice: String = "Ashley", val loyaltyCards: Map<String, String> = emptyMap(), val hiddenDealKinds: Set<String> = emptySet(), val tillRelay: Boolean = false, val tillRelayIntervalMs: Int = 1200) {
+data class AppSettings(val baseUrl: String, val token: String, val language: String = "system", val currentBasketId: String = "default", val speakReplies: Boolean = false, val ttsModel: String = "inworld/realtime-tts-1.5-mini", val ttsVoice: String = "Ashley", val loyaltyCards: Map<String, String> = emptyMap(), val hiddenDealKinds: Set<String> = emptySet(), val tillRelay: Boolean = false, val tillRelayIntervalMs: Int = 1200, val selfScan: Boolean = false, val selfScanWifi: String = "") {
     val configured: Boolean get() = baseUrl.isNotBlank()
 
     /** Language code sent to the server: the chosen one, or the device language when set to "system". */
@@ -50,6 +50,20 @@ class SettingsStore(private val context: Context) {
     private val tillRelayKey = booleanPreferencesKey("tillRelay")
     private val tillRelayIntervalKey = intPreferencesKey("tillRelayIntervalMs")
 
+    /** Experimental: AH in-store self-scan, the live AH basket over the store Wi-Fi (docs/ah-selfscan.md). */
+    private val selfScanKey = booleanPreferencesKey("selfScan")
+    /** The store Wi-Fi's name, when known: baskt can then join it for the trip by itself. */
+    private val selfScanWifiKey = stringPreferencesKey("selfScanWifi")
+    /** This phone's self-scan id (`AH-Device-Uuid`, also the trip id); made once and kept. */
+    private val selfScanUuidKey = stringPreferencesKey("selfScanDeviceUuid")
+
+    suspend fun saveSelfScan(enabled: Boolean) { context.dataStore.edit { it[selfScanKey] = enabled } }
+    suspend fun saveSelfScanWifi(name: String) { context.dataStore.edit { it[selfScanWifiKey] = name.trim() } }
+    suspend fun selfScanDeviceUuid(): String {
+        val prefs = context.dataStore.edit { if (it[selfScanUuidKey].isNullOrBlank()) it[selfScanUuidKey] = java.util.UUID.randomUUID().toString() }
+        return prefs[selfScanUuidKey]!!
+    }
+
     suspend fun saveTillRelay(enabled: Boolean) { context.dataStore.edit { it[tillRelayKey] = enabled } }
     suspend fun saveTillRelayInterval(ms: Int) { context.dataStore.edit { it[tillRelayIntervalKey] = ms } }
 
@@ -73,7 +87,7 @@ class SettingsStore(private val context: Context) {
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
-        AppSettings(baseUrl = prefs[baseUrlKey] ?: DEFAULT_BASE_URL, token = prefs[tokenKey] ?: "", language = prefs[languageKey] ?: "system", currentBasketId = prefs[basketKey] ?: "default", speakReplies = prefs[speakKey] ?: false, ttsModel = prefs[ttsModelKey] ?: "inworld/realtime-tts-1.5-mini", ttsVoice = prefs[ttsVoiceKey] ?: "Ashley", loyaltyCards = decodeCards(prefs[loyaltyKey]), hiddenDealKinds = prefs[hiddenDealKindsKey] ?: emptySet(), tillRelay = prefs[tillRelayKey] ?: false, tillRelayIntervalMs = prefs[tillRelayIntervalKey] ?: 1200)
+        AppSettings(baseUrl = prefs[baseUrlKey] ?: DEFAULT_BASE_URL, token = prefs[tokenKey] ?: "", language = prefs[languageKey] ?: "system", currentBasketId = prefs[basketKey] ?: "default", speakReplies = prefs[speakKey] ?: false, ttsModel = prefs[ttsModelKey] ?: "inworld/realtime-tts-1.5-mini", ttsVoice = prefs[ttsVoiceKey] ?: "Ashley", loyaltyCards = decodeCards(prefs[loyaltyKey]), hiddenDealKinds = prefs[hiddenDealKindsKey] ?: emptySet(), tillRelay = prefs[tillRelayKey] ?: false, tillRelayIntervalMs = prefs[tillRelayIntervalKey] ?: 1200, selfScan = prefs[selfScanKey] ?: false, selfScanWifi = prefs[selfScanWifiKey] ?: "")
     }
 
     suspend fun saveCurrentBasket(id: String) {

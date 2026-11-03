@@ -146,6 +146,7 @@ class BasketRepository(
                                 kindLearnt(op.store, ticked.match(op.store)?.effective?.id, ticked.text, op.text)
                                 patchLocal(ticked.id) { ticked }
                                 notices.tryEmit("Ticked off “${ticked.text}”")
+                                tickedByBarcode.update { it + ((productGtin(op.text) ?: op.text) to ticked.id) }
                             } else {
                                 tripScans.update { list -> list.map { if (it.id == op.itemId) it.copy(product = result.product ?: it.product, synced = true) else it } }
                                 result.product?.let { product -> updateTillCodes { list -> list.map { if (it.scanId == op.itemId && it.itemId == null) it.copy(title = product.title) else it } } }
@@ -684,6 +685,9 @@ class BasketRepository(
         val raw = tillCodes.value.firstOrNull { it.itemId == item.id }?.raw ?: scan.barcode
         reportBarcodeKind(store, item, raw)
     }
+
+    /** Which list item a scanned code ticked off (code -> item id), so the AH self-scan basket can say what each line is for. */
+    val tickedByBarcode = MutableStateFlow<Map<String, String>>(emptyMap())
 
     /** Scanned in the store while shopping: kept here (offline too) until the server has resolved and recorded it. */
     val tripScans = MutableStateFlow<List<TripScan>>(offline?.load<List<TripScan>>("trip-scans") ?: emptyList())
