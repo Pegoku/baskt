@@ -151,6 +151,7 @@ class BasketRepository(
                             }
                             offline?.save("trip-scans", tripScans.value)
                         }
+                        "unscan" -> api.unscan(op.store!!, op.text!!, op.at)
                         "quantity" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, quantity = op.quantity) }
                         "rename" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, text = op.text, keepMatches = op.keepMatches == true) }
                         "delete" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.deleteItem(it) }
@@ -624,17 +625,28 @@ class BasketRepository(
     fun knownLabel(gtin: String): ScannedLabel? = barcodes.known(gtin, _stock.value)
     suspend fun resolveLabel(gtin: String): ScannedLabel? = barcodes.resolve(gtin, _stock.value)
 
-    suspend fun scanItem(store: String, barcode: String) {
+    suspend fun scanItem(store: String, barcode: String, at: Long = System.currentTimeMillis()) {
         // Show a name and a picture straight away when the phone has seen the code before; a bare number tells
         // the user nothing about what they just scanned.
         val gtin = productGtin(barcode) ?: barcode
-        val scan = TripScan(id = localId(), store = store, barcode = gtin, at = System.currentTimeMillis(), label = knownLabel(gtin))
+        val scan = TripScan(id = localId(), store = store, barcode = gtin, at = at, label = knownLabel(gtin))
         queued(PendingOp(type = "scanItem", itemId = scan.id, store = store, text = barcode, at = scan.at, basketId = _currentBasketId.value), optimistic = {
             tripScans.update { list -> list.filter { System.currentTimeMillis() - it.at < 24 * 60 * 60 * 1000 } + scan }
             offline?.save("trip-scans", tripScans.value)
         })
         // Only ask elsewhere when the backend is out of reach; when it answers, its product wins anyway.
         if (scan.label == null && !online.value) scope.launch { labelScan(scan.id, gtin) }
+    }
+
+    /**
+     * Takes back a scan (a wrong or unreadable code): off the trip, out of today's order and out of stock. Queued
+     * after the scan itself, so an offline scan is recorded and then undone in order.
+     */
+    suspend fun removeScan(scan: TripScan) {
+        queued(PendingOp(type = "unscan", itemId = scan.id, store = scan.store, text = scan.barcode, at = scan.at), optimistic = {
+            tripScans.update { list -> list.filterNot { it.id == scan.id } }
+            offline?.save("trip-scans", tripScans.value)
+        })
     }
 
     /** Fills in a scan's name and picture from Open Food Facts when the backend is unreachable. */

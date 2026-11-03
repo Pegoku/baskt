@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CardMembership
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.SearchOff
@@ -63,6 +64,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import nl.baskt.data.BasketItem
+import nl.baskt.data.TripScan
 import nl.baskt.data.euros
 import nl.baskt.data.freeExtra
 import nl.baskt.data.dealPricing
@@ -74,7 +76,7 @@ import nl.baskt.ui.common.StoreBadge
  * In-store mode: big checkboxes, items grouped by aisle (product category), screen stays on. Ticking records the
  * item on today's trip (it moves to the orders page); swiping a row sideways archives it for this trip (it is
  * crossed out on the main list and can be brought back from the archive button); the scan button adds things
- * picked up that were not on the list; the card button shows the store's loyalty card for the checkout.
+ * picked up that were not on the list (a swipe takes a scan back); the card button shows the store's loyalty card for the checkout.
  */
 @Composable
 fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
@@ -138,7 +140,12 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
         }
     }
 
-    val scan = nl.baskt.ui.common.rememberBarcodeScanner { viewModel.scanItem(store, it) }
+    val openScanner = nl.baskt.ui.common.rememberBarcodeScanner { viewModel.scanItem(store, it) }
+
+    fun removeScan(scan: TripScan) {
+        viewModel.removeScan(scan)
+        undoable("Removed “${scan.product?.title ?: scan.label?.title ?: scan.barcode}”") { viewModel.restoreScan(scan) }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -163,7 +170,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(onClick = { scan() }, icon = { Icon(Icons.Default.QrCodeScanner, contentDescription = null) }, text = { Text("Scan") })
+            ExtendedFloatingActionButton(onClick = { openScanner() }, icon = { Icon(Icons.Default.QrCodeScanner, contentDescription = null) }, text = { Text("Scan") })
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
@@ -264,30 +271,46 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                     item("h-scanned") {
                         Text("Scanned here", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
                     }
+                    // A sideways swipe takes a scan back (wrong code, scanned twice); a code no store knows also offers
+                    // a second try, since a crumpled or glared barcode often reads as something else.
                     items(scansHere, key = { it.id }) { scan ->
-                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            val product = scan.product
-                            val label = scan.label
-                            if (product != null) ProductThumb(product, size = 44)
-                            else if (label?.imageUrl != null) Surface(color = Color.White, shape = RoundedCornerShape(12.dp), modifier = Modifier.size(44.dp)) {
-                                coil3.compose.AsyncImage(model = label.imageUrl, contentDescription = label.title, modifier = Modifier.padding(4.dp))
+                        val dismiss = rememberSwipeToDismissBoxState(
+                            confirmValueChange = { value ->
+                                if (value == SwipeToDismissBoxValue.Settled) false else { removeScan(scan); true }
+                            },
+                        )
+                        SwipeToDismissBox(
+                            state = dismiss,
+                            modifier = Modifier.animateItem(),
+                            backgroundContent = { RemoveBackground(dismiss.dismissDirection) },
+                        ) {
+                            Surface {
+                                Row(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    val product = scan.product
+                                    val label = scan.label
+                                    if (product != null) ProductThumb(product, size = 44)
+                                    else if (label?.imageUrl != null) Surface(color = Color.White, shape = RoundedCornerShape(12.dp), modifier = Modifier.size(44.dp)) {
+                                        coil3.compose.AsyncImage(model = label.imageUrl, contentDescription = label.title, modifier = Modifier.padding(4.dp))
+                                    }
+                                    else Icon(if (scan.synced) Icons.Default.QrCodeScanner else Icons.Default.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(28.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(product?.title ?: label?.title ?: scan.barcode, style = MaterialTheme.typography.titleMedium)
+                                        Text(
+                                            when {
+                                                product != null -> "${product.quantityText} · in today's order and in stock"
+                                                label != null && !scan.synced -> listOfNotNull(label.quantityText, "recognised by your phone · price follows when online").joinToString(" · ")
+                                                label != null -> listOfNotNull(label.quantityText, "no store price for this code").joinToString(" · ")
+                                                scan.synced -> "Unknown product · swipe to remove"
+                                                else -> "Waiting for connection · stocked once online"
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    if (product != null) Text(product.priceCents.euros(), fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(end = 8.dp))
+                                    else if (scan.synced) TextButton(onClick = { viewModel.removeScan(scan); openScanner() }) { Text("Scan again") }
+                                }
                             }
-                            else Icon(if (scan.synced) Icons.Default.QrCodeScanner else Icons.Default.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(28.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(product?.title ?: label?.title ?: scan.barcode, style = MaterialTheme.typography.titleMedium)
-                                Text(
-                                    when {
-                                        product != null -> "${product.quantityText} · in today's order and in stock"
-                                        label != null && !scan.synced -> listOfNotNull(label.quantityText, "recognised by your phone · price follows when online").joinToString(" · ")
-                                        label != null -> listOfNotNull(label.quantityText, "no store price for this code").joinToString(" · ")
-                                        scan.synced -> "Unknown product · saved by its barcode"
-                                        else -> "Waiting for connection · stocked once online"
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            if (product != null) Text(product.priceCents.euros(), fontWeight = FontWeight.SemiBold)
                         }
                         HorizontalDivider()
                     }
@@ -308,6 +331,21 @@ private fun ArchiveBackground(direction: SwipeToDismissBoxValue) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(Icons.Default.Archive, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
             Text("Archive", color = MaterialTheme.colorScheme.onSecondaryContainer, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+/** Behind a scanned row as it slides away: unlike list items, a scan is taken back, not archived. */
+@Composable
+private fun RemoveBackground(direction: SwipeToDismissBoxValue) {
+    val alignment = if (direction == SwipeToDismissBoxValue.EndToStart) Alignment.CenterEnd else Alignment.CenterStart
+    Box(
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.errorContainer).padding(horizontal = 24.dp),
+        contentAlignment = alignment,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+            Text("Remove", color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.labelLarge)
         }
     }
 }

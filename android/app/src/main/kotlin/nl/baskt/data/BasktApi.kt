@@ -207,6 +207,11 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
     suspend fun scanItem(store: String, barcode: String, purchasedAt: Long, basketId: String? = null): ScanItemResponse =
         client.post(url("/purchases/scan-item")) { auth(); contentType(ContentType.Application.Json); setBody(ScanItemRequest(store, barcode, purchasedAt, basketId)) }.expect()
 
+    /** Takes back an extra scanned at [store] at [purchasedAt]: its line on the trip and the stock it created. */
+    suspend fun unscan(store: String, barcode: String, purchasedAt: Long) {
+        client.post(url("/purchases/unscan")) { auth(); contentType(ContentType.Application.Json); setBody(UnscanRequest(store, barcode, purchasedAt)) }.expect<UnscanResponse>()
+    }
+
     suspend fun purchaseHistory(): PurchaseHistory = client.get(url("/purchases/history")) { auth() }.expect()
 
     suspend fun clearChecked(basketId: String): Int =
@@ -512,6 +517,8 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
 @Serializable private data class GenerateRequest(val description: String, val draft: Boolean)
 @Serializable private data class BoughtRequest(val store: String, val productId: String?, val purchasedAt: Long)
 @Serializable private data class ScanItemRequest(val store: String, val barcode: String, val purchasedAt: Long, val basketId: String? = null)
+@Serializable private data class UnscanRequest(val store: String, val barcode: String, val purchasedAt: Long)
+@Serializable private data class UnscanResponse(val removed: Boolean = false)
 @Serializable private data class SavePurchaseRequest(val store: String, val purchasedAt: String?, val totalCents: Int?, val lines: List<ReceiptLine>)
 @Serializable private data class TransferRequest(val basketId: String, val copy: Boolean)
 @Serializable private data class GroupFromItemsRequest(val text: String, val itemIds: List<String>)

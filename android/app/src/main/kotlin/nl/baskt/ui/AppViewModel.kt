@@ -944,6 +944,9 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         basket.scanItem(store, code.trim())
     }
     val tripScans: StateFlow<List<TripScan>> = basket.tripScans
+    fun removeScan(scan: TripScan) = viewModelScope.launch { basket.removeScan(scan) }
+    /** Undo of [removeScan]: the same code, recorded at the time it was first scanned. */
+    fun restoreScan(scan: TripScan) = viewModelScope.launch { basket.scanItem(scan.store, scan.barcode, scan.at) }
 
     /** Day-by-day orders: purchases recorded in the store plus scanned receipts. */
     private val _history = MutableStateFlow<PurchaseHistory?>(null)
