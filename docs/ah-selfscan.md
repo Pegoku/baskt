@@ -71,6 +71,19 @@ Kotlin under `nl.ah.appie...selfscan`) gave the shape below.
   `X-Correlation-Id`, `Content-Type: application/json`, `User-Agent: Android`, app version `9.47.3`. The exact
   auth header is in an obfuscated OkHttp interceptor (`c07`); confirm it with the capture rather than guessing.
 
+### Payment happens at the till, not in baskt
+
+Confirmed from the app's own strings ("Go to a self-checkout and scan this code", "First, complete the payment at
+the self-checkout", "You can pay with this at the cash registers on the Zelfscan square"): the standard zelfscan
+flow scans items in the app, then shows a handoff code you scan at a Zelfscan self-checkout, where you pay with a
+normal bank card / PIN. In-app "Online payment" (Adyen: iDEAL, card, AH Wallet) exists but is optional.
+
+So a baskt self-scan client only needs to: (1) start a trip, (2) add each scanned item, (3) show the checkout
+handoff code. It never touches payment (no Adyen, no money flow through baskt), which keeps it in the read-only
+scope. Other features seen: weighed/loose produce (scan the scale label), Bonus / Bonus Box / coupons / Koopzegels
+applied live, deposit (statiegeld) and gift cards, age-restricted items verified by staff, random checks
+("controle"), and an exit-gate code after paying.
+
 ### Still to confirm with one captured request
 
 1. How a trip is created (does it need a store id from an entrance QR, or just `last_known_store_number` + the
