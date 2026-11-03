@@ -37,7 +37,7 @@ the list for the store.
 The server keeps it in the `barcodeKinds` setting (backend/data/baskt.db, `settings` table):
 
 ```sh
-curl -H "Authorization: Bearer $APP_API_TOKEN" "$BASE/purchases/barcode-kinds?store=AH"
+curl -H "Authorization: Bearer $APP_API_TOKEN" "$BASE/api/v1/purchases/barcode-kinds?store=AH"
 ```
 
 Each entry has `kind` (`pack`, `label`, `none`), the product id or item text, and the last 5 raw codes.
