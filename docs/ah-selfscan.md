@@ -84,11 +84,55 @@ scope. Other features seen: weighed/loose produce (scan the scale label), Bonus 
 applied live, deposit (statiegeld) and gift cards, age-restricted items verified by staff, random checks
 ("controle"), and an exit-gate code after paying.
 
-### Still to confirm with one captured request
+### Confirmed protocol (decrypted in-store capture, 2026-11-03, store 1379)
 
-1. How a trip is created (does it need a store id from an entrance QR, or just `last_known_store_number` + the
-   member token) and the create path/body.
-2. The exact `Authorization` value on the port-8881 host (member bearer token, same as the rest of the app?).
+Captured a full real session (raw pcap + TLS keylog + decoded transcript in `backend/data/captures/`, git-ignored;
+they hold the member's bonuskaart and a session token, so keep them local). All HTTP/1.1, JSON. No OAuth/bearer.
+
+Auth is a set of `AH-*` headers, not `Authorization`:
+
+- `AH-App-Name: Albert Heijn`, `AH-App-Version: 9.47.3`, `AH-Device-Platform: Android`,
+  `AH-Device-Name: Pixel 8 Pro`, `AH-Device-Version: 17`, `User-Agent: Appie/9.47.3 (Android 17-API37; ...)`
+- `AH-Device-Uuid: <uuid>`: a per-device UUID; it is also the trip/session id in the path.
+- `AH-Uid: <bonuskaart>`: the member's bonuskaart number (e.g. `26230...`), empty on the very first `/service` call.
+- `AH-Token: <token>`: a per-session token obtained from `GET /sessions/{uuid}` (below); sent on every call after.
+
+Base `https://selfscan.store.ah.nl:8881/api/selfscan/v2.0/`. Flow:
+
+1. `GET /service` -> `{"result":{"storeNumber":1379,"storeFormat":"Albert Heijn","storeType":"regular"}}`. Polled
+   repeatedly as a heartbeat throughout.
+2. `GET /sessions/{uuid}?terms=` -> `{"result":{"token":"<AH-Token>","eanRis":[{minRange,maxRange,eanType:"BOK"},…]}}`.
+   This hands out the session token; `eanRis` are the in-store variable-barcode ranges (weighed/BOK items).
+3. `GET /trips/{uuid}` -> the basket. It starts with the Bonuskaart as item 0
+   (`{"description":"Bonuskaart","barcode":"<bonuskaart>","flags":["BOK"]}`).
+4. `POST /trips/{uuid}/items`  body `{"barcode":"8719587149300","quantity":1}` -> returns the full updated basket:
+   per item `description` (e.g. "PIZZADEEG"), `price` (cents), `quantity`, `nasaNr`, `flags` (ART/BONUS/AKTIE/…),
+   `bonusInfo.promoLabel`; plus `discounts[]` (bonus text + `discount` cents) and `totals`
+   (`subtotal`, `bonusDiscount`, `personalDiscount`, `discount`, `itemCount`, …) and a `transactionId`.
+5. `PUT /trips/{uuid}/items/{barcode}`  body `{"quantity":N}` -> set quantity; **`{"quantity":0}` removes** the item.
+6. `GET /trips/{uuid}/payment/totals` -> `{"message":{"code":"GOTO_PAYTOWER","message":"Ga naar een betaalpaal en
+   scan onderstaande streepjescode"},"result":{"totals":{"total":1352,…},"barcode":"<bonuskaart>",
+   "symbology":"EAN13","imageUrl":".../assets/barc/P<bonuskaart>.gif","showToPay":true}}`.
+7. `GET /trips/{uuid}/payment/status?lastAttempt=false` -> `status: paying` ("Volg de instructies op de betaalpaal")
+   then `status: paid` ("Je hebt betaald. Scan onderstaande code om het hekje te openen"), barcode = the bonuskaart.
+8. `GET /trips/{uuid}/exitgate/status` -> gate state.
+
+**Payment is 100% at the betaalpaal with your own card.** The "code to scan at checkout" and the gate code are
+both just your **Bonuskaart EAN13** (the same barcode baskt already renders for loyalty cards). The app does not
+mint a special checkout code and does not handle the payment.
+
+### What a baskt (Android, store-Wi-Fi-only) read-only client needs
+
+1. Persist a device UUID; set the `AH-*` headers above. Use the member's bonuskaart (baskt already has the AH
+   account) as `AH-Uid`.
+2. `GET /service`, then `GET /sessions/{uuid}?terms=` to get `AH-Token`.
+3. For each scan: `POST /trips/{uuid}/items {barcode,quantity}`; show the returned basket (names, cents, bonus).
+   Quantity edits via `PUT .../items/{barcode} {quantity}` (0 = remove).
+4. At checkout: just show the Bonuskaart barcode (EAN13) for the betaalpaal. No payment code, no Adyen.
+
+Open questions remaining: whether `GET /sessions` needs the `{uuid}` pre-registered with the member via an
+`api.ah.nl` call (none was seen before it in the capture, so likely not), and the `eanRis`/`flags` semantics for
+weighed items. Both can be read from the saved transcript.
 
 ### Non-rooted capture pipeline (built 2026-11-03, phone `42271FDJG0019N`)
 
