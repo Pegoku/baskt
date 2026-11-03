@@ -8,7 +8,7 @@ import { markItemBought } from "@/routes/basket";
 import { hasStore } from "@/stores/registry";
 import { lookupBarcode, productsByIds } from "@/stores/search";
 import { enabledStoreCodes } from "@/db/settings";
-import { purchaseHistory, recordBought } from "@/orders";
+import { forgetScan, purchaseHistory, recordBought } from "@/orders";
 import { addStock } from "@/stock";
 
 export const purchasesRoute = new Hono();
@@ -110,6 +110,16 @@ purchasesRoute.post("/scan-item", async (c) => {
   });
   addStock({ text: product?.title ?? name, quantityText: weighed ?? product?.quantityText ?? null, productId: product?.id ?? null, imageUrl: product?.imageUrl ?? null, barcode: gtin });
   return c.json({ purchase, line, product, item: null, matchedItemId: null }, 201);
+});
+
+/** Undoes an extra scanned at [store] at [purchasedAt] (the phone's scan time): its line and its stock entry. */
+purchasesRoute.post("/unscan", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { store?: string; barcode?: string; purchasedAt?: number | null };
+  if (!body.store || !hasStore(body.store)) return c.json({ error: { code: "BAD_REQUEST", message: "store is required" } }, 400);
+  const code = parseScannedCode(body.barcode ?? "");
+  if (!code) return c.json({ error: { code: "BAD_REQUEST", message: "not a product barcode" } }, 400);
+  const at = typeof body.purchasedAt === "number" && body.purchasedAt > 0 ? body.purchasedAt : Date.now();
+  return c.json({ removed: forgetScan(body.store, code.gtin, at) });
 });
 
 /** The open list item a scanned product stands for: the very product first, then a list entry that describes it. */

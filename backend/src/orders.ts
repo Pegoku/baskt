@@ -1,6 +1,6 @@
-import { and, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm";
 import { db, newId, now } from "@/db";
-import { purchaseLines, purchases, type PurchaseLineRow, type PurchaseRow, type ProductRow } from "@/db/schema";
+import { purchaseLines, purchases, stock, type PurchaseLineRow, type PurchaseRow, type ProductRow } from "@/db/schema";
 import { productsByIds } from "@/stores/search";
 
 /** Ticks within this window at the same store belong to one shopping trip. */
@@ -79,6 +79,32 @@ export function forgetBought(itemId: string) {
   for (const id of new Set(lines.map((line) => line.purchaseId))) retotal(id);
   return lines.length;
 }
+
+/**
+ * Takes back an extra scanned in the store (a wrong or unreadable code): the newest line with that barcode on the
+ * trip the scan belongs to, and its stock entry when the scan is what created it. Scans that ticked a list item
+ * are left alone; unticking the item is how those are undone.
+ */
+export function forgetScan(store: string, barcode: string, at: number) {
+  const database = db();
+  const line = database
+    .select({ line: purchaseLines })
+    .from(purchaseLines)
+    .innerJoin(purchases, eq(purchaseLines.purchaseId, purchases.id))
+    .where(and(eq(purchases.store, store), eq(purchases.source, "shop"), eq(purchaseLines.barcode, barcode), isNull(purchaseLines.itemId), gt(purchases.purchasedAt, at - TRIP_WINDOW_MS), lte(purchases.purchasedAt, at + SCAN_CLOCK_SLACK_MS)))
+    .orderBy(desc(purchases.purchasedAt), desc(purchaseLines.sortOrder))
+    .get()?.line;
+  if (!line) return false;
+  database.delete(purchaseLines).where(eq(purchaseLines.id, line.id)).run();
+  retotal(line.purchaseId);
+  const stillBought = database.select({ id: purchaseLines.id }).from(purchaseLines).where(and(eq(purchaseLines.purchaseId, line.purchaseId), eq(purchaseLines.barcode, barcode))).get();
+  // Offline scans reach the server later than they happened, so "created by this scan" allows for that delay.
+  if (!stillBought) database.delete(stock).where(and(eq(stock.barcode, barcode), gte(stock.addedAt, at - SCAN_CLOCK_SLACK_MS))).run();
+  return true;
+}
+
+/** Phone and server clocks disagree a little; a scan's time is the phone's. */
+const SCAN_CLOCK_SLACK_MS = 2 * 60 * 1000;
 
 export type PurchaseHistory = {
   purchases: Array<{ purchase: PurchaseRow; lines: PurchaseLineRow[] }>;

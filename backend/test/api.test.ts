@@ -491,6 +491,23 @@ describe("api", () => {
     for (const row of ((await (await api("/stock")).json()) as any).items) expect((await api(`/stock/${row.id}`, { method: "DELETE" })).status).toBe(204);
   });
 
+  test("unscanning an extra takes back its line and the stock it created", async () => {
+    const at = Date.now();
+    const scan = (await (await api("/purchases/scan-item", { method: "POST", body: JSON.stringify({ store: "AH", barcode: "8710400054321", purchasedAt: at }) })).json()) as any;
+    expect(scan.line.barcode).toBe("8710400054321");
+    const stocked = ((await (await api("/stock")).json()) as any).items;
+    expect(stocked.some((row: any) => row.barcode === "8710400054321")).toBe(true);
+    const undone = await api("/purchases/unscan", { method: "POST", body: JSON.stringify({ store: "AH", barcode: "8710400054321", purchasedAt: at }) });
+    expect(((await undone.json()) as any).removed).toBe(true);
+    const history = (await (await api("/purchases/history")).json()) as any;
+    expect(history.purchases.some((entry: any) => entry.lines.some((line: any) => line.barcode === "8710400054321"))).toBe(false);
+    expect(((await (await api("/stock")).json()) as any).items.some((row: any) => row.barcode === "8710400054321")).toBe(false);
+    // Nothing left to take back.
+    const again = (await (await api("/purchases/unscan", { method: "POST", body: JSON.stringify({ store: "AH", barcode: "8710400054321", purchasedAt: at }) })).json()) as any;
+    expect(again.removed).toBe(false);
+    for (const row of ((await (await api("/stock")).json()) as any).items) expect((await api(`/stock/${row.id}`, { method: "DELETE" })).status).toBe(204);
+  });
+
   test("a weighed product's label is recorded with its printed price", async () => {
     const scanned = (await (await api("/purchases/scan-item", { method: "POST", body: JSON.stringify({ store: "AH", barcode: "]d2010871000000000031030004523922000699" }) })).json()) as any;
     expect(scanned.line.name).toBe("Weighed product");
