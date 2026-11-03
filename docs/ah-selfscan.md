@@ -118,12 +118,20 @@ Android-CA work.
 
 ### In the store
 
-On store Wi-Fi, start the PCAPdroid capture, then:
+The app gates self-scan on store Wi-Fi (the Zelfscan screen shows "Use your Albert Heijn store's Wi-Fi network to
+start" and makes no call until then), so this can only be captured in-store, not at home.
 
-1. Start zelfscan (note how: QR at the entrance, choosing the store, Wi-Fi detection). The **trip-create request is
-   the one we need**: it answers both open questions above.
-2. Scan a couple of pack items, one weighed label, one DataMatrix item, and remove one again.
-3. Stop the capture and export the PCAP/HAR. (For read-only you can stop before paying.)
+On store Wi-Fi:
 
-Put the export in `backend/data/captures/` (git-ignored; it holds your tokens). Then the in-app self-scan client
-can be modelled from it plus the DTOs above.
+1. Start the PCAPdroid capture (decryption rule for Albert Heijn active).
+2. Home -> store (winkel) mode -> the scan icon in the search bar -> **In-store Zelfscan**. The **trip-create
+   request is the one we need**: it answers both open questions above.
+3. Scan a couple of pack items, one weighed label, one DataMatrix item, and remove one again.
+4. Read the decrypted requests: PCAPdroid -> Connections -> tap the `selfscan.store.ah.nl` (or
+   `api.ah.nl/handscanner`) HTTPS connection -> **PAYLOAD -> SHOW DATA**, and screenshot the request line, the
+   headers (especially `Authorization`), and the body. Even truncated, the request headers fit.
+
+Getting a full file instead of screenshots: PCAPdroid's **PCAPNG** format (the only dump that saves decrypted
+payloads) is a paid one-time unlock; a plain `.pcap` stores only the encrypted packets. Either buy the unlock for
+a clean file to drop in `backend/data/captures/` (git-ignored; it holds your tokens), or just use the live
+PAYLOAD -> SHOW DATA screenshots above, which are enough to model the read-only client with the DTOs here.
