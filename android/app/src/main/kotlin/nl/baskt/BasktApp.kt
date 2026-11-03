@@ -41,6 +41,9 @@ class AppContainer(private val app: Application) {
 
     val basket = BasketRepository(api, scope, offline, onBasketSwitched = { id -> settingsStore.saveCurrentBasket(id); nl.baskt.widget.BasketWidget.refreshAll(app) }, onQueued = { nl.baskt.data.SyncWorker.schedule(app) })
 
+    /** AH in-store self-scan: talks to the store's LAN server directly, never through the backend. */
+    val selfScan = nl.baskt.data.SelfScanSession(app, scope, settingsStore)
+
     val recipes = nl.baskt.data.RecipeLibrary(api, offline, basket, cacheImages = { urls ->
         if (basket.online.value) for (url in urls.distinct()) SingletonImageLoader.get(app).enqueue(coil3.request.ImageRequest.Builder(app).data(url).build())
     }).also { basket.recipeLibrary = it }
