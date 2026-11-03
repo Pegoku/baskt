@@ -638,6 +638,37 @@ data class TripScan(
     val label: ScannedLabel? = null,
 )
 
+/**
+ * A code exactly as the camera read it in the shop (raw text and ML Kit format), kept on the phone so the checkout
+ * screen can show it again for the till's scanner. [itemId] is the list item it stands for, once known.
+ */
+@Serializable
+data class TillCode(
+    val id: String,
+    val store: String,
+    val raw: String,
+    val format: Int,
+    val at: Long,
+    val scanId: String? = null,
+    val itemId: String? = null,
+    val title: String? = null,
+)
+
+/** Server map of what a product carries at the till: "pack" barcode, weighed "label", or "none". */
+@Serializable
+data class BarcodeKindEntry(
+    val store: String,
+    val productId: String? = null,
+    val itemText: String? = null,
+    val kind: String,
+    val codes: List<String> = emptyList(),
+    val count: Int = 0,
+    val lastAt: Long = 0,
+)
+
+@Serializable
+data class BarcodeKindsResponse(val kinds: List<BarcodeKindEntry> = emptyList())
+
 @Serializable
 data class PurchaseDetail(val purchase: Purchase, val lines: List<PurchaseLine> = emptyList(), val products: Map<String, Product> = emptyMap())
 

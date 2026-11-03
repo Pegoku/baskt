@@ -250,6 +250,19 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
             }
 
             HorizontalDivider()
+            Text("Experimental", style = MaterialTheme.typography.titleMedium)
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Scan with the phone, pay at the till")
+                    Text(
+                        "In shop mode, every scan is kept as read. At the checkout, a till button shows your card and then each code in turn for the scanner, so the till rings up what you scanned. Weighed items need their label scanned. Tested for Albert Heijn; check the till's total before paying.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = settings?.tillRelay == true, onCheckedChange = { viewModel.setTillRelay(it) })
+            }
+
+            HorizontalDivider()
             Text(
                 "baskt keeps the products you pick and the ones you reject, and uses them to rank future suggestions. Matching runs on your own server; the app never talks to the supermarkets directly.",
                 style = MaterialTheme.typography.bodySmall,

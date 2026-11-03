@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -13,7 +14,7 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "baskt-settings")
 
-data class AppSettings(val baseUrl: String, val token: String, val language: String = "system", val currentBasketId: String = "default", val speakReplies: Boolean = false, val ttsModel: String = "inworld/realtime-tts-1.5-mini", val ttsVoice: String = "Ashley", val loyaltyCards: Map<String, String> = emptyMap(), val hiddenDealKinds: Set<String> = emptySet()) {
+data class AppSettings(val baseUrl: String, val token: String, val language: String = "system", val currentBasketId: String = "default", val speakReplies: Boolean = false, val ttsModel: String = "inworld/realtime-tts-1.5-mini", val ttsVoice: String = "Ashley", val loyaltyCards: Map<String, String> = emptyMap(), val hiddenDealKinds: Set<String> = emptySet(), val tillRelay: Boolean = false, val tillRelayIntervalMs: Int = 1200) {
     val configured: Boolean get() = baseUrl.isNotBlank()
 
     /** Language code sent to the server: the chosen one, or the device language when set to "system". */
@@ -45,6 +46,13 @@ class SettingsStore(private val context: Context) {
     /** Deal kinds ("volume", "online", …) hidden from the store-wide deals list. */
     private val hiddenDealKindsKey = stringSetPreferencesKey("hiddenDealKinds")
 
+    /** Experimental: replay the codes scanned in the shop as barcodes on screen for the checkout scanner. */
+    private val tillRelayKey = booleanPreferencesKey("tillRelay")
+    private val tillRelayIntervalKey = intPreferencesKey("tillRelayIntervalMs")
+
+    suspend fun saveTillRelay(enabled: Boolean) { context.dataStore.edit { it[tillRelayKey] = enabled } }
+    suspend fun saveTillRelayInterval(ms: Int) { context.dataStore.edit { it[tillRelayIntervalKey] = ms } }
+
     private fun decodeCards(raw: String?): Map<String, String> =
         raw?.let { runCatching { kotlinx.serialization.json.Json.decodeFromString<Map<String, String>>(it) }.getOrNull() } ?: emptyMap()
 
@@ -65,7 +73,7 @@ class SettingsStore(private val context: Context) {
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
-        AppSettings(baseUrl = prefs[baseUrlKey] ?: DEFAULT_BASE_URL, token = prefs[tokenKey] ?: "", language = prefs[languageKey] ?: "system", currentBasketId = prefs[basketKey] ?: "default", speakReplies = prefs[speakKey] ?: false, ttsModel = prefs[ttsModelKey] ?: "inworld/realtime-tts-1.5-mini", ttsVoice = prefs[ttsVoiceKey] ?: "Ashley", loyaltyCards = decodeCards(prefs[loyaltyKey]), hiddenDealKinds = prefs[hiddenDealKindsKey] ?: emptySet())
+        AppSettings(baseUrl = prefs[baseUrlKey] ?: DEFAULT_BASE_URL, token = prefs[tokenKey] ?: "", language = prefs[languageKey] ?: "system", currentBasketId = prefs[basketKey] ?: "default", speakReplies = prefs[speakKey] ?: false, ttsModel = prefs[ttsModelKey] ?: "inworld/realtime-tts-1.5-mini", ttsVoice = prefs[ttsVoiceKey] ?: "Ashley", loyaltyCards = decodeCards(prefs[loyaltyKey]), hiddenDealKinds = prefs[hiddenDealKindsKey] ?: emptySet(), tillRelay = prefs[tillRelayKey] ?: false, tillRelayIntervalMs = prefs[tillRelayIntervalKey] ?: 1200)
     }
 
     suspend fun saveCurrentBasket(id: String) {

@@ -24,13 +24,17 @@ val ProductBarcodeFormats = intArrayOf(
  * Google's one-shot code scanner: opens its own full-screen camera and hands back a single code. Cancelling
  * is silent; any other failure is shown as a toast, since the caller's screen may be gone by then.
  */
-fun startBarcodeScan(context: Context, formats: IntArray = ProductBarcodeFormats, onCode: (String) -> Unit) {
+fun startBarcodeScan(context: Context, formats: IntArray = ProductBarcodeFormats, onCode: (String) -> Unit) =
+    startBarcodeScanWithFormat(context, formats) { raw, _ -> onCode(raw) }
+
+/** [startBarcodeScan] that also says how the code was printed (a [Barcode] FORMAT_ constant), to draw it again. */
+fun startBarcodeScanWithFormat(context: Context, formats: IntArray = ProductBarcodeFormats, onCode: (String, Int) -> Unit) {
     val options = GmsBarcodeScannerOptions.Builder()
         .setBarcodeFormats(formats.first(), *formats.drop(1).toIntArray())
         .enableAutoZoom()
         .build()
     GmsBarcodeScanning.getClient(context, options).startScan()
-        .addOnSuccessListener { barcode -> barcode.rawValue?.let(onCode) }
+        .addOnSuccessListener { barcode -> barcode.rawValue?.let { onCode(it, barcode.format) } }
         .addOnFailureListener { error ->
             val cancelled = error is MlKitException && error.errorCode == MlKitException.CODE_SCANNER_CANCELLED
             if (!cancelled) Toast.makeText(context, error.message ?: "Scanner unavailable", Toast.LENGTH_SHORT).show()
@@ -43,4 +47,12 @@ fun rememberBarcodeScanner(formats: IntArray = ProductBarcodeFormats, onCode: (S
     val context = LocalContext.current
     val latest by rememberUpdatedState(onCode)
     return { startBarcodeScan(context, formats) { latest(it) } }
+}
+
+/** [rememberBarcodeScanner] with the printed format of the code. */
+@Composable
+fun rememberBarcodeScannerWithFormat(formats: IntArray = ProductBarcodeFormats, onCode: (String, Int) -> Unit): () -> Unit {
+    val context = LocalContext.current
+    val latest by rememberUpdatedState(onCode)
+    return { startBarcodeScanWithFormat(context, formats) { raw, format -> latest(raw, format) } }
 }

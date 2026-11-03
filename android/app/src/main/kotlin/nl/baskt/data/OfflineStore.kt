@@ -75,6 +75,8 @@ data class PendingOp(
     val keepMatches: Boolean? = null,
     /** What the phone knew about a scanned code, used to name the item when no store recognises it. */
     val scanLabel: ScannedLabel? = null,
+    /** A raw till code, for "barcodeKind" reports. */
+    val code: String? = null,
     val at: Long = System.currentTimeMillis(),
 ) {
     val label: String
@@ -104,6 +106,7 @@ data class PendingOp(
             "bought" -> "Bought at $store"
             "unbuy" -> "Undo bought"
             "scanItem" -> "Scanned $text at $store"
+            "barcodeKind" -> "Note till code for “$text”"
             "quantity" -> "Set quantity $quantity"
             "rename" -> "Rename to “$text”"
             "delete" -> "Delete item"

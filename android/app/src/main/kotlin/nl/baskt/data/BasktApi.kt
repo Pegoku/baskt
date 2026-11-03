@@ -212,6 +212,13 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
         client.post(url("/purchases/unscan")) { auth(); contentType(ContentType.Application.Json); setBody(UnscanRequest(store, barcode, purchasedAt)) }.expect<UnscanResponse>()
     }
 
+    suspend fun barcodeKinds(store: String): BarcodeKindsResponse = client.get(url("/purchases/barcode-kinds")) { auth(); parameter("store", store) }.expect()
+
+    /** Reports what an item carried at the till: a code (pack or weighed label, read from it) or [kind] "none". */
+    suspend fun reportBarcodeKind(store: String, productId: String?, itemText: String?, code: String?, kind: String?, at: Long) {
+        client.post(url("/purchases/barcode-kinds")) { auth(); contentType(ContentType.Application.Json); setBody(BarcodeKindRequest(store, productId, itemText, code, kind, at)) }.expect<kotlinx.serialization.json.JsonObject>()
+    }
+
     suspend fun purchaseHistory(): PurchaseHistory = client.get(url("/purchases/history")) { auth() }.expect()
 
     suspend fun clearChecked(basketId: String): Int =
@@ -518,6 +525,7 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
 @Serializable private data class BoughtRequest(val store: String, val productId: String?, val purchasedAt: Long)
 @Serializable private data class ScanItemRequest(val store: String, val barcode: String, val purchasedAt: Long, val basketId: String? = null)
 @Serializable private data class UnscanRequest(val store: String, val barcode: String, val purchasedAt: Long)
+@Serializable private data class BarcodeKindRequest(val store: String, val productId: String?, val itemText: String?, val code: String?, val kind: String?, val at: Long)
 @Serializable private data class UnscanResponse(val removed: Boolean = false)
 @Serializable private data class SavePurchaseRequest(val store: String, val purchasedAt: String?, val totalCents: Int?, val lines: List<ReceiptLine>)
 @Serializable private data class TransferRequest(val basketId: String, val copy: Boolean)

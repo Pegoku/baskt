@@ -939,14 +939,31 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun unbuy(item: BasketItem) = viewModelScope.launch { basket.unbuy(item) }
     /** Picked up in the store without being on the list. */
     /** The whole code goes to the server: a weighed product's label also carries its weight and price. */
-    fun scanItem(store: String, code: String) = viewModelScope.launch {
+    /** [format] is set when the code should be kept, as read, for the checkout screen (the till relay). */
+    fun scanItem(store: String, code: String, format: Int? = null) = viewModelScope.launch {
         if (nl.baskt.data.productGtin(code) == null) return@launch notify("That is not a product barcode")
-        basket.scanItem(store, code.trim())
+        basket.scanItem(store, code.trim(), format = format)
     }
     val tripScans: StateFlow<List<TripScan>> = basket.tripScans
-    fun removeScan(scan: TripScan) = viewModelScope.launch { basket.removeScan(scan) }
-    /** Undo of [removeScan]: the same code, recorded at the time it was first scanned. */
-    fun restoreScan(scan: TripScan) = viewModelScope.launch { basket.scanItem(scan.store, scan.barcode, scan.at) }
+    private val removedTillCodes = mutableMapOf<String, nl.baskt.data.TillCode>()
+    fun removeScan(scan: TripScan) = viewModelScope.launch {
+        basket.tillCodes.value.firstOrNull { it.scanId == scan.id }?.let { removedTillCodes[scan.id] = it }
+        basket.removeScan(scan)
+    }
+    /** Undo of [removeScan]: the same code, recorded at the time it was first scanned (and kept for the till again). */
+    fun restoreScan(scan: TripScan) = viewModelScope.launch {
+        val code = removedTillCodes.remove(scan.id)
+        basket.scanItem(scan.store, code?.raw ?: scan.barcode, scan.at, code?.format)
+    }
+
+    val tillCodes: StateFlow<List<nl.baskt.data.TillCode>> = basket.tillCodes
+    val barcodeKinds: StateFlow<List<nl.baskt.data.BarcodeKindEntry>> = basket.barcodeKinds
+    fun loadBarcodeKinds(store: String) = viewModelScope.launch { basket.loadBarcodeKinds(store) }
+    fun linkScan(scan: TripScan, item: BasketItem, store: String) = viewModelScope.launch { basket.linkScan(scan, item, store) }
+    fun reportNoBarcode(store: String, item: BasketItem) = viewModelScope.launch { basket.reportBarcodeKind(store, item, code = null, kind = "none") }
+    fun clearTillCodes(store: String) = basket.clearTillCodes(store)
+    fun setTillRelay(enabled: Boolean) = viewModelScope.launch { container.settingsStore.saveTillRelay(enabled) }
+    fun setTillRelayInterval(ms: Int) = viewModelScope.launch { container.settingsStore.saveTillRelayInterval(ms) }
 
     /** Day-by-day orders: purchases recorded in the store plus scanned receipts. */
     private val _history = MutableStateFlow<PurchaseHistory?>(null)

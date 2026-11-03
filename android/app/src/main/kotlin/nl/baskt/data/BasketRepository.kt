@@ -142,16 +142,20 @@ class BasketRepository(
                             if (ticked != null) {
                                 // It was on the list: the item is ticked off and the scan is not an extra line.
                                 tripScans.update { list -> list.filterNot { it.id == op.itemId } }
+                                updateTillCodes { list -> list.map { if (it.scanId == op.itemId) it.copy(scanId = null, itemId = ticked.id, title = ticked.text) else it } }
+                                kindLearnt(op.store, ticked.match(op.store)?.effective?.id, ticked.text, op.text)
                                 patchLocal(ticked.id) { ticked }
                                 notices.tryEmit("Ticked off “${ticked.text}”")
                             } else {
                                 tripScans.update { list -> list.map { if (it.id == op.itemId) it.copy(product = result.product ?: it.product, synced = true) else it } }
+                                result.product?.let { product -> updateTillCodes { list -> list.map { if (it.scanId == op.itemId && it.itemId == null) it.copy(title = product.title) else it } } }
                                 // No store sells this code: the phone still says what it is, rather than showing digits.
                                 if (result.product == null) productGtin(op.text)?.let { gtin -> op.itemId?.let { id -> scope.launch { labelScan(id, gtin) } } }
                             }
                             offline?.save("trip-scans", tripScans.value)
                         }
                         "unscan" -> api.unscan(op.store!!, op.text!!, op.at)
+                        "barcodeKind" -> api.reportBarcodeKind(op.store!!, op.productId, op.text, op.code, op.mode, op.at)
                         "quantity" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, quantity = op.quantity) }
                         "rename" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateItem(it, text = op.text, keepMatches = op.keepMatches == true) }
                         "delete" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.deleteItem(it) }
@@ -613,7 +617,72 @@ class BasketRepository(
 
     suspend fun unbuy(item: BasketItem) = queued(PendingOp(type = "unbuy", itemId = item.id), optimistic = {
         patchLocal(item.id) { it.copy(checked = false, boughtAt = null) }
+        updateTillCodes { list -> list.filterNot { it.itemId == item.id } }
     })
+
+    /** Codes scanned in the shop, as read, for the checkout screen to show the till again. Phone only. */
+    val tillCodes = MutableStateFlow<List<TillCode>>(offline?.load<List<TillCode>>("till-codes") ?: emptyList())
+
+    private fun updateTillCodes(transform: (List<TillCode>) -> List<TillCode>) {
+        tillCodes.update { list -> transform(list).filter { System.currentTimeMillis() - it.at < 24 * 60 * 60 * 1000 } }
+        offline?.save("till-codes", tillCodes.value)
+    }
+
+    /** After paying: the codes for [store] are done with. */
+    fun clearTillCodes(store: String) = updateTillCodes { list -> list.filterNot { it.store == store } }
+
+    /** What each product carries at the till, learnt from earlier scans (server map plus what this phone saw since). */
+    val barcodeKinds = MutableStateFlow<List<BarcodeKindEntry>>(offline?.load<List<BarcodeKindEntry>>("barcode-kinds") ?: emptyList())
+
+    private fun kindKey(entry: BarcodeKindEntry) = entry.store + ":" + (entry.productId ?: "t:" + entry.itemText?.trim()?.lowercase())
+
+    private fun mergeKinds(incoming: List<BarcodeKindEntry>) {
+        barcodeKinds.update { current ->
+            (current + incoming).groupBy(::kindKey).values.map { same -> same.maxBy { it.lastAt } }
+        }
+        offline?.save("barcode-kinds", barcodeKinds.value)
+    }
+
+    suspend fun loadBarcodeKinds(store: String) {
+        if (!online.value) return
+        runCatching { api.barcodeKinds(store) }.onSuccess { mergeKinds(it.kinds) }
+    }
+
+    /** The server learns a tick by scan on its own; this only mirrors it on the phone. */
+    private fun kindLearnt(store: String?, productId: String?, itemText: String?, code: String?) {
+        val kind = code?.let(::tillCodeKind) ?: return
+        if (store == null || (productId == null && itemText == null)) return
+        val previous = barcodeKinds.value.firstOrNull { kindKey(it) == kindKey(BarcodeKindEntry(store, productId, itemText, kind)) }
+        mergeKinds(listOf(BarcodeKindEntry(store, productId, itemText, kind, listOf(code) + (previous?.codes ?: emptyList()).filter { it != code }.take(4), (previous?.count ?: 0) + 1, System.currentTimeMillis())))
+    }
+
+    /** Tells the map what an item carried at the till: a code (pack or label is read from it), or [kind] "none". */
+    suspend fun reportBarcodeKind(store: String, item: BasketItem, code: String?, kind: String? = null) {
+        val productId = item.match(store)?.effective?.id
+        queued(PendingOp(type = "barcodeKind", store = store, productId = productId, text = item.text, code = code, mode = kind), optimistic = {
+            if (code != null) kindLearnt(store, productId, item.text, code)
+            else if (kind != null) mergeKinds(listOf(BarcodeKindEntry(store, productId, item.text, kind, count = 1, lastAt = System.currentTimeMillis())))
+        })
+    }
+
+    /** The open list item at [store] whose product was seen with this very code before, so a scan can tick it offline. */
+    private fun knownItemFor(store: String, gtin: String): BasketItem? {
+        val products = barcodeKinds.value.filter { it.store == store && it.productId != null && it.codes.any { code -> productGtin(code) == gtin } }.mapNotNull { it.productId }.toSet()
+        if (products.isEmpty()) return null
+        return _items.value.firstOrNull { !it.isGroup && !it.checked && it.match(store)?.effective?.id in products }
+    }
+
+    /**
+     * A scan that no list item claimed (typically a weighed label) said by hand to be [item]: the extra is taken
+     * back, the item is ticked, the code stays for the till and the map learns what this item carries.
+     */
+    suspend fun linkScan(scan: TripScan, item: BasketItem, store: String) {
+        updateTillCodes { list -> list.map { if (it.scanId == scan.id) it.copy(scanId = null, itemId = item.id, title = item.text) else it } }
+        removeScan(scan)
+        markBought(item, store, item.match(store)?.effective)
+        val raw = tillCodes.value.firstOrNull { it.itemId == item.id }?.raw ?: scan.barcode
+        reportBarcodeKind(store, item, raw)
+    }
 
     /** Scanned in the store while shopping: kept here (offline too) until the server has resolved and recorded it. */
     val tripScans = MutableStateFlow<List<TripScan>>(offline?.load<List<TripScan>>("trip-scans") ?: emptyList())
@@ -625,14 +694,21 @@ class BasketRepository(
     fun knownLabel(gtin: String): ScannedLabel? = barcodes.known(gtin, _stock.value)
     suspend fun resolveLabel(gtin: String): ScannedLabel? = barcodes.resolve(gtin, _stock.value)
 
-    suspend fun scanItem(store: String, barcode: String, at: Long = System.currentTimeMillis()) {
+    suspend fun scanItem(store: String, barcode: String, at: Long = System.currentTimeMillis(), format: Int? = null) {
         // Show a name and a picture straight away when the phone has seen the code before; a bare number tells
         // the user nothing about what they just scanned.
         val gtin = productGtin(barcode) ?: barcode
         val scan = TripScan(id = localId(), store = store, barcode = gtin, at = at, label = knownLabel(gtin))
+        // Kept for the till only when the scanner said how it was printed (shop mode with the relay on).
+        val known = if (format != null) knownItemFor(store, gtin) else null
         queued(PendingOp(type = "scanItem", itemId = scan.id, store = store, text = barcode, at = scan.at, basketId = _currentBasketId.value), optimistic = {
             tripScans.update { list -> list.filter { System.currentTimeMillis() - it.at < 24 * 60 * 60 * 1000 } + scan }
             offline?.save("trip-scans", tripScans.value)
+            if (format != null) updateTillCodes { list ->
+                list + TillCode(id = localId(), store = store, raw = barcode.trim(), format = format, at = at, scanId = scan.id, itemId = known?.id, title = known?.text ?: scan.label?.title)
+            }
+            // Seen with this code before: tick it now, the server does the same when the scan reaches it.
+            if (known != null) patchLocal(known.id) { it.copy(checked = true, boughtAt = at, assignedStore = store) }
         })
         // Only ask elsewhere when the backend is out of reach; when it answers, its product wins anyway.
         if (scan.label == null && !online.value) scope.launch { labelScan(scan.id, gtin) }
@@ -645,6 +721,7 @@ class BasketRepository(
     suspend fun removeScan(scan: TripScan) {
         queued(PendingOp(type = "unscan", itemId = scan.id, store = scan.store, text = scan.barcode, at = scan.at), optimistic = {
             tripScans.update { list -> list.filterNot { it.id == scan.id } }
+            updateTillCodes { list -> list.filterNot { it.scanId == scan.id } }
             offline?.save("trip-scans", tripScans.value)
         })
     }
