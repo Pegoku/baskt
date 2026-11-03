@@ -1,7 +1,12 @@
 # AH: scan with the phone, pay at the till
 
-Two parts: the **till relay** that ships now (experimental), and the notes for capturing the Appie app's own
-zelfscan traffic so a real integration can follow.
+Two parts: the **till relay** that ships now (experimental), and the **confirmed protocol** for a real in-app
+self-scan integration (the in-store capture is done; see "Confirmed protocol" below for the authoritative spec).
+
+> Building the real integration? Read **"Confirmed protocol"** + **"What a baskt client needs"** below; those are
+> the authoritative, capture-verified spec. Everything under "How the capture was obtained" is historical (already
+> done) and only needed to re-capture on a new app version. Ignore the pre-capture guesses in "What the APK
+> revealed → Headers"; the real headers are in the confirmed protocol.
 
 ## 1. Till relay (in the app now)
 
@@ -42,7 +47,7 @@ curl -H "Authorization: Bearer $APP_API_TOKEN" "$BASE/api/v1/purchases/barcode-k
 
 Each entry has `kind` (`pack`, `label`, `none`), the product id or item text, and the last 5 raw codes.
 
-## 2. Capturing Appie's zelfscan (for the real integration)
+## 2. Real self-scan integration (spec, capture done)
 
 Self-scan is **not** on the public `api.ah.nl` and **not** in the GraphQL schema (checked against the
 gwillem/appie-go 2026-01-18 dump). Decompiling Appie 9.47.3 (Flutter app, but the self-scan feature is native
@@ -67,22 +72,22 @@ Kotlin under `nl.ah.appie...selfscan`) gave the shape below.
   `Subtotals`, `Discount`, `BonusInfo`, `Campaigns`, `Message`/`MessageArgs`, `Symbology`, `Redirect`,
   `PaymentStatusResult`, `PaymentTotalsResult`, `ExitgateStatusResult` (+ `.Status`), `ServiceResult`
   (`MemberType`, `StoreFormat`, `StoreType`), `TransactionInfoData` (+ `PaymentMethod`).
-- **Headers seen near the client:** `X-Application`, `Appie-Current-Order-Id`, `AH-Payment-Method`,
-  `X-Correlation-Id`, `Content-Type: application/json`, `User-Agent: Android`, app version `9.47.3`. The exact
-  auth header is in an obfuscated OkHttp interceptor (`c07`); confirm it with the capture rather than guessing.
+- **Headers (pre-capture guess from the dex, now SUPERSEDED):** the decompile suggested `X-Application`,
+  `Appie-Current-Order-Id`, `AH-Payment-Method`, etc. The real self-scan headers turned out to be the `AH-*` set
+  in the confirmed protocol below (no `Authorization`). Use that, not this bullet.
 
 ### Payment happens at the till, not in baskt
 
-Confirmed from the app's own strings ("Go to a self-checkout and scan this code", "First, complete the payment at
-the self-checkout", "You can pay with this at the cash registers on the Zelfscan square"): the standard zelfscan
-flow scans items in the app, then shows a handoff code you scan at a Zelfscan self-checkout, where you pay with a
-normal bank card / PIN. In-app "Online payment" (Adyen: iDEAL, card, AH Wallet) exists but is optional.
+The standard zelfscan flow scans items in the app, then at checkout you go to a betaalpaal and pay with a normal
+bank card / PIN. The capture (below) proved the "code to scan at checkout" and the gate code are both **just your
+Bonuskaart EAN13**, not a special generated code. In-app "Online payment" (Adyen: iDEAL, card, AH Wallet) exists
+but is optional and irrelevant here.
 
-So a baskt self-scan client only needs to: (1) start a trip, (2) add each scanned item, (3) show the checkout
-handoff code. It never touches payment (no Adyen, no money flow through baskt), which keeps it in the read-only
-scope. Other features seen: weighed/loose produce (scan the scale label), Bonus / Bonus Box / coupons / Koopzegels
-applied live, deposit (statiegeld) and gift cards, age-restricted items verified by staff, random checks
-("controle"), and an exit-gate code after paying.
+So a baskt self-scan client only needs to: (1) start a trip, (2) add each scanned item, (3) at checkout show the
+Bonuskaart barcode for the betaalpaal. It never touches payment (no Adyen, no money flow through baskt), which
+keeps it in the read-only scope. Other features seen: weighed/loose produce (scan the scale label), Bonus / Bonus
+Box / coupons / Koopzegels applied live, deposit (statiegeld) and gift cards, age-restricted items verified by
+staff, random checks ("controle"), and an exit-gate code after paying.
 
 ### Confirmed protocol (decrypted in-store capture, 2026-11-03, store 1379)
 
@@ -130,9 +135,30 @@ mint a special checkout code and does not handle the payment.
    Quantity edits via `PUT .../items/{barcode} {quantity}` (0 = remove).
 4. At checkout: just show the Bonuskaart barcode (EAN13) for the betaalpaal. No payment code, no Adyen.
 
-Open questions remaining: whether `GET /sessions` needs the `{uuid}` pre-registered with the member via an
-`api.ah.nl` call (none was seen before it in the capture, so likely not), and the `eanRis`/`flags` semantics for
-weighed items. Both can be read from the saved transcript.
+Build pointers (what to reuse in the repo):
+
+- **`AH-Uid` (bonuskaart):** the app already stores the AH loyalty card locally in
+  `settings.loyaltyCards["AH"]` (`android/.../data/Settings.kt`); that 13-digit EAN is the `AH-Uid`. (The
+  server-side AH account in `backend/src/stores/ah-account.ts` has the member but not needed for this; the client
+  runs on the phone.)
+- **Scanner:** reuse `android/.../ui/common/BarcodeScan.kt` (`rememberBarcodeScannerWithFormat`) to read EANs.
+- **Checkout barcode:** reuse `android/.../ui/shop/LoyaltyCard.kt` (`BarcodeImage` / full-screen card) to show the
+  Bonuskaart EAN13 at the betaalpaal; it already renders EAN13.
+- **Where it lives:** a new Android data class + a Compose screen, store-Wi-Fi-only. Do NOT route through the Bun
+  backend (it cannot reach `172.16.8.3`). The till relay (`data/TillCodes.kt`, `ui/shop/TillRelay.kt`) is a
+  separate, already-shipped feature; this is a different flow (live AH basket, not re-drawn codes).
+- **Full decoded example:** `backend/data/captures/selfscan-transcript.txt` (git-ignored) is the complete real
+  session (every request + response body) to model against; the raw `store.pcap` + `store.keylog` are beside it
+  (open in Wireshark with the keylog as the TLS secrets log).
+
+Open questions remaining (read the transcript to resolve): whether `GET /sessions` needs the `{uuid}`
+pre-registered with the member via an `api.ah.nl` call (none was seen before it in the capture, so likely not),
+and the `eanRis`/`flags` semantics for weighed/BOK items.
+
+## 3. How the capture was obtained (historical, done; only for re-capturing on a new app version)
+
+The capture that produced the confirmed protocol above is finished. This section is kept only so the capture can
+be repeated if AH ships a new app version or changes the protocol. A builder does not need any of it.
 
 ### Non-rooted capture pipeline (built 2026-11-03, phone `42271FDJG0019N`)
 
@@ -152,8 +178,8 @@ The patched build is already made on this machine:
 On the phone: install **PCAPdroid** + its **mitm addon**, install PCAPdroid's CA as a *user* certificate, then
 add a **Decryption rule** for the Albert Heijn app (menu -> Decryption rules -> + -> App). The "Target apps"
 toggle on the Status screen only scopes capture; TLS is decrypted only for apps/hosts in the Decryption rules.
-Use **PCAPNG** dump format so decrypted payloads are saved to the file (a plain `.pcap` stores only the
-encrypted packets; the decrypted view is otherwise only in the Connections UI).
+The free "PCAP file" dump writes a `.pcap` plus a `.keylog` (TLS secrets); decrypt offline with that keylog (see
+the tshark command below). PCAPNG is not needed.
 
 ### Dart vs native: why home decryption of `api.ah.nl` fails but self-scan should work (verified 2026-11-03)
 
@@ -184,11 +210,16 @@ On store Wi-Fi:
 2. Home -> store (winkel) mode -> the scan icon in the search bar -> **In-store Zelfscan**. The **trip-create
    request is the one we need**: it answers both open questions above.
 3. Scan a couple of pack items, one weighed label, one DataMatrix item, and remove one again.
-4. Read the decrypted requests: PCAPdroid -> Connections -> tap the `selfscan.store.ah.nl` (or
-   `api.ah.nl/handscanner`) HTTPS connection -> **PAYLOAD -> SHOW DATA**, and screenshot the request line, the
-   headers (especially `Authorization`), and the body. Even truncated, the request headers fit.
+4. Stop the capture and pull the files. What actually worked (2026-11-03): PCAPdroid's free "PCAP file" dump
+   writes a plain `.pcap` **plus a matching `.keylog`** (the TLS secrets). `adb pull` both, then decrypt offline:
 
-Getting a full file instead of screenshots: PCAPdroid's **PCAPNG** format (the only dump that saves decrypted
-payloads) is a paid one-time unlock; a plain `.pcap` stores only the encrypted packets. Either buy the unlock for
-a clean file to drop in `backend/data/captures/` (git-ignored; it holds your tokens), or just use the live
-PAYLOAD -> SHOW DATA screenshots above, which are enough to model the read-only client with the DTOs here.
+   ```sh
+   tshark -r store.pcap -o tls.keylog_file:store.keylog -d tcp.port==8881,tls \
+     -Y 'tcp.port==8881 && (http.request || http.response)' \
+     -T fields -e frame.number -e http.request.method -e http.request.uri -e http.request.line \
+     -e http.response.code -e http.file_data
+   ```
+
+   (`http.file_data` is hex; `bytes.fromhex(...).decode()` it.) No paid PCAPNG unlock needed. The self-scan
+   headers are `AH-*`, not `Authorization`. Drop the files in `backend/data/captures/` (git-ignored; they hold the
+   bonuskaart + session token).
