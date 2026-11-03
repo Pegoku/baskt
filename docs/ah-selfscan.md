@@ -92,11 +92,29 @@ The patched build is already made on this machine:
 - Caveat: a resigned payment app can trip Play Integrity. Read-only (start trip, read basket) is usually gated
   less than payment; if self-scan refuses to start, rooting (Magisk + system CA) is the fallback.
 
-On the phone: install **PCAPdroid** + its **mitm addon**, install PCAPdroid's CA as a *user* certificate, set the
-decryption target to `com.icemobile.albertheijn`.
+On the phone: install **PCAPdroid** + its **mitm addon**, install PCAPdroid's CA as a *user* certificate, then
+add a **Decryption rule** for the Albert Heijn app (menu -> Decryption rules -> + -> App). The "Target apps"
+toggle on the Status screen only scopes capture; TLS is decrypted only for apps/hosts in the Decryption rules.
+Use **PCAPNG** dump format so decrypted payloads are saved to the file (a plain `.pcap` stores only the
+encrypted packets; the decrypted view is otherwise only in the Connections UI).
 
-**Verify at home first** (don't waste the store trip): open the patched Appie, start a PCAPdroid mitm capture, do
-any logged-in action, and confirm decrypted `api.ah.nl` JSON appears.
+### Dart vs native: why home decryption of `api.ah.nl` fails but self-scan should work (verified 2026-11-03)
+
+Tested on the phone: with the CA installed (Trusted credentials -> User -> "PCAPdroid CA") and a decryption rule
+for the app, `api.ah.nl` still came through as raw TLS and the app kept working. That is **not pinning**. The
+content API is served by the app's **Dart/Flutter** layer (`package:http`, `ah_module_data/src/network/graphql/...`,
+`SecurityContext_TrustBuiltinRoots`), and Dart ships its own CA roots and ignores Android's user CAs and
+network-security-config. PCAPdroid passthrough'd those connections, so the app worked but nothing decrypted.
+
+Self-scan is different: its endpoints, DTOs and the `:8881` host are **entirely in the native Kotlin dex, with
+zero presence in the Dart image**. The self-scan client is native OkHttp/Ktor with no `CertificatePinner`,
+`X509TrustManager` or `sslSocketFactory` of its own; it uses the app's shared custom trust manager (`ciw`), which
+apk-mitm already neutralized. Native TLS honours the Android trust store + the patched `nsc_mitm.xml`. So the
+**self-scan traffic should decrypt** with this exact setup even though the Dart content API does not.
+
+Residual risk: if self-scan surprisingly does not decrypt in-store, the content path is Dart-style TLS and the
+fix is **reFlutter** (patch `libflutter.so` to disable Dart cert validation and route through a proxy), not more
+Android-CA work.
 
 ### In the store
 
