@@ -44,34 +44,68 @@ Each entry has `kind` (`pack`, `label`, `none`), the product id or item text, an
 
 ## 2. Capturing Appie's zelfscan (for the real integration)
 
-The Appie app's own phone self-scan is not in the public GraphQL schema (checked against the
-gwillem/appie-go 2026-01-18 dump: only delivery checkout, no in-store session). It is probably a separate REST
-service, and it needs the store's Wi-Fi. To build it, baskt needs the requests from a real session.
+Self-scan is **not** on the public `api.ah.nl` and **not** in the GraphQL schema (checked against the
+gwillem/appie-go 2026-01-18 dump). Decompiling Appie 9.47.3 (Flutter app, but the self-scan feature is native
+Kotlin under `nl.ah.appie...selfscan`) gave the shape below.
 
-### Setup (before going to the store)
+### What the APK revealed
 
-Android does not trust user certificates for apps by default, so one of:
+- **Host:** `https://selfscan.store.ah.nl:8881/api/selfscan/v2.0/` (class `qhs`, the `AppieSelfscanEnvironment`).
+  A second `HandscannerSelfscanEnvironment` adds a websocket endpoint, for the store's physical handheld
+  scanners, not the phone.
+- **`selfscan.store.ah.nl` resolves to `172.16.8.3`** (a private, in-store-only address. AH's public DNS hands
+  out a LAN IP), so this server is reachable **only from a device on the store's Wi-Fi**. The baskt backend (at
+  home) can never reach it. A real self-scan client therefore has to live in the **Android app** and run only on
+  store Wi-Fi; this is the one place baskt talks to a store directly.
+- **Session = a "trip" keyed by UUID.** REST paths:
+  - `trips/{uuid}` (the session; GET reads the basket)
+  - `trips/{uuid}/items`, `trips/{uuid}/items/{barcode}` (add / adjust; fields `barcode`, `quantity`, `symbology`)
+  - `trips/{uuid}/totals`
+  - `trips/{uuid}/payment/status`
+  - `trips/{uuid}/exitgate/status` (gate code after paying)
+- **DTOs** under `nl.ah.appie.dto.selfscan` / `.zelfscan`: `Basket`, `Item` (+ `Item.Icons`), `UnitInfo`,
+  `Subtotals`, `Discount`, `BonusInfo`, `Campaigns`, `Message`/`MessageArgs`, `Symbology`, `Redirect`,
+  `PaymentStatusResult`, `PaymentTotalsResult`, `ExitgateStatusResult` (+ `.Status`), `ServiceResult`
+  (`MemberType`, `StoreFormat`, `StoreType`), `TransactionInfoData` (+ `PaymentMethod`).
+- **Headers seen near the client:** `X-Application`, `Appie-Current-Order-Id`, `AH-Payment-Method`,
+  `X-Correlation-Id`, `Content-Type: application/json`, `User-Agent: Android`, app version `9.47.3`. The exact
+  auth header is in an obfuscated OkHttp interceptor (`c07`); confirm it with the capture rather than guessing.
 
-- **Rooted phone**: Magisk plus a module that moves user CAs into the system store, then any proxy works.
-- **Not rooted**: patch the Appie APK with `npx apk-mitm appie.apk` (trusts user CAs and strips pinning), install
-  the patched build. It may refuse to run if it checks its signature or Play Integrity; then root is the way.
+### Still to confirm with one captured request
 
-Then capture **on the phone**, since it has to stay on store Wi-Fi: **PCAPdroid** with its mitm addon decrypts
-TLS on-device and exports a pcap plus keylog (or HAR). Install its CA as a user certificate.
+1. How a trip is created (does it need a store id from an entrance QR, or just `last_known_store_number` + the
+   member token) and the create path/body.
+2. The exact `Authorization` value on the port-8881 host (member bearer token, same as the rest of the app?).
 
-Check at home first: log in to the patched Appie, open a product, and confirm PCAPdroid shows decrypted
-`api.ah.nl` requests.
+### Non-rooted capture pipeline (built 2026-11-03, phone `42271FDJG0019N`)
+
+Appie's `network_security_config` does not trust user CAs and there is no app-level pinning on this host, so the
+app is repackaged to trust a user CA; then PCAPdroid does the on-device TLS interception on store Wi-Fi.
+
+The patched build is already made on this machine:
+
+- Pulled 3 split APKs with `adb`, bundled them, ran `apk-mitm --apktool apktool_3.0.3.jar` (the Play-store apktool
+  was too old for target SDK 36 + sparse encoding). It adds `res/xml/nsc_mitm.xml` with a `<base-config>`
+  trusting `user` + `system` certs, repoints the manifest, strips pinning, resigns with a debug key.
+- Result: `/tmp/appie/patched/` (base + 2 splits, v3-signed). Install with `/tmp/appie/install-patched.sh`
+  (uninstalls the Play build first, so it logs you out of Appie; re-login in the patched one).
+- Caveat: a resigned payment app can trip Play Integrity. Read-only (start trip, read basket) is usually gated
+  less than payment; if self-scan refuses to start, rooting (Magisk + system CA) is the fallback.
+
+On the phone: install **PCAPdroid** + its **mitm addon**, install PCAPdroid's CA as a *user* certificate, set the
+decryption target to `com.icemobile.albertheijn`.
+
+**Verify at home first** (don't waste the store trip): open the patched Appie, start a PCAPdroid mitm capture, do
+any logged-in action, and confirm decrypted `api.ah.nl` JSON appears.
 
 ### In the store
 
-Start the capture just before opening zelfscan in Appie, and keep it running until you are past the gate.
+On store Wi-Fi, start the PCAPdroid capture, then:
 
-1. Start zelfscan (note how: QR at the entrance, choosing the store, Wi-Fi detection).
-2. Scan a few pack items, one weighed label, one DataMatrix item, and remove one item again.
-3. Go to the betaalpaal and screenshot the code Appie shows (and note whether the till scans the phone or the
-   phone scans the till).
-4. Pay, and screenshot the gate code.
-5. If there is a random check ("controle"), note when it is announced.
+1. Start zelfscan (note how: QR at the entrance, choosing the store, Wi-Fi detection). The **trip-create request is
+   the one we need**: it answers both open questions above.
+2. Scan a couple of pack items, one weighed label, one DataMatrix item, and remove one again.
+3. Stop the capture and export the PCAP/HAR. (For read-only you can stop before paying.)
 
-Stop the capture and put the export plus screenshots in `backend/data/captures/` (ignored by git, it will hold
-your tokens). Then baskt can start a session, add each scanned code to it, and show Appie's own till code.
+Put the export in `backend/data/captures/` (git-ignored; it holds your tokens). Then the in-app self-scan client
+can be modelled from it plus the DTOs above.
