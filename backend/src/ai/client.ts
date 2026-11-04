@@ -135,14 +135,20 @@ export async function chatJson<T>(
       const choice = payload.choices?.[0];
       const usage = (
         payload as {
-          usage?: { prompt_tokens?: number; completion_tokens?: number };
+          usage?: {
+            prompt_tokens?: number;
+            completion_tokens?: number;
+            prompt_tokens_details?: { cached_tokens?: number };
+          };
         }
       ).usage;
+      // Groq caches repeated prompt prefixes (system prompt + tools) and does not count them toward the rate limit.
+      const cached = usage?.prompt_tokens_details?.cached_tokens ?? 0;
       promptTokens += usage?.prompt_tokens ?? 0;
       completionTokens += usage?.completion_tokens ?? 0;
       noteUsage(target.id, usage?.prompt_tokens ?? 0, usage?.completion_tokens ?? 0);
       console.log(
-        `[ai] ${target.id} ${target.model} ${usage?.prompt_tokens ?? "?"}+${usage?.completion_tokens ?? "?"} tokens, ${Math.round(performance.now() - started)} ms`,
+        `[ai] ${target.id} ${target.model} ${usage?.prompt_tokens ?? "?"}+${usage?.completion_tokens ?? "?"} tokens${cached ? ` (${cached} cached)` : ""}, ${Math.round(performance.now() - started)} ms`,
       );
       const content = choice?.message?.content;
       // Some models (gpt-oss) emit a native function call when the prompt describes tools, even though
