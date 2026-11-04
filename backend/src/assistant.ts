@@ -19,14 +19,17 @@ import { localizeRecipe } from "@/matching/localize";
 import { chooseMatch, getItem, getMatch } from "@/matching/pipeline";
 import { searchAllSources } from "@/matching/sources";
 import {
+  addSkipped,
   createGroupFromUrl,
   createItem,
   deleteItemWithChildren,
+  rescaleGroup,
+  searchDeals,
   updateItemFields,
 } from "@/routes/basket";
 import { fetchRecipe } from "@/routes/recipes";
 import { collectProductIds, itemView } from "@/serialize";
-import { inStock, listStock, matchByText } from "@/stock";
+import { addStock, inStock, listStock, matchByText, removeStock } from "@/stock";
 import { productDetails } from "@/stores/details";
 import { allStores } from "@/stores/registry";
 import { productsByIds, searchStore } from "@/stores/search";
@@ -58,23 +61,39 @@ function save(row: Omit<ChatMessageRow, "id" | "createdAt">): ChatMessageRow {
   return full;
 }
 
+/** Recipe folders, so the model can rescale them or add the ingredients skipped because they were in stock. */
+function recipeFolders(rows: Array<typeof basketItems.$inferSelect>) {
+  return rows
+    .filter((row) => row.kind === "group" && row.recipeJson)
+    .map((row) => ({
+      folderId: row.id,
+      recipe: row.text,
+      servings: row.recipeJson?.currentServings ?? row.recipeJson?.baseServings ?? null,
+      skippedInStock: (row.recipeJson?.skipped ?? []).map((entry) => entry.text),
+    }));
+}
+
 /** Compact view of the basket for the model: ids, texts, quantities, and on request the per-store picks. */
 function basketSnapshot(basketId: string, detail: boolean) {
-  const items = db()
+  const rows = db()
     .select()
     .from(basketItems)
     .where(eq(basketItems.basketId, basketId))
     .orderBy(asc(basketItems.sortOrder))
-    .all()
-    .filter((item) => item.kind === "item");
+    .all();
+  const folders = recipeFolders(rows);
+  const items = rows.filter((item) => item.kind === "item");
   // Without the per-store picks a whole basket fits in one tool result; with them ~7 items fill the budget.
   if (!detail)
-    return items.map((item) => ({
-      itemId: item.id,
-      text: item.text,
-      quantity: item.quantity,
-      checked: item.checked,
-    }));
+    return [
+      ...folders,
+      ...items.map((item) => ({
+        itemId: item.id,
+        text: item.text,
+        quantity: item.quantity,
+        checked: item.checked,
+      })),
+    ];
   const ids = items.map((item) => item.id);
   const matches = ids.length
     ? db()
@@ -89,7 +108,7 @@ function basketSnapshot(basketId: string, detail: boolean) {
       product,
     ]),
   );
-  return items.map((item) => {
+  return [...folders, ...items.map((item) => {
     const view = itemView(
       item,
       matches.filter((match) => match.itemId === item.id),
@@ -118,7 +137,7 @@ function basketSnapshot(basketId: string, detail: boolean) {
         }),
       ),
     };
-  });
+  })];
 }
 
 /** Items and recipe folders sitting directly in the basket; deleting a folder takes its children with it. */
@@ -165,6 +184,10 @@ function describeTool(call: ToolCall): string {
       return "Checking what you have in stock";
     case "list_purchases":
       return "Looking at what you bought";
+    case "list_deals":
+      return args.query
+        ? `Looking for deals on “${String(args.query)}”${args.store ? ` at ${storeName(args.store)}` : ""}`
+        : `Looking at this week's deals${args.store ? ` at ${storeName(args.store)}` : ""}`;
     case "search_products":
       return `Searching ${storeName(args.store)} for “${String(args.query ?? "")}”`;
     case "product_details":
@@ -211,6 +234,18 @@ const TOOL_SPECS = [
     description:
       "What the household bought recently (ticked off while shopping or from scanned receipts), newest first: date, store, product name, quantity, price, productId.",
     parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "list_deals",
+    description:
+      "This week's promotions (bonus/aanbiedingen): store, title, deal text, price, valid until, productId when it is one product.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "short Dutch keyword, e.g. koffie; omit for all deals (long)" },
+        store: { type: "string", description: "store code; omit for every store" },
+      },
+    },
   },
   {
     name: "search_products",
@@ -274,6 +309,7 @@ const TOOL_RESULT_CHARS: Record<string, number> = {
   list_basket: 6000,
   list_stock: 4000,
   list_purchases: 5000,
+  list_deals: 4000,
   product_details: 3000,
 };
 
@@ -303,6 +339,7 @@ export async function runTool(call: ToolCall, basketId: string): Promise<unknown
     case "list_stock": {
       const { listStock } = await import("@/stock");
       return listStock().map((row) => ({
+        stockId: row.id,
         text: row.text,
         quantity: row.quantityText,
         productId: row.productId,
@@ -332,6 +369,23 @@ export async function runTool(call: ToolCall, basketId: string): Promise<unknown
             productId,
           };
         }),
+      );
+    }
+    case "list_deals": {
+      const store = typeof args.store === "string" && args.store ? args.store : null;
+      if (store && !enabledStoreCodes().includes(store))
+        return { error: `store must be one of ${enabledStoreCodes().join(", ")}` };
+      const { results } = await searchDeals(typeof args.query === "string" ? args.query : "", store);
+      return results.flatMap((result) =>
+        result.deals.map((deal) => ({
+          store: result.store,
+          title: deal.title,
+          deal: deal.dealText,
+          priceCents: deal.priceCents,
+          regularPriceCents: deal.regularPriceCents,
+          validUntil: deal.validUntil,
+          productId: deal.product ? deal.productId : null, // only ids stored as products, so the answer can link them
+        })),
       );
     }
     case "search_products": {
@@ -423,8 +477,8 @@ Answer in ${language}. Be brief.
 
 Work in steps. Each turn return ONLY a JSON object:
 {"answer": string, "tool": {"name","args"} | null, "proposal": {"summary", "changes": [...]} | null, "recipes": [{"title","url","source","imageUrl"}] | null, "products": [productId] | null}
-Tools: list_basket {detail} (every item: itemId, text, quantity; detail=true also gives the per-store pick with productId/title/size/price) · list_stock (what is at home) · list_purchases (what was bought recently, newest first) · search_products {store, query} (store codes: STORES) · product_details {productId} (brand, description, availability) · check_product_image {productId, question} (a vision model looks at the packaging photos and answers) · search_recipes {query} (recipe cards) · read_recipe {url} (ingredients + steps).
-Change types (real itemIds/productIds from tool results only): {"type":"add","text","quantity"} · {"type":"delete","itemId","text"} · {"type":"delete_all"} (empties the basket; the app expands it to one row per item) · {"type":"rename","itemId","from","to"} · {"type":"quantity","itemId","text","quantity"} · {"type":"replace","itemId","text","store","productId","from","to"} · {"type":"skip","itemId","text","store"} · {"type":"add_recipe_folder","url","title"}.
+Tools: list_basket {detail} (every item: itemId, text, quantity; detail=true also gives the per-store pick with productId/title/size/price) · list_stock (what is at home) · list_purchases (what was bought recently, newest first) · search_products {store, query} (store codes: STORES) · product_details {productId} (brand, description, availability) · check_product_image {productId, question} (a vision model looks at the packaging photos and answers) · list_deals {query?, store?} (this week's promotions) · search_recipes {query} (recipe cards) · read_recipe {url} (ingredients + steps).
+Change types (real itemIds/productIds from tool results only): {"type":"add","text","quantity"} · {"type":"delete","itemId","text"} · {"type":"delete_all"} (empties the basket; the app expands it to one row per item) · {"type":"rename","itemId","from","to"} · {"type":"quantity","itemId","text","quantity"} · {"type":"replace","itemId","text","store","productId","from","to"} · {"type":"skip","itemId","text","store"} · {"type":"add_recipe_folder","url","title"} · {"type":"stock_add","text","quantityText"} (the user has it at home) · {"type":"stock_remove","stockId","text"} (ran out) · {"type":"servings","folderId","servings"} (rescale a recipe folder) · {"type":"add_skipped","folderId"} (add a folder's skipped-because-in-stock ingredients).
 Rules:
 - Emptying the basket ("delete everything", "clear the list"): ONE {"type":"delete_all"} change, never a list of deletes, and no need to call list_basket first.
 - A tool result ending in "only the first N of M entries are shown" is incomplete: never conclude from it that the basket is empty or that you have seen everything.
@@ -436,6 +490,9 @@ Rules:
 - Never ask permission in text; put ALL changes in "proposal" in the same turn. The app shows it as a card titled "summary" (e.g. "What you still need to buy for pancakes").
 - "answer" is ONLY for answering a question (e.g. cooking time) or a warning; "" when the card says it all; NEVER name items that are in "changes". Plain text, no markdown.
 - Recipes: ALWAYS search_recipes first and return real results in "recipes" (max 5); never invent one. Use read_recipe when the user is specific.
+- Deals ("what's on offer", "is coffee on bonus?"): list_deals with a short Dutch keyword; name the deals in "answer" and list their productIds in "products".
+- Stock ("I'm out of eggs", "I still have rice"): list_stock first for stock_remove ids; stock_add/stock_remove change what is at home, not the basket.
+- Recipe folders (folderId, servings, skippedInStock come from list_basket): "make it for 6" is one "servings" change; "add the skipped ones too" is one "add_skipped".
 - Missing ingredients: call list_stock and list_basket first, skip what is there, then one "add" per missing item instead of listing them.
 - Items the user names explicitly: include EVERY one as "add" even if already in basket/stock (the app labels duplicates). Never drop a named item.
 - "add" text is a short generic idea ("penne 500 g", "eggs 10"), never a brand product title.
@@ -466,6 +523,14 @@ function describeChange(change: ProposedChange): string {
       return `skip "${change.text}" at ${change.store}`;
     case "add_recipe_folder":
       return `add recipe folder "${change.title}"`;
+    case "stock_add":
+      return `mark "${change.text}" as in stock`;
+    case "stock_remove":
+      return `remove "${change.text}" from stock`;
+    case "servings":
+      return `rescale "${change.title}" to ${change.servings} servings`;
+    case "add_skipped":
+      return `add skipped ingredients of "${change.title}"`;
   }
 }
 
@@ -636,6 +701,54 @@ export function sanitizeProposal(
             title: typeof change.title === "string" ? change.title : change.url,
           });
         break;
+      case "stock_add": {
+        const text = typeof change.text === "string" ? change.text.trim() : "";
+        if (!text) break;
+        const quantityText =
+          typeof change.quantityText === "string" && change.quantityText.trim()
+            ? change.quantityText.trim()
+            : typeof change.quantity === "string" || typeof change.quantity === "number"
+              ? String(change.quantity)
+              : null;
+        changes.push({ type: "stock_add", text, quantityText });
+        break;
+      }
+      case "stock_remove": {
+        const stockId = typeof change.stockId === "string" ? change.stockId : null;
+        // An id when the model has one, else the stock entry its text names.
+        const row =
+          stockRows.find((entry) => entry.id === stockId) ??
+          (typeof change.text === "string" ? inStock(change.text, stockRows) : null);
+        if (row && !changes.some((done) => done.type === "stock_remove" && done.stockId === row.id))
+          changes.push({ type: "stock_remove", stockId: row.id, text: row.text });
+        break;
+      }
+      case "servings":
+      case "add_skipped": {
+        const folderId =
+          typeof change.folderId === "string" ? change.folderId : itemId;
+        const folder = folderId ? getItem(folderId) : null;
+        if (!folder || folder.kind !== "group" || !folder.recipeJson || folder.basketId !== basketId) break;
+        const info = folder.recipeJson;
+        if (change.type === "servings") {
+          const servings = Number(change.servings);
+          if (Number.isInteger(servings) && servings >= 1 && servings <= 50)
+            changes.push({
+              type: "servings",
+              itemId: folder.id,
+              title: folder.text,
+              from: info.currentServings ?? info.baseServings ?? null,
+              servings,
+            });
+        } else if (info.skipped?.length)
+          changes.push({
+            type: "add_skipped",
+            itemId: folder.id,
+            title: folder.text,
+            items: info.skipped.map((entry) => entry.text),
+          });
+        break;
+      }
     }
   }
   if (!changes.length) return null;
@@ -928,6 +1041,25 @@ export async function applyProposal(
         case "add_recipe_folder":
           createGroupFromUrl(change.url, row.basketId);
           break;
+        case "stock_add":
+          addStock(change.text, change.quantityText);
+          break;
+        case "stock_remove":
+          // Already gone (removed by hand since) is the outcome the user wanted.
+          removeStock(change.stockId);
+          break;
+        case "servings": {
+          const folder = getItem(change.itemId);
+          if (!folder?.recipeJson) throw new Error("recipe folder no longer exists");
+          await rescaleGroup(folder, change.servings);
+          break;
+        }
+        case "add_skipped": {
+          const folder = getItem(change.itemId);
+          if (!folder || folder.kind !== "group") throw new Error("recipe folder no longer exists");
+          addSkipped(folder);
+          break;
+        }
       }
       applied.add(index);
       results.push({ index, ok: true });

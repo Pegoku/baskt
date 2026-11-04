@@ -256,7 +256,11 @@ export type ProposedChange =
   | { type: "quantity"; itemId: string; text: string; quantity: number }
   | { type: "replace"; itemId: string; text: string; store: string; productId: string; from: string | null; to: string }
   | { type: "skip"; itemId: string; text: string; store: string }
-  | { type: "add_recipe_folder"; url: string; title: string };
+  | { type: "add_recipe_folder"; url: string; title: string }
+  | { type: "stock_add"; text: string; quantityText: string | null }
+  | { type: "stock_remove"; stockId: string; text: string }
+  | { type: "servings"; itemId: string; title: string; from: number | null; servings: number }
+  | { type: "add_skipped"; itemId: string; title: string; items: string[] };
 
 export type Proposal = { summary: string; changes: ProposedChange[]; applied: number[] | null };
 export type RecipeCard = { title: string; url: string; source: string | null; imageUrl: string | null };

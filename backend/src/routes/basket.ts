@@ -380,6 +380,26 @@ basket.get("/groups/:id/recipe", async (c) => {
   return c.json(await localizeRecipe({ title: info.title, sourceUrl: info.sourceUrl, servings: info.servings, ingredientLines: info.ingredientLines, imageUrl: info.imageUrl ?? null, steps: info.steps ?? [] }));
 });
 
+/** Rebuilds a recipe folder's children for another number of servings (no hand edits to keep). */
+export async function rescaleGroup(group: BasketItemRow, servings: number) {
+  const info = group.recipeJson!;
+  const recipe = info.sourceUrl ? { title: info.title, sourceUrl: info.sourceUrl, servings: info.servings, ingredientLines: info.ingredientLines } : null;
+  db().update(basketItems).set({ status: "PARSING", updatedAt: now() }).where(eq(basketItems.id, group.id)).run();
+  const items = await itemsForServings(recipe, group.text, info.baseServings ?? null, servings);
+  const database = db();
+  const oldChildren = childrenOf(group.id).map((child) => child.id);
+  if (oldChildren.length) {
+    database.delete(basketItems).where(inArray(basketItems.id, oldChildren)).run();
+    tombstone(oldChildren);
+  }
+  const skipped = createChildren(group.id, items);
+  database
+    .update(basketItems)
+    .set({ recipeJson: { ...info, skipped, currentServings: servings }, status: "MATCHED", error: null, updatedAt: now() })
+    .where(eq(basketItems.id, group.id))
+    .run();
+}
+
 /** Rescales a recipe folder to another number of servings; children are rebuilt from the recipe. */
 basket.post("/groups/:id/servings", async (c) => {
   const group = getItem(c.req.param("id"));
@@ -387,7 +407,6 @@ basket.post("/groups/:id/servings", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { servings?: number; children?: Array<{ id: string; text: string; quantity: number }>; recipe?: { ingredientLines?: string[] } };
   if (typeof body.servings !== "number" || body.servings <= 0 || body.servings > 50) return c.json({ error: { code: "BAD_REQUEST", message: "servings must be 1-50" } }, 400);
   const info = group.recipeJson;
-  const recipe = info.sourceUrl ? { title: info.title, sourceUrl: info.sourceUrl, servings: info.servings, ingredientLines: info.ingredientLines } : null;
   if (Array.isArray(body.children)) {
     const children = childrenOf(group.id);
     if (body.children.length !== children.length || new Set(body.children.map((child) => child.id)).size !== children.length ||
@@ -405,31 +424,21 @@ basket.post("/groups/:id/servings", async (c) => {
     for (const child of body.children) enqueue(child.id);
     return c.json({ group: viewOf(group.id), items: loadViews(childrenOf(group.id)) });
   }
-  db().update(basketItems).set({ status: "PARSING", updatedAt: now() }).where(eq(basketItems.id, group.id)).run();
-  const items = await itemsForServings(recipe, group.text, info.baseServings ?? null, body.servings);
-  const database = db();
-  const oldChildren = childrenOf(group.id).map((child) => child.id);
-  if (oldChildren.length) {
-    database.delete(basketItems).where(inArray(basketItems.id, oldChildren)).run();
-    tombstone(oldChildren);
-  }
-  const skipped = createChildren(group.id, items);
-  database
-    .update(basketItems)
-    .set({ recipeJson: { ...info, skipped, currentServings: body.servings }, status: "MATCHED", error: null, updatedAt: now() })
-    .where(eq(basketItems.id, group.id))
-    .run();
+  await rescaleGroup(group, body.servings);
   return c.json({ group: viewOf(group.id), items: loadViews(childrenOf(group.id)) });
 });
 
 /** Adds the ingredients that were skipped because they were in stock. */
+export function addSkipped(group: BasketItemRow) {
+  const created = (group.recipeJson?.skipped ?? []).map((entry) => createItem(entry.text, entry.quantity, group.id));
+  db().update(basketItems).set({ recipeJson: { ...group.recipeJson!, skipped: [] }, updatedAt: now() }).where(eq(basketItems.id, group.id)).run();
+  return created;
+}
+
 basket.post("/groups/:id/add-skipped", (c) => {
   const group = getItem(c.req.param("id"));
   if (!group || group.kind !== "group") return c.json({ error: { code: "NOT_FOUND", message: "folder not found" } }, 404);
-  const skipped = group.recipeJson?.skipped ?? [];
-  const created = skipped.map((entry) => createItem(entry.text, entry.quantity, group.id));
-  db().update(basketItems).set({ recipeJson: { ...group.recipeJson!, skipped: [] }, updatedAt: now() }).where(eq(basketItems.id, group.id)).run();
-  return c.json({ items: loadViews(created) });
+  return c.json({ items: loadViews(addSkipped(group)) });
 });
 
 basket.post("/groups/:id/items", async (c) => {
@@ -774,9 +783,8 @@ function withProducts(cards: DealCard[]): DealCard[] {
 }
 
 /** Store-wide promotions (not tied to the basket), optionally narrowed by store and keyword. */
-basket.get("/deals/all", async (c) => {
-  const query = c.req.query("q")?.trim() ?? "";
-  const only = c.req.query("store");
+export async function searchDeals(rawQuery: string, only?: string | null) {
+  const query = rawQuery.trim();
   const stores = enabledStoreCodes().filter((code) => !only || code === only);
   // Search by meaning: Dutch synonyms of the typed word (the raw word only when no synonyms came back).
   const expanded = query ? await expandDealQuery(query) : [""];
@@ -806,8 +814,10 @@ basket.get("/deals/all", async (c) => {
       }
     }),
   );
-  return c.json({ query, terms, results, computedAt: now() });
-});
+  return { query, terms, results, computedAt: now() };
+}
+
+basket.get("/deals/all", async (c) => c.json(await searchDeals(c.req.query("q") ?? "", c.req.query("store"))));
 
 /**
  * Order step: decides where each open item is bought. mode "store:AH" = everything at AH (items AH lacks go to
