@@ -58,3 +58,17 @@ fun tillSequence(codes: List<TillCode>, items: List<BasketItem>): List<TillCode>
         if (linked.size == 1 && quantity > 1 && tillCodeKind(code.raw) == "pack") List(quantity) { code } else listOf(code)
     }
 }
+
+/**
+ * What to send AH self-scan for a camera read, best first. The symbology identifier ("]C1", "]d2", "]Q3") is the
+ * scanner's, not part of the code, and AH answers BARCODE_UNKNOWN when it is left on. A GS1 string goes as its
+ * element string first (a weighed label needs its weight or price; an expiry date may carry a markdown), then as
+ * the bare GTIN-13 for a pack code, which the store always knows.
+ */
+fun selfScanCodes(raw: String): List<String> {
+    val text = raw.trim().removePrefix("]d2").removePrefix("]C1").removePrefix("]Q3").removePrefix("]e0").trimStart('\u001d').trimEnd('\u001d')
+    if (text.isEmpty()) return emptyList()
+    if (text.all { it.isDigit() } && text.length <= 14) return listOf(text)
+    val gtin = if (gs1Ais(text) != null && tillCodeKind(text) == "pack") productGtin(text) else null
+    return listOfNotNull(text, gtin).distinct()
+}

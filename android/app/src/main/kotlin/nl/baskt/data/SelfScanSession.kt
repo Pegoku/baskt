@@ -21,6 +21,8 @@ import kotlin.coroutines.resume
 
 enum class SelfScanPhase { OFF, CONNECTING, NO_WIFI, ACTIVE, FAILED }
 
+private const val BARCODE_UNKNOWN = "BARCODE_UNKNOWN"
+
 /** A scan AH refused or that never reached it, shown on its own row until dismissed or scanned again. */
 data class SelfScanIssue(val id: Long, val barcode: String, val title: String, val detail: String? = null)
 
@@ -260,7 +262,7 @@ class SelfScanSession(private val context: Context, private val scope: Coroutine
         }
         _state.update { it.copy(sending = it.sending + code) }
         return try {
-            val envelope = authed { it.add(code) }
+            val envelope = addFirstKnown(selfScanCodes(code).ifEmpty { listOf(code) })
             envelope.result?.basket?.let { basket -> _state.update { it.copy(basket = basket) } }
             val message = envelope.message
             if (message?.isProblem == true) {
@@ -280,6 +282,21 @@ class SelfScanSession(private val context: Context, private val scope: Coroutine
         } finally {
             _state.update { it.copy(sending = it.sending - code) }
         }
+    }
+
+    /** Tries each form of a code until AH knows one; the last answer stands when none is known. */
+    private suspend fun addFirstKnown(codes: List<String>): SsEnvelope<SsBasketResult> {
+        for ((index, candidate) in codes.withIndex()) {
+            val last = index == codes.lastIndex
+            val envelope = try {
+                authed { it.add(candidate) }
+            } catch (e: SelfScanHttpException) {
+                if (last || e.ahMessage?.code != BARCODE_UNKNOWN) throw e
+                continue
+            }
+            if (last || envelope.message?.code != BARCODE_UNKNOWN) return envelope
+        }
+        error("no codes")
     }
 
     /** Sets a line's quantity; 0 removes it. True when AH took the change. */

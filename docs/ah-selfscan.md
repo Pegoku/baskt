@@ -114,6 +114,9 @@ Base `https://selfscan.store.ah.nl:8881/api/selfscan/v2.0/`. Flow:
    per item `description` (e.g. "PIZZADEEG"), `price` (cents), `quantity`, `nasaNr`, `flags` (ART/BONUS/AKTIE/…),
    `bonusInfo.promoLabel`; plus `discounts[]` (bonus text + `discount` cents) and `totals`
    (`subtotal`, `bonusDiscount`, `personalDiscount`, `discount`, `itemCount`, …) and a `transactionId`.
+   Field test 2026-11-04: a GS1-128 sent with the camera's `]C1` symbology prefix (`]C1010871890762987417261114`)
+   comes back `BARCODE_UNKNOWN`. baskt now strips the prefix and sends the element string, then falls back to the
+   bare GTIN-13 for pack codes (01 plus dates/batch only). Still unknown: whether AH takes the element string itself.
 5. `PUT /trips/{uuid}/items/{barcode}`  body `{"quantity":N}` -> set quantity; **`{"quantity":0}` removes** the item.
 6. `GET /trips/{uuid}/payment/totals` -> `{"message":{"code":"GOTO_PAYTOWER","message":"Ga naar een betaalpaal en
    scan onderstaande streepjescode"},"result":{"totals":{"total":1352,…},"barcode":"<bonuskaart>",
