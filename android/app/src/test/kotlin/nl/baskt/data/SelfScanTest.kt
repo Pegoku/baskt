@@ -75,4 +75,14 @@ class SelfScanTest {
         assertNull(decodeSelfScan("<html>502</html>", SsBasketResult.serializer()).result)
         assertNull(decodeSelfScan("", SsService.serializer()).message)
     }
+
+    @Test fun selfScanDropsTheSymbologyAndFallsBackToTheGtin() {
+        // The lettuce from the store: GS1-128 with a GTIN and a best-before date.
+        assertEquals(listOf("010871890762987417261114", "8718907629874"), selfScanCodes("]C1010871890762987417261114"))
+        assertEquals(listOf("010871958748100417261115", "8719587481004"), selfScanCodes("]d2\u001d010871958748100417261115"))
+        assertEquals(listOf("8719587149300"), selfScanCodes("8719587149300"))
+        // A weighed label keeps only the full string: its GTIN alone would not say how much.
+        assertEquals(listOf("0128700000000003310300512"), selfScanCodes("]C10128700000000003310300512"))
+        assertEquals(emptyList<String>(), selfScanCodes("]C1"))
+    }
 }
