@@ -853,6 +853,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         val failed = result.results.filter { !it.ok }
         notify(if (failed.isEmpty()) "Applied ${result.results.size} change${if (result.results.size == 1) "" else "s"}" else "${result.results.size - failed.size} applied, ${failed.size} failed: ${failed.first().error}")
         basket.refresh(false)
+        if (indices.any { message.proposalJson?.changes?.getOrNull(it)?.type?.startsWith("stock_") == true }) basket.refreshStock()
     }
 
     private val _memory = MutableStateFlow<List<Choice>>(emptyList())

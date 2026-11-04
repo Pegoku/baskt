@@ -708,6 +708,10 @@ data class ProposedChange(
     val inStock: Boolean? = null,
     val stockName: String? = null,
     val inList: String? = null,
+    val stockId: String? = null,
+    val quantityText: String? = null,
+    val servings: Int? = null,
+    val items: List<String>? = null,
 )
 
 @Serializable

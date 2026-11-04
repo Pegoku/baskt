@@ -275,7 +275,7 @@ private fun ProposalCard(message: ChatMessage, summary: String, changes: List<Pr
                     if (done) Icon(Icons.Default.Check, contentDescription = "Applied", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                     else Checkbox(checked = index in selected, onCheckedChange = { selected = if (it) selected + index else selected - index })
                     Icon(
-                        when (change.type) { "add", "add_recipe_folder" -> Icons.Default.Add; "delete" -> Icons.Default.Remove; "replace" -> Icons.Default.SwapHoriz; "skip" -> Icons.Default.Remove; else -> Icons.Default.Edit },
+                        when (change.type) { "add", "add_recipe_folder", "add_skipped", "stock_add" -> Icons.Default.Add; "delete", "stock_remove" -> Icons.Default.Remove; "replace" -> Icons.Default.SwapHoriz; "skip" -> Icons.Default.Remove; else -> Icons.Default.Edit },
                         contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Column(modifier = Modifier.weight(1f)) {
@@ -304,6 +304,10 @@ private fun changeTitle(change: ProposedChange): String = when (change.type) {
     "replace" -> "Replace product for “${change.text}”"
     "skip" -> "Skip “${change.text}” at this store"
     "add_recipe_folder" -> "Add recipe folder “${change.title}”"
+    "stock_add" -> "Mark “${change.text}” as in stock"
+    "stock_remove" -> "Remove “${change.text}” from stock"
+    "servings" -> "Make “${change.title}” for ${change.servings}"
+    "add_skipped" -> "Add skipped ingredients to “${change.title}”"
     else -> change.type
 }
 
@@ -315,5 +319,8 @@ private fun changeDetail(change: ProposedChange, storeNames: Map<String, String>
     }
     "replace" -> "${change.from ?: "current pick"} → ${change.to}"
     "add_recipe_folder" -> change.url
+    "stock_add" -> change.quantityText
+    "servings" -> change.from?.let { "$it → ${change.servings} servings" }
+    "add_skipped" -> change.items?.joinToString(", ")
     else -> null
 }
