@@ -116,7 +116,18 @@ Base `https://selfscan.store.ah.nl:8881/api/selfscan/v2.0/`. Flow:
    (`subtotal`, `bonusDiscount`, `personalDiscount`, `discount`, `itemCount`, …) and a `transactionId`.
    Field test 2026-11-04: a GS1-128 sent with the camera's `]C1` symbology prefix (`]C1010871890762987417261114`)
    comes back `BARCODE_UNKNOWN`. baskt now strips the prefix and sends the element string, then falls back to the
-   bare GTIN-13 for pack codes (01 plus dates/batch only). Still unknown: whether AH takes the element string itself.
+   bare GTIN-13 for pack codes (01 plus dates/batch only).
+   Field capture 2026-11-07 (Appie, store 1379) settles it: **AH takes the GS1 element string itself.** A chicken
+   fillet's DataMatrix went up as `{"barcode":"010871890768042417261115","quantity":1}` (no symbology, no FNC1;
+   AIs 01 + 17 only, so no weight in it) and came back as `KIPFILET`, `price` 955, `flags ["ART","THT","PRICEFAV"]`,
+   no `unitInfo`: a fixed-price pack, priced from the GTIN. The basket line keeps the full element string as its
+   `barcode`, so later PUTs use it too. `THT` marks that AH read the best-before date, which is what feeds a
+   short-date `wasteDiscount`.
+   The first try of that scan returned HTTP 200 with the basket unchanged and
+   `{"message":{"level":"error","code":"BONUS_BLOCKED","message":"Vraag om assistentie bij het servicepunt."}}`.
+   About two and a half minutes later the identical POST went through, so the block sits on the card/trip, not the
+   item, and is lifted in the store. baskt shows it as "AH paused self-scan on your Bonuskaart" and the same scan
+   can simply be repeated.
 5. `PUT /trips/{uuid}/items/{barcode}`  body `{"quantity":N}` -> set quantity; **`{"quantity":0}` removes** the item.
 6. `GET /trips/{uuid}/payment/totals` -> `{"message":{"code":"GOTO_PAYTOWER","message":"Ga naar een betaalpaal en
    scan onderstaande streepjescode"},"result":{"totals":{"total":1352,…},"barcode":"<bonuskaart>",
@@ -161,9 +172,10 @@ Answered from the transcript and the APK (2026-11-03):
 - **`eanRis`/`BOK` are Bonuskaart number ranges, not weighed items.** The member's card `2623065933434` lies in the
   range `2623064040003`..`2623069039996`, and the card line in the basket carries `flags:["BOK"]`. Products carry
   `ART`; `BONUS` (+ `bonusInfo.promoLabel`) once a deal applies, `AKTIE` while a promotion is not triggered yet (one
-  pizza dough of a 1+1), `PRICEFAV` (prijsfavoriet); `OEDI`/`OEPrefix` are internal. No weighed label was scanned
-  in the capture; such a label is sent as its raw code, and the `Item` DTO has `unitInfo {price, quantity, type}`
-  and `deposit` for those cases.
+  pizza dough of a 1+1), `PRICEFAV` (prijsfavoriet), `THT` (a best-before date was read from a GS1 code);
+  `OEDI`/`OEPrefix` are internal. A truly weighed label (EAN-13 starting with `2`, or GS1 with 310x/392x) has still
+  not been captured; it is sent as its raw code, and the `Item` DTO has `unitInfo {price, quantity, type}` and
+  `deposit` for those cases.
 - **Totals:** item `price` is the gross line price; `totals.subtotal` is already net of `totals.discount` and is
   what `payment/totals` later reports as `total`.
 - **TLS:** the production environment (`qhs`, name `PRD`) has `ignoreSSL=false`, so the store server's certificate
@@ -199,8 +211,8 @@ Wi-Fi `Network`, `AH-*` headers), `data/SelfScanSession.kt` (trip state, Wi-Fi, 
   old one stops answering.
 
 To check in the store: that the server takes `AH-App-Version 9.47.3` from a non-Appie client (if it answers
-"Update the app", bump `SELF_SCAN_APP_VERSION`), what a weighed label and a GS1 DataMatrix return, and the store
-Wi-Fi's SSID (to type into settings).
+"Update the app", bump `SELF_SCAN_APP_VERSION`), what a loose-produce scale label (in-store `2…` EAN-13) returns,
+and the store Wi-Fi's SSID (to type into settings). The GS1 DataMatrix is answered (2026-11-07, above).
 
 ## 3. How the capture was obtained (historical, done; only for re-capturing on a new app version)
 

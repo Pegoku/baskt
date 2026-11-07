@@ -69,6 +69,7 @@ data class SsItem(
     /** False for lines the shopper cannot add more of (the Bonuskaart itself). */
     val plusAllowed: Boolean = true,
     val infos: List<String> = emptyList(),
+    /** Cents off for a short best-before date; AH reads the date from the GS1 code (flag `THT`). */
     val wasteDiscount: Int? = null,
     @SerialName("private") val privateNumber: String? = null,
 ) {
@@ -78,6 +79,8 @@ data class SsItem(
     /** Part of a promotion that is not triggered yet (one pizza dough of a 1+1). */
     val inPromotion: Boolean get() = "AKTIE" in flags && !isBonus
     val isPriceFavourite: Boolean get() = "PRICEFAV" in flags
+    /** AH read a best-before (THT) date off the code, so a short-dated markdown can apply. */
+    val hasDate: Boolean get() = "THT" in flags
 }
 
 @Serializable
@@ -179,4 +182,16 @@ fun SsItem.tags(): List<String> = buildList {
     if (inPromotion) add("In a deal")
     if (isPriceFavourite) add("Prijsfavoriet")
     deposit?.takeIf { it > 0 }?.let { add("+ ${it.euros()} deposit") }
+    wasteDiscount?.takeIf { it > 0 }?.let { add("− ${it.euros()} short date") }
+}
+
+/**
+ * An English line for the refusals AH sends with a known code; null keeps AH's own Dutch text. BONUS_BLOCKED is not
+ * about the scanned item: AH holds every add on the card until a service desk employee frees it, then the same scan
+ * goes through (field capture 2026-11-07).
+ */
+fun SsMessage.shopperText(): String? = when (code) {
+    "BONUS_BLOCKED" -> "AH paused self-scan on your Bonuskaart. Ask at the service desk, then scan again."
+    "BARCODE_UNKNOWN" -> "AH does not know this barcode"
+    else -> null
 }
