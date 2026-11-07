@@ -17,6 +17,12 @@ class SelfScanTest {
 
     private val paid = """{"result":{"imageUrl":"x","symbology":"EAN13","backButton":{"label":"Klaar"},"status":"paid","barcode":"2623065000013"},"message":{"code":"TRANSACTION_PAID_CODE","level":"info","message":"Je hebt betaald. Scan onderstaande code om het hekje te openen."}}"""
 
+    // Field capture 2026-11-07: Appie scanning a chicken fillet's GS1 DataMatrix (GTIN + best-before, no weight).
+    private val chicken = """{"result":{"basket":{"items":[{"plusAllowed":false,"flags":["BOK"],"private":"65000013","barcode":"2623065000013","description":"Bonuskaart"},{"nasaNr":"805097","plusAllowed":false,"description":"KIPFILET","barcode":"010871890768042417261115","price":955,"flags":["ART","THT","PRICEFAV"],"quantity":1}],"totals":{"personalDiscount":0,"bonusDiscount":0,"subtotal":955,"itemCount":1,"discount":0,"uniqueItemCount":1,"regularItemCount":1},"discounts":[],"transactionId":"AH21b080"}}}"""
+
+    // The same scan two minutes earlier: HTTP 200, basket untouched, the card held until the service desk freed it.
+    private val bonusBlocked = """{"result":{"basket":{"items":[{"private":"65000013","description":"Bonuskaart","barcode":"2623065000013","flags":["BOK"],"plusAllowed":false}],"totals":{"subtotal":0,"discount":0},"discounts":[]}},"message":{"level":"error","message":"Vraag om assistentie bij het servicepunt.","code":"BONUS_BLOCKED"}}"""
+
     @Test fun sessionGivesTokenAndCardRanges() {
         val result = decodeSelfScan(session, SsSession.serializer()).result
         assertEquals("cb3e799887ffa392b074b38e9b1c04d8", result?.token)
@@ -74,6 +80,27 @@ class SelfScanTest {
         assertNull(refused.result)
         assertNull(decodeSelfScan("<html>502</html>", SsBasketResult.serializer()).result)
         assertNull(decodeSelfScan("", SsService.serializer()).message)
+    }
+
+    @Test fun aDatedDataMatrixGoesUpAsItsElementString() {
+        // What Appie sent for the chicken: the element string as is, no symbology, no FNC1.
+        assertEquals("010871890768042417261115", selfScanCodes("]d2010871890768042417261115").first())
+        assertEquals("pack", tillCodeKind("]d2010871890768042417261115"))
+        val line = decodeSelfScan(chicken, SsBasketResult.serializer()).result!!.basket!!.item("010871890768042417261115")!!
+        assertEquals("KIPFILET", line.description)
+        assertEquals(955, line.price)
+        assertTrue(line.hasDate)
+        assertNull(line.weightText())
+        assertEquals(listOf("Prijsfavoriet"), line.tags())
+        assertEquals(listOf("Prijsfavoriet", "− €0,50 short date"), line.copy(wasteDiscount = 50).tags())
+    }
+
+    @Test fun aBlockedCardIsAProblemWithItsOwnText() {
+        val envelope = decodeSelfScan(bonusBlocked, SsBasketResult.serializer())
+        assertTrue(envelope.message!!.isProblem)
+        assertTrue(envelope.result!!.basket!!.products.isEmpty())
+        assertTrue(envelope.message!!.shopperText()!!.contains("service desk"))
+        assertNull(SsMessage(code = "SOMETHING_NEW", message = "x").shopperText())
     }
 
     @Test fun selfScanDropsTheSymbologyAndFallsBackToTheGtin() {

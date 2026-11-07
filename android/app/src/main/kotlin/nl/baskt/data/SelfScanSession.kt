@@ -266,14 +266,14 @@ class SelfScanSession(private val context: Context, private val scope: Coroutine
             envelope.result?.basket?.let { basket -> _state.update { it.copy(basket = basket) } }
             val message = envelope.message
             if (message?.isProblem == true) {
-                issue(code, message.message ?: "AH did not add this", message.code)
+                issue(code, message.shopperText() ?: message.message ?: "AH did not add this", message.code)
                 false
             } else {
                 _state.update { s -> s.copy(issues = s.issues.filterNot { it.barcode == code }, notice = message?.takeIf { !it.message.isNullOrBlank() } ?: s.notice, connectionLost = false) }
                 envelope.result?.basket != null
             }
         } catch (e: SelfScanHttpException) {
-            issue(code, e.ahMessage?.message ?: "AH did not add this (HTTP ${e.status})", e.ahMessage?.code)
+            issue(code, e.ahMessage?.shopperText() ?: e.ahMessage?.message ?: "AH did not add this (HTTP ${e.status})", e.ahMessage?.code)
             false
         } catch (e: IOException) {
             _state.update { it.copy(connectionLost = true) }
