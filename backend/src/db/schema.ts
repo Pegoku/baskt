@@ -74,6 +74,12 @@ export const stock = sqliteTable("stock", {
   productId: text("product_id"),
   imageUrl: text("image_url"),
   barcode: text("barcode"),
+  /** A stock category key (see stock-categories.ts) set by hand or by the AI; null means derive it from the product. */
+  category: text("category"),
+  /** "manual" beats the product's own category; "ai" only fills in when there is no product category. */
+  categorySource: text("category_source"),
+  /** When it was marked as running low (and put on the basket); cleared when it is bought again. */
+  lowAt: integer("low_at"),
   addedAt: integer("added_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

@@ -8,7 +8,7 @@ import { aiStats } from "@/ai/client";
 import { db, now } from "@/db";
 import { aiCache, basketItems, basketMatches, priceHistory, products, searchCache } from "@/db/schema";
 import { appLanguage, defaultServings, enabledStoreCodes, rankBy, setSetting, skipInStock } from "@/db/settings";
-import { addStock, listStock, removeStock } from "@/stock";
+import { addStock, removeStock, sortUnsortedStock, stockView, updateStock } from "@/stock";
 import { deleteChoice, listChoices } from "@/matching/memory";
 import { deleteName, listNames } from "@/matching/naming";
 import { allStores, hasStore, storeHealth } from "@/stores/registry";
@@ -50,12 +50,25 @@ meta.patch("/settings", async (c) => {
   return c.json(settingsView());
 });
 
-meta.get("/stock", (c) => c.json({ items: listStock() }));
+meta.get("/stock", (c) => {
+  const items = stockView();
+  // Unsorted entries get a group in the background; the next load shows it.
+  if (items.some((row) => row.category == null && row.categorySource == null)) void sortUnsortedStock();
+  return c.json({ items });
+});
 
 meta.post("/stock", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { text?: string; quantityText?: string | null; productId?: string | null; imageUrl?: string | null; barcode?: string | null };
   if (!body.text?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "text is required" } }, 400);
-  return c.json(addStock({ text: body.text, quantityText: body.quantityText ?? null, productId: body.productId ?? null, imageUrl: body.imageUrl ?? null, barcode: body.barcode ?? null }), 201);
+  const row = addStock({ text: body.text, quantityText: body.quantityText ?? null, productId: body.productId ?? null, imageUrl: body.imageUrl ?? null, barcode: body.barcode ?? null });
+  return c.json(stockView([row])[0], 201);
+});
+
+/** `{ category }` moves an entry to another group by hand (null goes back to automatic); `{ runningLow }` flags it. */
+meta.patch("/stock/:id", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { category?: string | null; runningLow?: boolean };
+  const updated = updateStock(c.req.param("id"), { category: body.category, runningLow: typeof body.runningLow === "boolean" ? body.runningLow : undefined });
+  return updated ? c.json(updated) : c.json({ error: { code: "NOT_FOUND", message: "not in stock" } }, 404);
 });
 
 meta.delete("/stock/:id", (c) => (removeStock(c.req.param("id")) ? c.body(null, 204) : c.json({ error: { code: "NOT_FOUND", message: "not in stock" } }, 404)));

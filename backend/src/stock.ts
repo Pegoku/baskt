@@ -1,6 +1,9 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
+import { chatJson } from "@/ai/client";
 import { db, newId, now } from "@/db";
-import { stock, type StockRow } from "@/db/schema";
+import { products, stock, type StockRow } from "@/db/schema";
+import { aiConfigured } from "@/env";
+import { STOCK_CATEGORIES, categoryFromStore, isStockCategory, type StockCategory } from "@/stock-categories";
 import { expandTokens, normalizeText, tokenize } from "@/lib/text";
 
 export function listStock(): StockRow[] {
@@ -34,6 +37,8 @@ export function addStock(
     productId: data.productId ?? existing?.productId ?? null,
     imageUrl: data.imageUrl ?? existing?.imageUrl ?? null,
     barcode: data.barcode ?? existing?.barcode ?? null,
+    // Having it again means it is no longer running low.
+    lowAt: null,
   };
   if (existing) {
     db()
@@ -48,6 +53,8 @@ export function addStock(
     text: data.text.trim(),
     canonical,
     ...patch,
+    category: null,
+    categorySource: null,
     addedAt: now(),
     updatedAt: now(),
   };
@@ -67,6 +74,73 @@ export function stockForProduct(
         (barcode && row.barcode === barcode),
     ) ?? null
   );
+}
+
+export type StockView = StockRow & { category: StockCategory | null; runningLow: boolean };
+
+/** The product category behind each linked stock row, folded onto the stock groups. */
+function productCategories(rows: StockRow[]) {
+  const ids = [...new Set(rows.map((row) => row.productId).filter((id): id is string => !!id))];
+  if (!ids.length) return new Map<string, StockCategory>();
+  const found = db().select({ id: products.id, category: products.category }).from(products).where(inArray(products.id, ids)).all();
+  const map = new Map<string, StockCategory>();
+  for (const product of found) {
+    const category = categoryFromStore(product.category);
+    if (category) map.set(product.id, category);
+  }
+  return map;
+}
+
+/** A hand-picked group wins, then the product's own aisle, then the AI's guess; null while still unsorted. */
+export function stockView(rows: StockRow[] = listStock()): StockView[] {
+  const fromProducts = productCategories(rows);
+  return rows.map((row) => {
+    const fromProduct = row.productId ? fromProducts.get(row.productId) ?? null : null;
+    const stored = isStockCategory(row.category) ? row.category : null;
+    const category = row.categorySource === "manual" ? stored : fromProduct ?? stored;
+    return { ...row, category, runningLow: row.lowAt != null };
+  });
+}
+
+/** Moves an entry to another group by hand, and/or marks it as running low. */
+export function updateStock(id: string, patch: { category?: string | null; runningLow?: boolean }): StockView | null {
+  const set: Partial<StockRow> = { updatedAt: now() };
+  if (patch.category !== undefined) {
+    if (patch.category === null) Object.assign(set, { category: null, categorySource: null });
+    else if (isStockCategory(patch.category)) Object.assign(set, { category: patch.category, categorySource: "manual" });
+  }
+  if (patch.runningLow !== undefined) set.lowAt = patch.runningLow ? now() : null;
+  const updated = db().update(stock).set(set).where(eq(stock.id, id)).returning().all();
+  return updated.length ? stockView(updated)[0] : null;
+}
+
+let sorting: Promise<void> | null = null;
+
+/**
+ * Asks the AI once for every entry that has no group yet (free text like "sal", or a product with no aisle).
+ * Single-flight, and quiet when no AI is configured: those rows just show under "Other".
+ */
+export function sortUnsortedStock(): Promise<void> {
+  if (sorting) return sorting;
+  sorting = (async () => {
+    const unsorted = stockView().filter((row) => row.category == null && row.categorySource == null);
+    if (!unsorted.length || !aiConfigured()) return;
+    const keys = STOCK_CATEGORIES.join(", ");
+    const lines = unsorted.map((row, index) => `${index + 1}. ${row.text}`).join("\n");
+    const result = await chatJson<{ categories?: Record<string, string> }>([
+      {
+        role: "system",
+        content: `You sort pantry items into one group each. Groups: ${keys}. produce = vegetables, fruit, potatoes, fresh herbs; spices = salt, pepper, dried herbs, spices, oil, vinegar, stock cubes; pantry = pasta, rice, flour, tins, sauces, soups; breakfast = cereal, spreads, jam; meals = ready meals, salads; household = cleaning, toiletries, batteries. Items can be in any language. Reply as JSON: {"categories": {"<number>": "<group>"}}.`,
+      },
+      { role: "user", content: lines },
+    ], { maxTokens: 600 }).catch((error) => { console.warn("stock sort failed", String(error)); return null; });
+    const answer = result?.categories ?? {};
+    for (const [index, row] of unsorted.entries()) {
+      const category = answer[String(index + 1)];
+      db().update(stock).set({ category: isStockCategory(category) ? category : "other", categorySource: "ai" }).where(eq(stock.id, row.id)).run();
+    }
+  })().finally(() => { sorting = null; });
+  return sorting;
 }
 
 export function removeStock(id: string) {
