@@ -103,10 +103,9 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
     LaunchedEffect(mine, favourites, recent) {
         viewModel.warmRecipes(mine.map { RecipeSummary(it.title, it.url, it.imageUrl) } + recent + favourites.map { RecipeSummary(it.title, it.url, it.imageUrl) })
     }
-    val recipeUndo by viewModel.recipeUndo.collectAsState()
-    var adapting by remember { mutableStateOf(false) }
-    // Questions asked about the open recipe, kept while it stays open so follow-ups have context.
+    // Recipe AI field: questions asked and a proposed change, kept while the same recipe stays open.
     var recipeChat by remember(selected?.url) { mutableStateOf(emptyList<nl.baskt.data.RecipeTurn>()) }
+    var recipeChange by remember(selected?.url) { mutableStateOf<RecipeChangePreview?>(null) }
     LaunchedEffect(tab, discoverParams) { if (tab == 2) viewModel.loadDiscover() }
 
     fun isFavourite(recipe: RecipeSummary) = favourites.any { it.url == recipe.url }
@@ -196,16 +195,6 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
     val current = selected
     if (current != null) {
         RecipeSheet(title = current.displayTitle, detail = detail, expanded = openExpanded, onDismiss = { selected = null; viewModel.closeRecipe() }) {
-            recipeUndo?.takeIf { current.url == "baskt://recipe/${it.recipeId}" }?.let { undo ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(undo.summary.ifBlank { "Recipe changed" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { viewModel.undoRecipeEdit() }) { Text("Undo") }
-                }
-            }
-            androidx.compose.material3.FilledTonalButton(onClick = { adapting = true }, enabled = detail != null && online, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = null)
-                Text("  Ask or change with AI")
-            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { viewModel.addRecipeFolder(current.url); selected = null; viewModel.closeRecipe(); onFolderAdded() }) {
                     Icon(Icons.Default.CreateNewFolder, contentDescription = null)
@@ -216,68 +205,18 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
                     TextButton(onClick = { viewModel.saveSiteRecipeAsMine(current); selected = null; viewModel.closeRecipe() }) { Text("Copy to mine") }
                 }
             }
+            RecipeAiPanel(
+                detail = detail, viewModel = viewModel,
+                chat = recipeChat, onChat = { recipeChat = it },
+                preview = recipeChange, onPreview = { recipeChange = it },
+                savesCopy = !current.url.startsWith("baskt://"),
+                onApply = { draft ->
+                    // A site recipe's changed copy opens in its place.
+                    viewModel.applyRecipeChange(current, draft)?.also { selected = it } != null
+                },
+            )
         }
     }
-    val shown = detail
-    if (adapting && current != null && shown != null) {
-        RecipeAiDialog(chat = recipeChat, copies = !current.url.startsWith("baskt://"), onDismiss = { adapting = false }) { message ->
-            val result = viewModel.askRecipe(current, shown, message, recipeChat) ?: return@RecipeAiDialog false
-            if (result.answer != null) {
-                recipeChat = recipeChat + nl.baskt.data.RecipeTurn(message, result.answer)
-            } else {
-                adapting = false
-                result.opened?.let { selected = it }
-            }
-            true
-        }
-    }
-}
-
-/**
- * Recipe AI box: questions ("how long do I boil the egg?") are answered here and stay listed; a change ("without
- * olives", "vegetarian", "for 6") rewrites ingredients and steps together and closes the dialog. [onSubmit] says
- * whether it worked, so a failed message stays in the field.
- */
-@Composable
-private fun RecipeAiDialog(chat: List<nl.baskt.data.RecipeTurn>, copies: Boolean, onDismiss: () -> Unit, onSubmit: suspend (String) -> Boolean) {
-    var message by remember { mutableStateOf("") }
-    var working by remember { mutableStateOf(false) }
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    fun send() {
-        val value = message.trim()
-        if (value.isEmpty() || working) return
-        working = true
-        scope.launch { try { if (onSubmit(value)) message = "" } finally { working = false } }
-    }
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = { if (!working) onDismiss() },
-        icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
-        title = { Text("Ask about this recipe") },
-        text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (chat.isEmpty()) Text(
-                    "Ask anything (\"how long do I boil the egg?\") or ask for a change (\"without olives\", \"for 6\")." +
-                        if (copies) " Changes are saved as a copy in My recipes." else "",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                for (turn in chat) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(turn.question, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                        Text(turn.answer, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-                OutlinedTextField(
-                    value = message, onValueChange = { message = it }, enabled = !working,
-                    placeholder = { Text(if (chat.isEmpty()) "Question or change" else "Ask a follow-up") },
-                    modifier = Modifier.fillMaxWidth(), minLines = 2,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send), keyboardActions = KeyboardActions(onSend = { send() }),
-                )
-                if (working) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { LoadingIndicator(); Text("Thinking…") }
-            }
-        },
-        confirmButton = { TextButton(onClick = { send() }, enabled = message.isNotBlank() && !working) { Text("Send") } },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !working) { Text("Close") } },
-    )
 }
 
 @Composable

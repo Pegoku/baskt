@@ -284,7 +284,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         if (_recipeDetail.value == null) notify("This recipe has not been downloaded. Connect to open it.")
     }
 
-    fun closeRecipe() { _recipeDetail.value = null; _recipeUndo.value = null }
+    fun closeRecipe() { _recipeDetail.value = null }
 
     private var recipeWarmup: Job? = null
     /**
@@ -314,42 +314,34 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         }
     }
 
-    /** The version before the last AI edit of one of my recipes, so the sheet can offer to undo it. */
-    data class RecipeUndo(val recipeId: String, val previous: RecipeDraft, val summary: String)
-    private val _recipeUndo = MutableStateFlow<RecipeUndo?>(null)
-    val recipeUndo: StateFlow<RecipeUndo?> = _recipeUndo
+    /** What the recipe AI field gave back: an [answer] to a question, or a proposed [draft] (with [summary]) to preview. */
+    data class RecipeAiReply(val answer: String? = null, val draft: RecipeDraft? = null, val summary: String = "")
 
-    /** What the recipe AI box did: answered a question, or changed the recipe (now shown as [opened]). */
-    data class RecipeAiResult(val answer: String? = null, val opened: RecipeSummary? = null)
-
-    /**
-     * Recipe AI box. A question ("how long do I boil the egg?") just gets an answer. A change ("without olives")
-     * edits my recipes in place, or saves a changed copy of a site recipe in my recipes. Null when it failed (with a notice).
-     */
-    suspend fun askRecipe(recipe: RecipeSummary, detail: RecipeDetail, message: String, history: List<nl.baskt.data.RecipeTurn>): RecipeAiResult? {
+    /** Recipe AI field: answers a question or proposes a change. Nothing is saved here. Null when it failed (with a notice). */
+    suspend fun askRecipe(detail: RecipeDetail, message: String, history: List<nl.baskt.data.RecipeTurn>): RecipeAiReply? {
         val current = RecipeDraft(detail.title, detail.description, detail.servings, detail.ingredientLines, detail.steps)
         val reply = attempt("Recipe AI") { container.api.adaptRecipe(current, message, history) } ?: return null
-        reply.answer?.let { return RecipeAiResult(answer = it) }
-        val draft = reply.draft ?: run { notify("Recipe AI gave no answer, try again"); return null }
+        if (reply.answer == null && reply.draft == null) { notify("Recipe AI gave no answer, try again"); return null }
+        return RecipeAiReply(reply.answer, reply.draft, reply.summary)
+    }
+
+    /**
+     * Saves an accepted AI change: my recipes change in place, a site recipe becomes a changed copy in my recipes.
+     * Returns the recipe now shown, or null when saving failed (with a notice).
+     */
+    suspend fun applyRecipeChange(recipe: RecipeSummary, draft: RecipeDraft): RecipeSummary? {
         val ownId = recipe.url.removePrefix("baskt://recipe/").takeIf { recipe.url.startsWith("baskt://recipe/") }
         val saved = try {
             container.recipes.save(draft, "ai", existingId = ownId)
         } catch (e: kotlinx.coroutines.CancellationException) { throw e }
         catch (e: Exception) { notify(e.message ?: "Could not save the recipe"); return null }
-        _recipeUndo.value = if (ownId != null) RecipeUndo(saved.id, current, reply.summary) else null
-        if (ownId == null) notify(reply.summary.ifBlank { "Saved a changed copy in My recipes" })
+        if (ownId == null) notify("Saved the changed recipe in My recipes")
         val summary = RecipeSummary(saved.title, saved.url, saved.imageUrl, source = "Mine")
         container.recipes.recordViewed(summary)
         _recipeDetail.value = container.recipes.detail(saved.url)
-        return RecipeAiResult(opened = summary)
+        return summary
     }
 
-    fun undoRecipeEdit() = viewModelScope.launch {
-        val undo = _recipeUndo.value ?: return@launch
-        _recipeUndo.value = null
-        val restored = container.recipes.save(undo.previous, "manual", existingId = undo.recipeId)
-        _recipeDetail.value = container.recipes.detail(restored.url)
-    }
     fun clearRecentRecipes() = container.recipes.clearRecent()
 
     /** Discover tab: the current question, the ideas answering it (null until loaded), and how to order them. */
