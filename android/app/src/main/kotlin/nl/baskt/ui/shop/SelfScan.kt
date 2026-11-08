@@ -291,9 +291,7 @@ fun SelfScanBasketSheet(
             item("actions") {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = onCheckout, enabled = lines.isNotEmpty() && !state.connectionLost, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                        Icon(Icons.Default.ShoppingCartCheckout, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Pay at a betaalpaal · ${(basket?.toPayCents ?: 0).euros()}")
+                        nl.baskt.ui.common.IconLabel(Icons.Default.ShoppingCartCheckout, "Pay at a betaalpaal · ${(basket?.toPayCents ?: 0).euros()}")
                     }
                     Text("You pay at the betaalpaal with your own card; baskt only shows your Bonuskaart there.", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     TextButton(onClick = { confirmStop = true }, modifier = Modifier.fillMaxWidth()) { Text("Stop self-scan", color = colors.error) }

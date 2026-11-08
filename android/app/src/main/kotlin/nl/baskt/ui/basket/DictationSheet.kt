@@ -114,8 +114,7 @@ fun DictationSheet(onCancel: () -> Unit, onRecorded: (ByteArray) -> Unit, onUnav
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = { recorder.cancel(); onCancel() }) { Text("Cancel") }
                 Button(onClick = { finish() }) {
-                    Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("  Done")
+                    nl.baskt.ui.common.IconLabel(Icons.Default.Stop, "Done")
                 }
             }
         }

@@ -166,9 +166,7 @@ fun ReceiptEditor(
                 }
             }
             TextButton(onClick = { adding = true }) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Add a line the receipt missed")
+                nl.baskt.ui.common.IconLabel(Icons.Default.Add, "Add a line the receipt missed")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { onSave(store) }, enabled = scan.lines.isNotEmpty()) { Text(saveLabel) }

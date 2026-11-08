@@ -120,3 +120,11 @@ fun ProductRow(product: Product, modifier: Modifier = Modifier, dealMath: Boolea
         trailing?.invoke()
     }
 }
+
+/** Icon and label inside a button, at the M3 icon size and gap, so every button with an icon lines up the same. */
+@Composable
+fun IconLabel(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) {
+    androidx.compose.material3.Icon(icon, contentDescription = null, modifier = Modifier.size(androidx.compose.material3.ButtonDefaults.IconSize))
+    androidx.compose.foundation.layout.Spacer(Modifier.size(androidx.compose.material3.ButtonDefaults.IconSpacing))
+    Text(label)
+}

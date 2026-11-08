@@ -144,8 +144,7 @@ fun ProductSheet(product: Product, onDismiss: () -> Unit) {
                 TextButton(onClick = { retry++ }) { Text("Retry details") }
             }
             FilledTonalButton(onClick = { similar = true }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Storefront, contentDescription = null)
-                Text("  Find similar at other stores")
+                nl.baskt.ui.common.IconLabel(Icons.Default.Storefront, "Find similar at other stores")
             }
             if (similar) SimilarSheet(source) { similar = false }
             source.sourceUrl?.let { url -> TextButton(onClick = { uri.openUri(url) }) { Text("View original store page") } }

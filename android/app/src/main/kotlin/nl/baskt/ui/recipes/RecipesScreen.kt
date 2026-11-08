@@ -196,8 +196,7 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
         RecipeSheet(title = current.displayTitle, detail = detail, expanded = openExpanded, onDismiss = { selected = null; viewModel.closeRecipe() }) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { viewModel.addRecipeFolder(current.url); selected = null; viewModel.closeRecipe(); onFolderAdded() }) {
-                    Icon(Icons.Default.CreateNewFolder, contentDescription = null)
-                    Text("  Add as folder")
+                    nl.baskt.ui.common.IconLabel(Icons.Default.CreateNewFolder, "Add as folder")
                 }
                 if (!current.url.startsWith("baskt://")) {
                     IconButton(onClick = { viewModel.toggleRecipeFavourite(current) }) { Icon(if (isFavourite(current)) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "Favourite") }
@@ -395,7 +394,7 @@ private fun DiscoverPane(
         }
         items(shown, key = { it.title }) { dish -> DishCard(dish, onSearch, onOpenDish) }
         if (!busy && shown.isNotEmpty()) item("refresh") {
-            TextButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp)); Text("  Other ideas") }
+            TextButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) { nl.baskt.ui.common.IconLabel(Icons.Default.Refresh, "Other ideas") }
         }
     }
 }

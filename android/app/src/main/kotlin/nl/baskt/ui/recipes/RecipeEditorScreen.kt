@@ -181,8 +181,7 @@ fun RecipeEditorScreen(viewModel: AppViewModel, recipeId: String?, onBack: () ->
                     }
                 }
                 TextButton(onClick = { steps = steps + "" }) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Text("  Add step")
+                    nl.baskt.ui.common.IconLabel(Icons.Default.Add, "Add step")
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { scope.launch { if (viewModel.saveRecipe(currentDraft(), origin, existing?.id) != null) onBack() } }, enabled = title.isNotBlank() && ingredients.isNotBlank() && steps.any { it.isNotBlank() }) { Text(if (existing != null) "Save changes" else "Save recipe") }

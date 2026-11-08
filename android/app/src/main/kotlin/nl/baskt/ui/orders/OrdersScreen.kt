@@ -281,9 +281,7 @@ private fun PurchaseCard(entry: PurchaseWithLines, products: Map<String, nl.bask
             HorizontalDivider()
             for (line in entry.lines) LineRow(line, products[line.productId], onAdd = { onAdd(listOf(line)) })
             if (entry.lines.size > 1) TextButton(onClick = { onAdd(entry.lines) }, modifier = Modifier.align(Alignment.End)) {
-                Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Add all to basket")
+                nl.baskt.ui.common.IconLabel(Icons.Default.AddShoppingCart, "Add all to basket")
             }
         }
     }

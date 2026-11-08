@@ -194,8 +194,7 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
         RecipeSheet(title = card.title, detail = recipeDetail, onDismiss = { openRecipe = null; viewModel.closeRecipe() }) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Button(onClick = { viewModel.addRecipeFolder(card.url); openRecipe = null; viewModel.closeRecipe(); onFolderAdded() }) {
-                    Icon(Icons.Default.CreateNewFolder, contentDescription = null)
-                    Text("  Add as folder")
+                    nl.baskt.ui.common.IconLabel(Icons.Default.CreateNewFolder, "Add as folder")
                 }
                 if (!card.url.startsWith("baskt://")) {
                     val favourite = favourites.any { it.url == card.url }

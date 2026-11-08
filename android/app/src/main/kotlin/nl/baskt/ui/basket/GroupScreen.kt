@@ -124,8 +124,7 @@ fun GroupScreen(viewModel: AppViewModel, groupId: String, onBack: () -> Unit, on
                         val info = group.recipe
                         if (info != null && !group.isProcessing && group.status != "ERROR") {
                             androidx.compose.material3.FilledTonalButton(onClick = { showRecipe = true; viewModel.openGroupRecipe(group.id) }) {
-                                Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null)
-                                Text("  Recipe & steps")
+                                nl.baskt.ui.common.IconLabel(Icons.AutoMirrored.Filled.MenuBook, "Recipe & steps")
                             }
                             val current = (info.currentServings ?: info.baseServings)?.toInt()
                             Row(verticalAlignment = Alignment.CenterVertically) {

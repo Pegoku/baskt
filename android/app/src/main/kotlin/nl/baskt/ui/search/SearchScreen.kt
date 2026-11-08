@@ -80,7 +80,6 @@ fun SearchScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (Strin
             TopAppBar(
                 title = { Text("Scan or search") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
-                actions = { IconButton(onClick = { startScan() }) { Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan barcode") } },
             )
         },
     ) { padding ->
@@ -97,8 +96,7 @@ fun SearchScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (Strin
                     trailingIcon = { IconButton(onClick = { if (query.isNotBlank()) viewModel.searchProducts(query.trim()) }) { Icon(Icons.Default.Search, contentDescription = "Search") } },
                 )
                 FilledTonalButton(onClick = { startScan() }) {
-                    Icon(Icons.Default.QrCodeScanner, contentDescription = null)
-                    Text("  Scan")
+                    nl.baskt.ui.common.IconLabel(Icons.Default.QrCodeScanner, "Scan")
                 }
             }
             if (searching) {
@@ -165,8 +163,7 @@ private fun ProductCard(product: Product, @Suppress("UNUSED_PARAMETER") codes: L
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { StoreBadge(product.store, stores) }
             ProductRow(product) {
                 Button(onClick = onAdd) {
-                    Icon(Icons.Default.AddShoppingCart, contentDescription = null)
-                    Text("  Add")
+                    nl.baskt.ui.common.IconLabel(Icons.Default.AddShoppingCart, "Add")
                 }
             }
         }
