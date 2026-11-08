@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingFlat
+import androidx.compose.material.icons.filled.LocalOffer
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Refresh
@@ -103,7 +106,7 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
                 if (data != null && data.changes.isEmpty()) {
-                    Text("No price changes in the last week for the products in your baskets.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    nl.baskt.ui.common.EmptyState("No price changes this week", "Nothing in your baskets got cheaper or dearer in the last week.", icon = Icons.AutoMirrored.Filled.TrendingFlat)
                 }
                 LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(data?.changes ?: emptyList(), key = { it.product.id }) { change ->
@@ -133,11 +136,11 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
             }
             val list = deals?.deals ?: emptyList()
             if (!loading && list.isEmpty()) {
-                Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("No promotions found for your open items", style = MaterialTheme.typography.titleMedium)
-                    Text("Tap the refresh icon to search the stores again for bonus packs, 1+1 and discounts.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TextButton(onClick = { viewModel.findDeals(live = true) }) { Text("Search the stores") }
-                }
+                nl.baskt.ui.common.EmptyState(
+                    "No promotions for your open items",
+                    "Search the stores again for bonus packs, 1+1 and discounts.",
+                    icon = Icons.Default.LocalOffer,
+                ) { FilledTonalButton(onClick = { viewModel.findDeals(live = true) }) { Text("Search the stores") } }
             }
             LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(list, key = { "${it.itemId}-${it.store}-${it.product.id}" }) { deal ->
@@ -241,7 +244,7 @@ private fun AllDealsTab(viewModel: AppViewModel, stores: List<nl.baskt.data.Stor
         if (showKinds) {
             androidx.compose.material3.ModalBottomSheet(onDismissRequest = { showKinds = false }) {
                 Column(modifier = Modifier.padding(bottom = 24.dp)) {
-                    Text("Show these deals", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+                    Text("Show these deals", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                     for ((key, label) in DEAL_KINDS) {
                         val count = loaded.count { it.hasKind(key) }
                         androidx.compose.material3.ListItem(

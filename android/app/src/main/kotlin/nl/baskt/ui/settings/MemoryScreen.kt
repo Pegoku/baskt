@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Card
@@ -48,7 +49,12 @@ fun MemoryScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         },
     ) { padding ->
         if (memory.isEmpty() && names.isEmpty()) {
-            Text("Nothing learned yet. Picks, thumbs, \"none of these fit\" and wording corrections from comment mode end up here.", modifier = Modifier.padding(padding).padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            nl.baskt.ui.common.EmptyState(
+                "Nothing learned yet",
+                "Picks, thumbs, \"none of these fit\" and wording corrections from comment mode end up here.",
+                icon = Icons.Default.Psychology,
+                modifier = Modifier.fillMaxSize().padding(padding),
+            )
             return@Scaffold
         }
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

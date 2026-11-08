@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddShoppingCart
@@ -82,10 +83,12 @@ fun StockScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         },
     ) { padding ->
         if (stock.isEmpty()) {
-            Column(modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp)) {
-                Text("Nothing in stock yet", style = MaterialTheme.typography.titleMedium)
-                Text("Add staples you always have (salt, pepper, oil, rice). Recipe folders will not ask you to buy them again.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            nl.baskt.ui.common.EmptyState(
+                "Nothing in stock yet",
+                "Add staples you always have (salt, pepper, oil, rice). Recipe folders will not ask you to buy them again.",
+                icon = Icons.Default.Kitchen,
+                modifier = Modifier.fillMaxSize().padding(padding),
+            )
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(vertical = 8.dp)) {
                 items(stock, key = { it.id }) { item ->

@@ -223,13 +223,12 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             }
             HorizontalDivider()
             if (day == null) {
-                Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.Default.ShoppingBag, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Nothing bought yet", style = MaterialTheme.typography.titleMedium)
-                        Text("Items you tick off or scan in the in-store checklist land here, grouped by day.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-                    }
-                }
+                nl.baskt.ui.common.EmptyState(
+                    "Nothing bought yet",
+                    "Items you tick off or scan in the in-store checklist land here, grouped by day.",
+                    icon = Icons.Default.ShoppingBag,
+                    modifier = Modifier.fillMaxSize(),
+                )
             } else {
                 HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), key = { days[it].toEpochDay() }, verticalAlignment = Alignment.Top) { page ->
                     val pageDay = days[page]

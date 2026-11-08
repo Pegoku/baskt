@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
@@ -150,7 +151,11 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             }
             if (purchases.isEmpty() && !scanning) {
                 item("empty") {
-                    Text("No receipts yet. Scan a receipt photo, pick a PDF, or share one from another app: baskt reads the lines, matches them to products and keeps your spending per store.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))
+                    nl.baskt.ui.common.EmptyState(
+                        "No receipts yet",
+                        "Scan a receipt photo, pick a PDF, or share one from another app: baskt reads the lines, matches them to products and keeps your spending per store.",
+                        icon = Icons.AutoMirrored.Filled.ReceiptLong,
+                    )
                 }
             }
             items(purchases, key = { it.id }) { purchase ->
