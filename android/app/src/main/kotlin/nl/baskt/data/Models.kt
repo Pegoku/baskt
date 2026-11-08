@@ -434,6 +434,12 @@ data class UserRecipesResponse(val recipes: List<UserRecipe> = emptyList())
 data class RecipeDraft(val title: String, val description: String? = null, val servings: String? = null, val ingredientLines: List<String> = emptyList(), val steps: List<RecipeStep> = emptyList())
 
 @Serializable
+data class AdaptRecipeRequest(val recipe: RecipeDraft, val instruction: String)
+
+@Serializable
+data class AdaptRecipeResponse(val draft: RecipeDraft, val summary: String = "")
+
+@Serializable
 data class GenerateResponse(val dish: String? = null, val matches: List<RecipeSummary> = emptyList(), val draft: RecipeDraft? = null)
 
 @Serializable

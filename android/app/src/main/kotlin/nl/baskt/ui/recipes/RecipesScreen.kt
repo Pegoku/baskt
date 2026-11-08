@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import nl.baskt.data.RecipeSummary
 import nl.baskt.data.UserRecipe
+import kotlinx.coroutines.launch
 import nl.baskt.ui.AppViewModel
 
 /**
@@ -97,6 +98,12 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
     var selected by remember { mutableStateOf<RecipeSummary?>(null) }
     var openExpanded by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { viewModel.loadRecipeFavourites(); viewModel.loadMyRecipes() }
+    // Library recipes are downloaded and translated in the background, so tapping one opens it ready.
+    LaunchedEffect(mine, favourites, recent) {
+        viewModel.warmRecipes(mine.map { RecipeSummary(it.title, it.url, it.imageUrl) } + recent + favourites.map { RecipeSummary(it.title, it.url, it.imageUrl) })
+    }
+    val recipeUndo by viewModel.recipeUndo.collectAsState()
+    var adapting by remember { mutableStateOf(false) }
     LaunchedEffect(tab, discoverParams) { if (tab == 2) viewModel.loadDiscover() }
 
     fun isFavourite(recipe: RecipeSummary) = favourites.any { it.url == recipe.url }
@@ -186,6 +193,16 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
     val current = selected
     if (current != null) {
         RecipeSheet(title = current.displayTitle, detail = detail, expanded = openExpanded, onDismiss = { selected = null; viewModel.closeRecipe() }) {
+            recipeUndo?.takeIf { current.url == "baskt://recipe/${it.recipeId}" }?.let { undo ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(undo.summary.ifBlank { "Recipe changed" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { viewModel.undoRecipeEdit() }) { Text("Undo") }
+                }
+            }
+            androidx.compose.material3.FilledTonalButton(onClick = { adapting = true }, enabled = detail != null && online, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                Text(if (current.url.startsWith("baskt://")) "  Change with AI" else "  Change with AI (saves a copy)")
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { viewModel.addRecipeFolder(current.url); selected = null; viewModel.closeRecipe(); onFolderAdded() }) {
                     Icon(Icons.Default.CreateNewFolder, contentDescription = null)
@@ -198,6 +215,45 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
             }
         }
     }
+    val shown = detail
+    if (adapting && current != null && shown != null) {
+        AdaptRecipeDialog(onDismiss = { adapting = false }) { instruction ->
+            viewModel.adaptRecipe(current, shown, instruction)?.let { selected = it }
+            adapting = false
+        }
+    }
+}
+
+/** "Without olives", "vegetarian", "for 6": the AI rewrites ingredients and steps together. */
+@Composable
+private fun AdaptRecipeDialog(onDismiss: () -> Unit, onSubmit: suspend (String) -> Unit) {
+    var instruction by remember { mutableStateOf("") }
+    var working by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    fun send() {
+        val value = instruction.trim()
+        if (value.isEmpty() || working) return
+        working = true
+        scope.launch { try { onSubmit(value) } finally { working = false } }
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { if (!working) onDismiss() },
+        icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
+        title = { Text("Change this recipe") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = instruction, onValueChange = { instruction = it }, enabled = !working,
+                    placeholder = { Text("e.g. without olives, vegetarian, for 6") },
+                    modifier = Modifier.fillMaxWidth(), minLines = 2,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { send() }),
+                )
+                if (working) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { LoadingIndicator(); Text("Rewriting ingredients and steps…") }
+            }
+        },
+        confirmButton = { TextButton(onClick = { send() }, enabled = instruction.isNotBlank() && !working) { Text("Change") } },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !working) { Text("Cancel") } },
+    )
 }
 
 @Composable

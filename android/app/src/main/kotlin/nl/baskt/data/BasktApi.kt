@@ -303,6 +303,11 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
         client.delete(url("/recipes/mine/$id")) { auth() }.expect<Unit>()
     }
 
+    suspend fun adaptRecipe(recipe: RecipeDraft, instruction: String): AdaptRecipeResponse =
+        client.post(url("/recipes/adapt")) {
+            auth(); contentType(ContentType.Application.Json); setBody(AdaptRecipeRequest(recipe, instruction))
+        }.expect()
+
     suspend fun generateRecipe(description: String, draft: Boolean): GenerateResponse =
         client.post(url("/recipes/generate")) {
             auth(); contentType(ContentType.Application.Json); setBody(GenerateRequest(description, draft))

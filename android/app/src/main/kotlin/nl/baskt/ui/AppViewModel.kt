@@ -284,7 +284,67 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         if (_recipeDetail.value == null) notify("This recipe has not been downloaded. Connect to open it.")
     }
 
-    fun closeRecipe() { _recipeDetail.value = null }
+    fun closeRecipe() { _recipeDetail.value = null; _recipeUndo.value = null }
+
+    private var recipeWarmup: Job? = null
+    /**
+     * Gets recipes ready before they are tapped: downloads each one (if needed), then translates its ingredients
+     * and, only when that worked, its steps, into the same disk cache the recipe sheet reads. One recipe at a time,
+     * in list order, so it never crowds out the recipe the user actually opens.
+     */
+    fun warmRecipes(recipes: List<RecipeSummary>) {
+        recipeWarmup?.cancel()
+        recipeWarmup = viewModelScope.launch {
+            delay(400)
+            val settings = container.currentSettings
+            val language = settings.resolvedLanguage
+            val translations = container.translations(settings)
+            // The sheet also translates what is at home and in the basket for its "In stock" labels.
+            val owned = basket.stock.value.map { it.text } + basket.items.value.filter { it.kind != "group" && !it.checked }.map { it.text }
+            if (owned.isNotEmpty() && online.value) translations.translate(owned, language)
+            for (recipe in recipes.distinctBy { it.url }.take(15)) {
+                if (!online.value) break
+                val detail = container.recipes.detail(recipe.url) ?: continue
+                val source = detail.original ?: detail
+                if (source.ingredientLines.isEmpty()) continue
+                val head = nl.baskt.data.recipeHeadTexts(source)
+                if (!translations.translate(head, language, listOf(head.lastIndex)).translated) continue
+                if (source.steps.isNotEmpty()) translations.translate(source.steps.map { it.text }, language)
+            }
+        }
+    }
+
+    /** The version before the last AI edit of one of my recipes, so the sheet can offer to undo it. */
+    data class RecipeUndo(val recipeId: String, val previous: RecipeDraft, val summary: String)
+    private val _recipeUndo = MutableStateFlow<RecipeUndo?>(null)
+    val recipeUndo: StateFlow<RecipeUndo?> = _recipeUndo
+
+    /**
+     * AI edit ("without olives", "vegetarian"): my recipes change in place; a site recipe is saved as a changed
+     * copy in my recipes. Returns the recipe now shown, or null when it failed (with a notice).
+     */
+    suspend fun adaptRecipe(recipe: RecipeSummary, detail: RecipeDetail, instruction: String): RecipeSummary? {
+        val current = RecipeDraft(detail.title, detail.description, detail.servings, detail.ingredientLines, detail.steps)
+        val adapted = attempt("Changing the recipe") { container.api.adaptRecipe(current, instruction) } ?: return null
+        val ownId = recipe.url.removePrefix("baskt://recipe/").takeIf { recipe.url.startsWith("baskt://recipe/") }
+        val saved = try {
+            container.recipes.save(adapted.draft, "ai", existingId = ownId)
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (e: Exception) { notify(e.message ?: "Could not save the recipe"); return null }
+        _recipeUndo.value = if (ownId != null) RecipeUndo(saved.id, current, adapted.summary) else null
+        if (ownId == null) notify(adapted.summary.ifBlank { "Saved a changed copy in My recipes" })
+        val summary = RecipeSummary(saved.title, saved.url, saved.imageUrl, source = "Mine")
+        container.recipes.recordViewed(summary)
+        _recipeDetail.value = container.recipes.detail(saved.url)
+        return summary
+    }
+
+    fun undoRecipeEdit() = viewModelScope.launch {
+        val undo = _recipeUndo.value ?: return@launch
+        _recipeUndo.value = null
+        val restored = container.recipes.save(undo.previous, "manual", existingId = undo.recipeId)
+        _recipeDetail.value = container.recipes.detail(restored.url)
+    }
     fun clearRecentRecipes() = container.recipes.clearRecent()
 
     /** Discover tab: the current question, the ideas answering it (null until loaded), and how to order them. */
