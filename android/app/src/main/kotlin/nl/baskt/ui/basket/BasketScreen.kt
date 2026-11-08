@@ -2,6 +2,7 @@
 
 package nl.baskt.ui.basket
 
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -405,7 +406,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                                             }
                                             if (overshoot != 0f) scope.launch { dragOffset += listState.scrollBy(overshoot * 0.3f) }
                                         }
-                                    },
+                                    }.minimumInteractiveComponentSize(),
                                 )
                             }
                         }

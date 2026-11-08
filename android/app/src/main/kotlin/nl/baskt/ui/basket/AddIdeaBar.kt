@@ -174,9 +174,9 @@ fun AddIdeaBar(
                     keyboardActions = KeyboardActions(onDone = { submit() }),
                 )
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IconButton(onClick = { quantity += 1 }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Add, contentDescription = "More") }
+                    IconButton(onClick = { quantity += 1 }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Add, contentDescription = "One more") }
                     Text("$quantity", style = MaterialTheme.typography.labelLarge)
-                    IconButton(onClick = { if (quantity > 1) quantity -= 1 }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Remove, contentDescription = "Less") }
+                    IconButton(onClick = { if (quantity > 1) quantity -= 1 }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Remove, contentDescription = "One less") }
                 }
                 if (text.isBlank() && onVoice != null) {
                     FilledIconButton(onClick = onVoice) { Icon(Icons.Default.Mic, contentDescription = "Dictate") }

@@ -1,5 +1,9 @@
 package nl.baskt.ui.basket
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,11 +52,15 @@ fun VoiceConfirmSheet(items: List<VoiceItem>, loading: Boolean, transcript: Stri
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = checked, onCheckedChange = { selected = if (it) selected + item.text else selected - item.text })
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            (if (item.kind == "recipe") "📁 " else "") + item.text + if (item.quantity > 1) "  ×${item.quantity}" else "",
-                            textDecoration = if (!checked) TextDecoration.LineThrough else null,
-                            color = if (checked) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (item.kind == "recipe") Icon(Icons.Default.Folder, contentDescription = "Recipe folder", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 6.dp).size(18.dp))
+                            Text(
+                                item.text + if (item.quantity > 1) "  ×${item.quantity}" else "",
+                                style = MaterialTheme.typography.bodyLarge,
+                                textDecoration = if (!checked) TextDecoration.LineThrough else null,
+                                color = if (checked) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         if (item.note != null) Text(item.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }

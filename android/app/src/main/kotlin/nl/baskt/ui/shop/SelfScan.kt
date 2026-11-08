@@ -1,5 +1,7 @@
 package nl.baskt.ui.shop
 
+import nl.baskt.ui.common.IconLabel
+import androidx.compose.material3.ButtonDefaults
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -152,12 +154,12 @@ fun SelfScanBar(
                 SelfScanPhase.OFF -> if (hasCard) Button(onClick = onStart) { Text("Start") } else FilledTonalButton(onClick = onAddCard) { Text("Add card") }
                 SelfScanPhase.CONNECTING -> TextButton(onClick = onStop) { Text("Cancel") }
                 SelfScanPhase.NO_WIFI -> {
-                    FilledTonalButton(onClick = onWifiSettings, contentPadding = PaddingValues(horizontal = 14.dp)) { Icon(Icons.Default.Wifi, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Wi-Fi") }
+                    FilledTonalButton(onClick = onWifiSettings, contentPadding = ButtonDefaults.ButtonWithIconContentPadding) { IconLabel(Icons.Default.Wifi, "Wi-Fi") }
                     IconButton(onClick = onStart) { Icon(Icons.Default.Refresh, contentDescription = "Try again") }
                     IconButton(onClick = onStop) { Icon(Icons.Default.Close, contentDescription = "Stop self-scan") }
                 }
                 SelfScanPhase.FAILED -> {
-                    Button(onClick = onStart) { Text("Retry") }
+                    Button(onClick = onStart) { Text("Try again") }
                     IconButton(onClick = onStop) { Icon(Icons.Default.Close, contentDescription = "Stop self-scan") }
                 }
                 SelfScanPhase.ACTIVE -> if (state.sending.isNotEmpty()) LoadingIndicator(modifier = Modifier.size(20.dp))
@@ -338,12 +340,12 @@ private fun SelfScanLine(line: SsItem, link: ListLink, sending: Boolean, onQuant
         Column(horizontalAlignment = Alignment.End) {
             Text((line.price ?: 0).euros(), fontWeight = FontWeight.SemiBold)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { onQuantity(quantity - 1) }, enabled = !sending, modifier = Modifier.size(36.dp)) {
+                IconButton(onClick = { onQuantity(quantity - 1) }, enabled = !sending) {
                     Icon(if (quantity <= 1) Icons.Default.Delete else Icons.Default.Remove, contentDescription = if (quantity <= 1) "Remove" else "One less")
                 }
                 if (sending) LoadingIndicator(modifier = Modifier.size(16.dp))
                 else Text("$quantity", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 4.dp))
-                IconButton(onClick = { onQuantity(quantity + 1) }, enabled = !sending && line.plusAllowed && line.weightText() == null, modifier = Modifier.size(36.dp)) {
+                IconButton(onClick = { onQuantity(quantity + 1) }, enabled = !sending && line.plusAllowed && line.weightText() == null) {
                     Icon(Icons.Default.Add, contentDescription = "One more")
                 }
             }

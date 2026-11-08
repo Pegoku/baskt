@@ -1,5 +1,6 @@
 package nl.baskt.ui.common
 
+import androidx.compose.material.icons.outlined.ShoppingBasket
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.aspectRatio
@@ -67,9 +68,19 @@ fun ItemThumb(imageUrl: String?, contentDescription: String?, size: Int = 44, mo
         modifier = modifier.size(size.dp),
     ) {
         if (imageUrl != null) AsyncImage(model = imageUrl, contentDescription = contentDescription, modifier = Modifier.padding((size / 14).dp))
-        else Box(contentAlignment = Alignment.Center) { Text("🛒", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center) }
+        else Box(contentAlignment = Alignment.Center) { PlaceholderIcon(size) }
     }
 }
+
+/** What stands in for a missing product photo: the basket glyph at about half the tile. */
+@Composable
+private fun PlaceholderIcon(tileSize: Int) =
+    androidx.compose.material3.Icon(
+        androidx.compose.material.icons.Icons.Outlined.ShoppingBasket,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.size((tileSize / 2).dp),
+    )
 
 /** Opening a product shows its facts first; images can then be enlarged inside the detail sheet. */
 @Composable
@@ -77,7 +88,7 @@ fun ProductThumb(product: Product, size: Int = 56, onOpen: (() -> Unit)? = null)
     var details by androidx.compose.runtime.remember(product.id) { androidx.compose.runtime.mutableStateOf(false) }
     Surface(shape = MaterialTheme.shapes.medium, color = Color.White, modifier = Modifier.size(size.dp).clickable { if (onOpen != null) onOpen() else details = true }) {
         if (product.imageUrl != null) AsyncImage(model = product.imageUrl, contentDescription = "View ${product.title}", modifier = Modifier.padding(4.dp))
-        else Box(contentAlignment = Alignment.Center) { Text("🛒", textAlign = TextAlign.Center) }
+        else Box(contentAlignment = Alignment.Center) { PlaceholderIcon(size) }
     }
     if (details) ProductSheet(product) { details = false }
 }

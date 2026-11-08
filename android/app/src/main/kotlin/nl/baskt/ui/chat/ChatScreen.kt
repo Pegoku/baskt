@@ -223,7 +223,7 @@ private fun AssistantMessage(viewModel: AppViewModel, message: ChatMessage, stor
             }
         }
         for (product in message.products) ProductCard(product, stores, product.id in inBasket) { viewModel.addFromProduct(product) }
-        message.proposalJson?.let { proposal -> ProposalCard(message, proposal.summary, proposal.changes, proposal.applied ?: emptyList(), stores.associate { it.code to it.name }, onApply) }
+        message.proposalJson?.let { proposal -> ProposalCard(message, proposal.summary, proposal.changes, proposal.applied ?: emptyList(), stores, onApply) }
         message.recipesJson?.takeIf { it.isNotEmpty() }?.let { cards ->
             for (card in cards) {
                 Card(onClick = { onOpenRecipe(card) }) {
@@ -258,7 +258,8 @@ private fun ProductCard(product: Product, stores: List<StoreInfo>, added: Boolea
 }
 
 @Composable
-private fun ProposalCard(message: ChatMessage, summary: String, changes: List<ProposedChange>, applied: List<Int>, storeNames: Map<String, String>, onApply: (List<Int>) -> Unit) {
+private fun ProposalCard(message: ChatMessage, summary: String, changes: List<ProposedChange>, applied: List<Int>, stores: List<StoreInfo>, onApply: (List<Int>) -> Unit) {
+    val storeNames = stores.associate { it.code to it.name }
     // First time: everything ticked except items already in stock. After applying some, start from nothing so the
     // remaining ones are a deliberate choice ("Apply 0").
     var selected by remember(message.id, applied.size) {
@@ -281,7 +282,7 @@ private fun ProposalCard(message: ChatMessage, summary: String, changes: List<Pr
                         Text(changeTitle(change), style = MaterialTheme.typography.bodyMedium, fontWeight = if (done) FontWeight.Normal else FontWeight.Medium)
                         changeDetail(change, storeNames)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
-                    change.store?.let { StoreBadge(it, emptyList()) }
+                    change.store?.let { StoreBadge(it, stores) }
                 }
             }
             val remaining = changes.indices.filter { it !in applied }

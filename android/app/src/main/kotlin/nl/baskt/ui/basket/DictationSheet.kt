@@ -104,7 +104,7 @@ fun DictationSheet(onCancel: () -> Unit, onRecorded: (ByteArray) -> Unit, onUnav
                     drawCircle(color = primary.copy(alpha = 0.18f), radius = base * (1.3f + level * 0.7f))
                     drawCircle(color = primary, radius = base)
                 }
-                Icon(Icons.Default.Mic, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
+                Icon(Icons.Default.Mic, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(32.dp))
             }
             Text(
                 "%d:%02d".format(elapsedMs / 60_000, (elapsedMs / 1_000) % 60),

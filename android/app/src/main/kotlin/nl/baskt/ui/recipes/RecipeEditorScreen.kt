@@ -1,5 +1,6 @@
 package nl.baskt.ui.recipes
 
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -183,7 +184,7 @@ fun RecipeEditorScreen(viewModel: AppViewModel, recipeId: String?, onBack: () ->
                                             dragOffset += above
                                         }
                                     }
-                                },
+                                }.minimumInteractiveComponentSize(),
                             )
                         }
                     }
