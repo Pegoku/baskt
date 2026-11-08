@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -41,6 +42,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -102,22 +106,33 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             TopAppBar(
                 title = { Text("Receipts & spending") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
+                actions = {
+                    // Importing is the secondary way in; the camera keeps the one FAB.
+                    var importMenu by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { importMenu = true }) { Icon(Icons.Default.UploadFile, contentDescription = "Import a receipt") }
+                        DropdownMenu(expanded = importMenu, onDismissRequest = { importMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("From photos") },
+                                leadingIcon = { Icon(Icons.Default.Image, contentDescription = null) },
+                                onClick = { importMenu = false; picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("From a PDF or file") },
+                                leadingIcon = { Icon(Icons.Default.Description, contentDescription = null) },
+                                onClick = { importMenu = false; filePicker.launch(arrayOf("application/pdf", "image/*")) },
+                            )
+                        }
+                    }
+                },
             )
         },
         floatingActionButton = {
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                androidx.compose.material3.SmallFloatingActionButton(onClick = { filePicker.launch(arrayOf("application/pdf", "image/*")) }) {
-                    Icon(Icons.Default.UploadFile, contentDescription = "From a PDF or file")
-                }
-                androidx.compose.material3.SmallFloatingActionButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
-                    Icon(Icons.Default.Image, contentDescription = "From photos")
-                }
-                ExtendedFloatingActionButton(
-                    onClick = { startCamera() },
-                    icon = { Icon(Icons.Default.DocumentScanner, contentDescription = null) },
-                    text = { Text("Scan receipt") },
-                )
-            }
+            ExtendedFloatingActionButton(
+                onClick = { startCamera() },
+                icon = { Icon(Icons.Default.DocumentScanner, contentDescription = null) },
+                text = { Text("Scan receipt") },
+            )
         },
     ) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
