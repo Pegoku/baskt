@@ -141,7 +141,7 @@ fun ProductSheet(product: Product, onDismiss: () -> Unit) {
             else if (loading) Row(verticalAlignment = Alignment.CenterVertically) { LoadingIndicator(Modifier.size(24.dp)); Text("Loading description…") }
             else {
                 Text("No additional description is available.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(onClick = { retry++ }) { Text("Retry details") }
+                TextButton(onClick = { retry++ }) { Text("Try again") }
             }
             FilledTonalButton(onClick = { similar = true }, modifier = Modifier.fillMaxWidth()) {
                 nl.baskt.ui.common.IconLabel(Icons.Default.Storefront, "Find similar at other stores")

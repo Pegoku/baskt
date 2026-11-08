@@ -48,7 +48,7 @@ fun StoreBadge(code: String, stores: List<StoreInfo>, modifier: Modifier = Modif
         color = onColor,
         fontWeight = FontWeight.SemiBold,
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(MaterialTheme.shapes.small)
             .background(color)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     )
@@ -129,6 +129,17 @@ fun ProductRow(product: Product, modifier: Modifier = Modifier, dealMath: Boolea
             }
         }
         trailing?.invoke()
+    }
+}
+
+/**
+ * A read-only label such as "Activated" or a missing ingredient. Chips are for things you can tap; a fact that
+ * only informs gets this quieter tag so it does not look like a button.
+ */
+@Composable
+fun Tag(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.secondaryContainer, contentColor: Color = MaterialTheme.colorScheme.onSecondaryContainer) {
+    Surface(shape = MaterialTheme.shapes.small, color = color, contentColor = contentColor, modifier = modifier) {
+        Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
     }
 }
 

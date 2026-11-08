@@ -118,8 +118,8 @@ private fun OfferCard(viewModel: AppViewModel, offer: PersonalOffer, products: M
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 when {
-                    offer.status == "ACTIVATED" -> AssistChip(onClick = {}, label = { Text(if (offer.autoActivated) "Activated for your basket" else "Activated") })
-                    offer.status == "ACTIVATABLE" && offer.hqId != null -> Button(enabled = canActivate && !busy, onClick = { viewModel.activateOffer(offer) }) {
+                    offer.status == "ACTIVATED" -> nl.baskt.ui.common.Tag(if (offer.autoActivated) "Activated for your basket" else "Activated")
+                    offer.status == "ACTIVATABLE" && offer.hqId != null -> androidx.compose.material3.FilledTonalButton(enabled = canActivate && !busy, onClick = { viewModel.activateOffer(offer) }) {
                         Text(if (busy) "Activating…" else if (canActivate) "Activate" else "Weekly limit reached")
                     }
                     else -> Text(offer.status.lowercase().replace('_', ' '), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -127,7 +127,7 @@ private fun OfferCard(viewModel: AppViewModel, offer: PersonalOffer, products: M
                 if (offerProducts.isNotEmpty()) TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide products" else "${offerProducts.size} product" + if (offerProducts.size == 1) "" else "s") }
             }
             if (expanded) for (product in offerProducts) {
-                ProductRow(product, trailing = { OutlinedButton(onClick = { viewModel.addFromProduct(product); onAdded("Added “${product.title}” to your basket") }) { Text("Add") } })
+                ProductRow(product, trailing = { androidx.compose.material3.FilledTonalButton(onClick = { viewModel.addFromProduct(product); onAdded("Added “${product.title}” to your basket") }) { Text("Add") } })
             }
         }
     }

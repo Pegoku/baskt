@@ -195,7 +195,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     } catch (e: Exception) {
         if (e is kotlinx.coroutines.CancellationException) throw e
         val offline = e is java.io.IOException || e is io.ktor.client.plugins.HttpRequestTimeoutException || e is io.ktor.client.network.sockets.ConnectTimeoutException
-        notify(if (offline) "You're offline — $what needs the server" else "$what failed: ${e.message ?: "unknown error"}")
+        notify(if (offline) "You're offline. $what needs the server" else "$what failed: ${e.message ?: "unknown error"}")
         null
     }
 

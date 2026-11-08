@@ -120,14 +120,14 @@ fun RecipeEditorScreen(viewModel: AppViewModel, recipeId: String?, onBack: () ->
                             }
                         }
                     }
-                    FilledTonalButton(enabled = online, onClick = { noneFit = true; viewModel.draftRecipe(description.trim()) }) { Text("None of these — write it for me") }
+                    FilledTonalButton(enabled = online, onClick = { noneFit = true; viewModel.draftRecipe(description.trim()) }) { Text("None of these, write it for me") }
                 } else if (generate != null && matches.isEmpty() && generate?.draft == null && !generating) {
                     Text("Nothing similar found on the sites.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     FilledTonalButton(enabled = online, onClick = { noneFit = true; viewModel.draftRecipe(description.trim()) }) { Text("Write it for me with AI") }
                 }
             }
             if (showEditor) {
-                if (origin == "ai") Text("Drafted by the AI — check amounts and steps before saving.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                if (origin == "ai") Text("Drafted by the AI. Check amounts and steps before saving.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = servings, onValueChange = { servings = it }, label = { Text("Servings") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = ingredients, onValueChange = { ingredients = it }, label = { Text("Ingredients, one per line, with amounts") }, minLines = 5, modifier = Modifier.fillMaxWidth())

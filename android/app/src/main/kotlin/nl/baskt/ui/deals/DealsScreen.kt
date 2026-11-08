@@ -164,7 +164,7 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
                                 val busy = personal.offerId in viewModel.activating.collectAsState().value
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("Bonus Box offer, not active yet", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f))
-                                    androidx.compose.material3.OutlinedButton(enabled = !busy && offer != null, onClick = { offer?.let { viewModel.activateOffer(it) } }) { Text(if (busy) "Activating…" else "Activate") }
+                                    androidx.compose.material3.FilledTonalButton(enabled = !busy && offer != null, onClick = { offer?.let { viewModel.activateOffer(it) } }) { Text(if (busy) "Activating…" else "Activate") }
                                 }
                                 LaunchedEffect(Unit) { if (viewModel.ahOffers.value == null) viewModel.loadAhOffers() }
                             }
@@ -326,7 +326,7 @@ private fun DealCardView(card: DealCard, stores: List<nl.baskt.data.StoreInfo>, 
                 val price = card.priceLine()
                 if (price.isNotEmpty()) Text(price, style = MaterialTheme.typography.bodySmall)
             }
-            TextButton(onClick = { onAdd(card) }) { Text("Add") }
+            androidx.compose.material3.FilledTonalButton(onClick = { onAdd(card) }) { Text("Add") }
         }
         if (variants.isNotEmpty()) {
             TextButton(onClick = { expanded = !expanded }, modifier = Modifier.padding(start = 4.dp)) {
@@ -339,7 +339,7 @@ private fun DealCardView(card: DealCard, stores: List<nl.baskt.data.StoreInfo>, 
                             Text("${variant.packCount}× pack" + (variant.dealText?.let { " · ${shown[3 + index]}" } ?: ""), style = MaterialTheme.typography.labelLarge)
                             Text(listOfNotNull(variant.priceCents?.euros(), variant.eachCents?.let { "${it.euros()} each" }, variant.regularPriceCents?.let { "was ${it.euros()}" }).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        TextButton(onClick = { onAdd(variant) }) { Text("Add") }
+                        androidx.compose.material3.FilledTonalButton(onClick = { onAdd(variant) }) { Text("Add") }
                     }
                 }
             }

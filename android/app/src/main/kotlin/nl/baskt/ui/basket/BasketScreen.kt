@@ -177,7 +177,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
         val added = lastAdded ?: return@LaunchedEffect
         viewModel.consumeLastAdded()
         if (added.inStock) {
-            val result = snackbar.showSnackbar("“${added.text}” is already in your stock — skipped this trip", actionLabel = "Buy anyway", withDismissAction = true)
+            val result = snackbar.showSnackbar("“${added.text}” is already in your stock, so it is skipped this trip", actionLabel = "Buy anyway", withDismissAction = true)
             if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) viewModel.skip(added, false)
         }
     }
@@ -199,7 +199,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
     }
     fun sendBot() = scope.launch {
         viewModel.sendToWhatsApp().fold(
-            { count -> snackbar.showSnackbar("Sent $count items to WhatsApp — react ✅ to check them off") },
+            { count -> snackbar.showSnackbar("Sent $count items to WhatsApp. React ✅ to check them off") },
             { error -> snackbar.showSnackbar(error.message ?: "WhatsApp bridge failed", actionLabel = "Settings").also { if (it == androidx.compose.material3.SnackbarResult.ActionPerformed) onSettings() } },
         )
     }
@@ -483,8 +483,8 @@ fun BasketItemCard(item: BasketItem, stores: List<StoreInfo>, onClick: () -> Uni
                         Icon(Icons.Default.Kitchen, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Already in stock · skipped", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    item.isQueued && item.barcode != null -> Text("Scanned offline — becomes the product when you’re back online", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
-                    item.isQueued -> Text("Waiting for connection — will be matched later", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                    item.isQueued && item.barcode != null -> Text("Scanned offline. Becomes the product when you’re back online", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                    item.isQueued -> Text("Waiting for connection. Matched once you’re back online", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
                     item.isProcessing -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         LoadingIndicator(modifier = Modifier.size(20.dp))
                         Text("Finding products…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

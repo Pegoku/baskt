@@ -471,8 +471,8 @@ private fun DishCard(dish: nl.baskt.data.DiscoverDish, onSearch: (String) -> Uni
             if (dish.source != null) Text("Photo: ${dish.source}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (dish.uses.isNotEmpty()) Text("Uses: ${dish.uses.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (dish.missing.isEmpty()) AssistChip(onClick = {}, label = { Text("Everything in stock") })
-                else for (item in dish.missing.take(4)) AssistChip(onClick = {}, label = { Text("+ $item") })
+                if (dish.missing.isEmpty()) nl.baskt.ui.common.Tag("Everything in stock")
+                else for (item in dish.missing.take(4)) nl.baskt.ui.common.Tag("Need $item", color = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TextButton(onClick = { onSearch(dish.searchQuery) }) { Text("Find recipes") }
         }

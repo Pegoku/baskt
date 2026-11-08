@@ -225,9 +225,9 @@ private fun Header(item: BasketItem, onQuantity: (Int) -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                SuggestionChip(onClick = {}, label = { Text(parsed.canonicalName) })
-                for (attribute in parsed.attributes.take(3)) SuggestionChip(onClick = {}, label = { Text(attribute) })
-                parsed.sizeHint?.let { SuggestionChip(onClick = {}, label = { Text("${it.amount.toString().removeSuffix(".0")} ${if (it.unit == "piece") "stuks" else it.unit}") }) }
+                nl.baskt.ui.common.Tag(parsed.canonicalName)
+                for (attribute in parsed.attributes.take(3)) nl.baskt.ui.common.Tag(attribute, color = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                parsed.sizeHint?.let { nl.baskt.ui.common.Tag("${it.amount.toString().removeSuffix(".0")} ${if (it.unit == "piece") "stuks" else it.unit}", color = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
             Text(
                 "The product name and the properties the AI read from your idea. It searches the stores with these.",
@@ -262,7 +262,7 @@ private fun StoreCard(
         Card(onClick = onUnskip, modifier = Modifier.alpha(0.55f)) {
             Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StoreBadge(store.code, stores)
-                Text("Skipped at ${storeName(store.code, stores)} — tap to enable again", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                Text("Skipped at ${storeName(store.code, stores)}. Tap to use it again.", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
                 if (busy) LoadingIndicator(modifier = Modifier.size(22.dp))
             }
         }
@@ -388,10 +388,7 @@ private fun OptionRow(product: Product, equivalence: String?, selected: Boolean,
         }
         if (equivalence != null && equivalence != "EQUIVALENT") {
             Spacer(Modifier.height(2.dp))
-            AssistChip(
-                onClick = {},
-                label = { Text(if (equivalence == "EXACT") "exact match" else "substitute", style = MaterialTheme.typography.labelSmall) },
-            )
+            nl.baskt.ui.common.Tag(if (equivalence == "EXACT") "Exact match" else "Substitute")
         }
     }
 }

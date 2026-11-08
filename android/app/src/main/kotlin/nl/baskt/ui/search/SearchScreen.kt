@@ -161,9 +161,7 @@ private fun ProductCard(product: Product, @Suppress("UNUSED_PARAMETER") codes: L
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { StoreBadge(product.store, stores) }
             ProductRow(product) {
-                Button(onClick = onAdd) {
-                    nl.baskt.ui.common.IconLabel(Icons.Default.AddShoppingCart, "Add")
-                }
+                androidx.compose.material3.FilledTonalButton(onClick = onAdd) { Text("Add") }
             }
         }
     }

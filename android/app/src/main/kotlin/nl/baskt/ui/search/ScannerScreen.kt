@@ -183,7 +183,7 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                                                 ScanLabel(scan.label)
                                                 Text(if (scan.label != null) "No store sells it under this code" else "Product not found", style = MaterialTheme.typography.titleMedium)
                                                 Text("Check the barcode or retry when connected. You can keep scanning.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                TextButton(onClick = { viewModel.retryScan(scan.gtin) }) { Text("Retry lookup") }
+                                                TextButton(onClick = { viewModel.retryScan(scan.gtin) }) { Text("Try again") }
                                             }
                                             else -> {
                                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { scan.products.distinctBy { it.store }.forEach { StoreBadge(it.store, stores) } }
