@@ -37,6 +37,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -261,10 +262,33 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
                 }
                 Switch(checked = settings?.tillRelay == true, onCheckedChange = { viewModel.setTillRelay(it) })
             }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("AH Zelfscan in the store")
+                    Text(
+                        "In Albert Heijn shop mode, a Start button opens a real self-scan trip on the store's server, like the Appie app: each scan goes into the AH basket with AH's own prices and Bonus, and at checkout baskt shows your Bonuskaart for the betaalpaal. You pay there with your own card. Works only on the store Wi-Fi, and needs your AH card above.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = settings?.selfScan == true, onCheckedChange = { viewModel.setSelfScan(it) })
+            }
+            if (settings?.selfScan == true) {
+                var wifiName by remember(settings?.selfScanWifi) { mutableStateOf(settings?.selfScanWifi.orEmpty()) }
+                OutlinedTextField(
+                    value = wifiName,
+                    onValueChange = { wifiName = it },
+                    label = { Text("Store Wi-Fi name (optional)") },
+                    supportingText = { Text("The network's name as Wi-Fi settings shows it. With it, Start joins the store Wi-Fi by itself for the trip; without it, Start opens the Wi-Fi panel when you are not on it yet.") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused && wifiName.trim() != settings?.selfScanWifi.orEmpty()) viewModel.setSelfScanWifi(wifiName) },
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { viewModel.setSelfScanWifi(wifiName) }),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                )
+            }
 
             HorizontalDivider()
             Text(
-                "baskt keeps the products you pick and the ones you reject, and uses them to rank future suggestions. Matching runs on your own server; the app never talks to the supermarkets directly.",
+                "baskt keeps the products you pick and the ones you reject, and uses them to rank future suggestions. Matching runs on your own server; the app never talks to the supermarkets directly, except AH Zelfscan, which talks to the store's own server over its Wi-Fi.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

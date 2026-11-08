@@ -1,7 +1,7 @@
 # AH: scan with the phone, pay at the till
 
-Two parts: the **till relay** that ships now (experimental), and the **confirmed protocol** for a real in-app
-self-scan integration (the in-store capture is done; see "Confirmed protocol" below for the authoritative spec).
+Two parts: the **till relay** (experimental), and the **real in-app self-scan** built on the confirmed protocol
+(experimental too; see "In the app now" under section 2).
 
 > Building the real integration? Read **"Confirmed protocol"** + **"What a baskt client needs"** below; those are
 > the authoritative, capture-verified spec. Everything under "How the capture was obtained" is historical (already
@@ -114,6 +114,20 @@ Base `https://selfscan.store.ah.nl:8881/api/selfscan/v2.0/`. Flow:
    per item `description` (e.g. "PIZZADEEG"), `price` (cents), `quantity`, `nasaNr`, `flags` (ART/BONUS/AKTIE/…),
    `bonusInfo.promoLabel`; plus `discounts[]` (bonus text + `discount` cents) and `totals`
    (`subtotal`, `bonusDiscount`, `personalDiscount`, `discount`, `itemCount`, …) and a `transactionId`.
+   Field test 2026-11-04: a GS1-128 sent with the camera's `]C1` symbology prefix (`]C1010871890762987417261114`)
+   comes back `BARCODE_UNKNOWN`. baskt now strips the prefix and sends the element string, then falls back to the
+   bare GTIN-13 for pack codes (01 plus dates/batch only).
+   Field capture 2026-11-07 (Appie, store 1379) settles it: **AH takes the GS1 element string itself.** A chicken
+   fillet's DataMatrix went up as `{"barcode":"010871890768042417261115","quantity":1}` (no symbology, no FNC1;
+   AIs 01 + 17 only, so no weight in it) and came back as `KIPFILET`, `price` 955, `flags ["ART","THT","PRICEFAV"]`,
+   no `unitInfo`: a fixed-price pack, priced from the GTIN. The basket line keeps the full element string as its
+   `barcode`, so later PUTs use it too. `THT` marks that AH read the best-before date, which is what feeds a
+   short-date `wasteDiscount`.
+   The first try of that scan returned HTTP 200 with the basket unchanged and
+   `{"message":{"level":"error","code":"BONUS_BLOCKED","message":"Vraag om assistentie bij het servicepunt."}}`.
+   About two and a half minutes later the identical POST went through, so the block sits on the card/trip, not the
+   item, and is lifted in the store. baskt shows it as "AH paused self-scan on your Bonuskaart" and the same scan
+   can simply be repeated.
 5. `PUT /trips/{uuid}/items/{barcode}`  body `{"quantity":N}` -> set quantity; **`{"quantity":0}` removes** the item.
 6. `GET /trips/{uuid}/payment/totals` -> `{"message":{"code":"GOTO_PAYTOWER","message":"Ga naar een betaalpaal en
    scan onderstaande streepjescode"},"result":{"totals":{"total":1352,…},"barcode":"<bonuskaart>",
@@ -151,9 +165,54 @@ Build pointers (what to reuse in the repo):
   session (every request + response body) to model against; the raw `store.pcap` + `store.keylog` are beside it
   (open in Wireshark with the keylog as the TLS secrets log).
 
-Open questions remaining (read the transcript to resolve): whether `GET /sessions` needs the `{uuid}`
-pre-registered with the member via an `api.ah.nl` call (none was seen before it in the capture, so likely not),
-and the `eanRis`/`flags` semantics for weighed/BOK items.
+Answered from the transcript and the APK (2026-11-03):
+
+- **No pre-registration.** `GET /sessions/{uuid}?terms=` is the first call after `/service` and works with a fresh
+  UUID; `GET /trips/{uuid}` already lists the Bonuskaart as item 0, so `AH-Uid` is all the server needs.
+- **`eanRis`/`BOK` are Bonuskaart number ranges, not weighed items.** The member's card `2623065000013` lies in the
+  range `2623064040003`..`2623069039996`, and the card line in the basket carries `flags:["BOK"]`. Products carry
+  `ART`; `BONUS` (+ `bonusInfo.promoLabel`) once a deal applies, `AKTIE` while a promotion is not triggered yet (one
+  pizza dough of a 1+1), `PRICEFAV` (prijsfavoriet), `THT` (a best-before date was read from a GS1 code);
+  `OEDI`/`OEPrefix` are internal. A truly weighed label (EAN-13 starting with `2`, or GS1 with 310x/392x) has still
+  not been captured; it is sent as its raw code, and the `Item` DTO has `unitInfo {price, quantity, type}` and
+  `deposit` for those cases.
+- **Totals:** item `price` is the gross line price; `totals.subtotal` is already net of `totals.discount` and is
+  what `payment/totals` later reports as `total`.
+- **TLS:** the production environment (`qhs`, name `PRD`) has `ignoreSSL=false`, so the store server's certificate
+  is publicly trusted; no custom trust is needed.
+- **Wi-Fi:** Appie never joins a network itself and hard-codes no SSID. It watches for any Wi-Fi and binds its
+  requests to it (`WifiRequestEnforcer`): a store Wi-Fi without internet is never Android's default network, so
+  unbound requests would leave over mobile data and never reach `172.16.8.3`.
+
+### In the app now (experimental)
+
+Turn on **Settings → Experimental → AH Zelfscan in the store** (needs the AH card under loyalty cards). Optionally
+type the store Wi-Fi's name there.
+
+Code: `data/SelfScan.kt` (DTOs, envelope, Bonuskaart ranges), `data/SelfScanClient.kt` (OkHttp bound to the store
+Wi-Fi `Network`, `AH-*` headers), `data/SelfScanSession.kt` (trip state, Wi-Fi, heartbeat, checkout polling),
+`ui/shop/SelfScan.kt` (bar, basket sheet, checkout). Tests: `SelfScanTest` runs the captured bodies.
+
+- **Start** (bottom bar of AH shop mode) probes `GET /service` over every Wi-Fi the phone is on, then the default
+  network. If none answers and a Wi-Fi name is set, it asks Android to join that network for baskt only
+  (`WifiNetworkSpecifier`, the system shows a Connect dialog); otherwise it opens the Wi-Fi panel and carries on by
+  itself as soon as a new Wi-Fi comes up. Then `GET /sessions/{uuid}` and `GET /trips/{uuid}`; an unpaid AH basket
+  from earlier comes back as it was. The device UUID is made once and kept.
+- **Scanning** while the trip runs: the code goes to AH first; only a code AH took goes on to baskt (ticking the
+  list item or adding an extra), so the two never drift. A refusal (unknown barcode, age check, ...) shows AH's
+  message on the bar, as a snackbar and as a row in the basket with **Scan again**. A Bonuskaart scan is not sent.
+- **Basket sheet** (tap the bar): AH's names, prices, Bonus/deal chips, weight, deposit; +/− and swipe to remove
+  (`PUT quantity`, 0 removes, and baskt takes back that scan: unticks the list item or drops the extra); which list
+  item each line is for or **Not on your list**; the savings lines; what is still on the list; **Pay at a betaalpaal**.
+- **Checkout**: `GET payment/totals` (AH's instruction and the total), the Bonuskaart full-screen at full brightness,
+  `payment/status` every 2.5 s until `paid`, then `exitgate/status`. **Done** ends the trip on the phone. Nothing in
+  baskt pays; `backButton`/Adyen/online payment are never called.
+- A heartbeat (`/service` every 20 s) shows "No connection" and moves the session to another Wi-Fi network when the
+  old one stops answering.
+
+To check in the store: that the server takes `AH-App-Version 9.47.3` from a non-Appie client (if it answers
+"Update the app", bump `SELF_SCAN_APP_VERSION`), what a loose-produce scale label (in-store `2…` EAN-13) returns,
+and the store Wi-Fi's SSID (to type into settings). The GS1 DataMatrix is answered (2026-11-07, above).
 
 ## 3. How the capture was obtained (historical, done; only for re-capturing on a new app version)
 

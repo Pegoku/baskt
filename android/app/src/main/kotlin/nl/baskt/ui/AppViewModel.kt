@@ -957,6 +957,47 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         basket.scanItem(scan.store, code?.raw ?: scan.barcode, scan.at, code?.format)
     }
 
+    /** AH in-store self-scan: the live AH basket for this trip (store Wi-Fi only). */
+    val selfScan: StateFlow<nl.baskt.data.SelfScanState> = container.selfScan.state
+    val tickedByBarcode: StateFlow<Map<String, String>> = basket.tickedByBarcode
+    fun setSelfScan(enabled: Boolean) = viewModelScope.launch { container.settingsStore.saveSelfScan(enabled); if (!enabled) container.selfScan.stop() }
+    fun setSelfScanWifi(name: String) = viewModelScope.launch { container.settingsStore.saveSelfScanWifi(name) }
+    fun startSelfScan() = viewModelScope.launch {
+        val current = container.awaitSettings()
+        val card = current.loyaltyCards["AH"] ?: return@launch notify("Add your Bonuskaart first")
+        container.selfScan.start(card, current.selfScanWifi)
+    }
+    fun stopSelfScan() = container.selfScan.stop()
+
+    /**
+     * A scan in AH shop mode while self-scan runs: AH gets it first, and only a code AH took goes on to baskt (ticking
+     * the list item or adding an extra), so the two baskets never drift apart.
+     */
+    fun selfScanItem(store: String, code: String, format: Int? = null) = viewModelScope.launch {
+        if (container.selfScan.add(code)) {
+            // AH also takes codes that are not products (deposit slips, coupons); those stay off the baskt list.
+            if (nl.baskt.data.productGtin(code) != null) scanItem(store, code, format)
+            return@launch
+        }
+        val state = container.selfScan.state.value
+        state.issues.lastOrNull { it.barcode == code.trim() }?.let { notify("AH: ${it.title}") } ?: state.notice?.message?.let { notify(it) }
+    }
+
+    /** Quantity edit on an AH line; at 0 the line leaves the AH basket and baskt takes back what that scan did. */
+    fun setSelfScanQuantity(store: String, barcode: String, quantity: Int) = viewModelScope.launch {
+        if (!container.selfScan.setQuantity(barcode, quantity) || quantity > 0) return@launch
+        val gtin = nl.baskt.data.productGtin(barcode) ?: barcode
+        val extra = basket.tripScans.value.lastOrNull { it.store == store && it.barcode == gtin }
+        if (extra != null) { removeScan(extra); return@launch }
+        val ticked = basket.tickedByBarcode.value[gtin]?.let { id -> basket.items.value.firstOrNull { it.id == id && it.isBought } }
+        if (ticked != null) { basket.unbuy(ticked); basket.tickedByBarcode.update { it - gtin } }
+    }
+    fun dismissSelfScanIssue(id: Long) = container.selfScan.dismissIssue(id)
+    fun dismissSelfScanNotice() = container.selfScan.dismissNotice()
+    fun refreshSelfScan() { container.selfScan.refresh() }
+    fun selfScanCheckout() = container.selfScan.checkout()
+    fun closeSelfScanCheckout() = container.selfScan.closeCheckout()
+
     val tillCodes: StateFlow<List<nl.baskt.data.TillCode>> = basket.tillCodes
     val barcodeKinds: StateFlow<List<nl.baskt.data.BarcodeKindEntry>> = basket.barcodeKinds
     fun loadBarcodeKinds(store: String) = viewModelScope.launch { basket.loadBarcodeKinds(store) }

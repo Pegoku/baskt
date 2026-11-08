@@ -5,6 +5,10 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- AH self-scan: bind requests to the store Wi-Fi and, when its name is known, join it for the trip. -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
@@ -18,7 +22,7 @@
         <receiver
             android:name=".widget.BasketWidgetReceiver"
             android:exported="true"
-            android:label="Basket">
+            android:label="@string/widget_basket_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -27,7 +31,7 @@
         <receiver
             android:name=".widget.QuickAddWidgetReceiver"
             android:exported="true"
-            android:label="Quick add">
+            android:label="@string/widget_quick_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -43,7 +47,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <!-- Receipts shared from other apps (a PDF from the store app, a photo, a screenshot). -->
-            <intent-filter android:label="Add receipt to baskt">
+            <intent-filter android:label="@string/share_receipt_label">
                 <action android:name="android.intent.action.SEND" />
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
