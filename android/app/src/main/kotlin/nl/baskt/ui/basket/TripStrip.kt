@@ -51,8 +51,7 @@ fun TripStrip(items: List<BasketItem>, stores: List<StoreInfo>, onPlan: () -> Un
                     Column {
                         Text(
                             if (total > 0) total.euros() else "—",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = if (best) FontWeight.Bold else FontWeight.Medium,
+                            style = if (best) MaterialTheme.typography.titleSmallEmphasized else MaterialTheme.typography.titleSmall,
                             color = if (best) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         )
                         Text(

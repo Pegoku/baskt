@@ -202,7 +202,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { StoreBadge(store, stores); Text("${remaining.size} left · ${total.euros()}") } },
+                title = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { StoreBadge(store, stores); Text("${remaining.size} left · ${total.euros()}", style = MaterialTheme.typography.titleLargeEmphasized) } },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
                 actions = {
                     if (archived.isNotEmpty() || showArchived) IconButton(onClick = { showArchived = !showArchived }) {

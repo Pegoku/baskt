@@ -234,7 +234,7 @@ private fun StoreCard(
                 Text(name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (chosen) Icon(Icons.Default.Check, contentDescription = "Everything here", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
             }
-            Text(summary.fullTotalCents.euros(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = if (best) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+            Text(summary.fullTotalCents.euros(), style = MaterialTheme.typography.headlineSmallEmphasized, color = if (best) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
             Text(
                 when {
                     best && missing.isEmpty() -> "cheapest · all $itemCount items"
@@ -281,7 +281,7 @@ private fun MixCard(total: Int, saving: Int, versus: String, active: Boolean, on
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Mix & match", style = MaterialTheme.typography.titleSmall)
-                    Text(total.euros(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(total.euros(), style = MaterialTheme.typography.titleSmallEmphasized)
                 }
                 Text(
                     if (saving > 0) "Cheapest store per item · saves ${saving.euros()} vs all at $versus" else "Cheapest store per item · no cheaper than all at $versus",

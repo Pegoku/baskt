@@ -149,7 +149,7 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                     Card {
                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("Last ${summary.months.size} months", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(summary.totalCents.euros(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                            Text(summary.totalCents.euros(), style = MaterialTheme.typography.headlineMediumEmphasized)
                             Text("${summary.purchases} receipts", style = MaterialTheme.typography.bodySmall)
                             val max = summary.months.maxOfOrNull { it.totalCents }?.coerceAtLeast(1) ?: 1
                             for (month in summary.months) {
@@ -186,7 +186,7 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                             Text(dateFormat.format(Date(purchase.purchasedAt)), style = MaterialTheme.typography.titleSmall)
                             Text("${purchase.lineCount} items", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Text(purchase.totalCents.euros(), fontWeight = FontWeight.Bold)
+                        Text(purchase.totalCents.euros(), style = MaterialTheme.typography.titleMediumEmphasized)
                     }
                 }
             }
@@ -222,7 +222,7 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     StoreBadge(open.purchase.store, stores)
                     Text(dateFormat.format(Date(open.purchase.purchasedAt)), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    Text(open.purchase.totalCents.euros(), fontWeight = FontWeight.Bold)
+                    Text(open.purchase.totalCents.euros(), style = MaterialTheme.typography.titleMediumEmphasized)
                     IconButton(onClick = { correcting = open.asScan() }) { Icon(Icons.Default.Edit, contentDescription = "Correct this receipt") }
                     IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.Delete, contentDescription = "Delete") }
                 }

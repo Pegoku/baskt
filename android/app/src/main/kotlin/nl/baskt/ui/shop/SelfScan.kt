@@ -405,7 +405,7 @@ fun SelfScanCheckoutDialog(checkout: SelfScanCheckout, card: String?, onRetry: (
                     Text(translated(instruction) ?: instruction, color = Color.Black, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
                     checkout.totals?.totals?.total?.takeIf { !checkout.paid }?.let { total ->
                         Spacer(Modifier.height(12.dp))
-                        Text(total.euros(), color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 44.sp)
+                        Text(total.euros(), color = Color.Black, style = MaterialTheme.typography.displayMediumEmphasized)
                         checkout.totals?.totals?.discount?.takeIf { it > 0 }?.let { Text("You save ${it.euros()}", color = Color.DarkGray) }
                     }
                     val code = (if (checkout.paid) checkout.gateBarcode else null) ?: checkout.totals?.barcode ?: card
