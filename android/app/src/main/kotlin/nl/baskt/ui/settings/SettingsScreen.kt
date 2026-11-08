@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.fillMaxSize
@@ -88,6 +90,104 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
             modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            val serverSettings by viewModel.basket.serverSettings.collectAsState()
+            LaunchedEffect(Unit) { viewModel.refreshStock() }
+            SettingsSection("Shopping")
+            Text("Supermarkets", style = MaterialTheme.typography.titleMedium)
+            if (stores.isEmpty()) Text("Connect to the server to load the store list.", style = MaterialTheme.typography.bodySmall)
+            for (store in stores) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    StoreBadge(store.code, stores)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(store.name)
+                        if (store.coverage != "full") Text("Offers only", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = store.enabled,
+                        onCheckedChange = { enabled ->
+                            val codes = stores.filter { if (it.code == store.code) enabled else it.enabled }.map { it.code }
+                            if (codes.isNotEmpty()) viewModel.setEnabledStores(codes)
+                        },
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text("Ranking", style = MaterialTheme.typography.titleMedium)
+            Text("What counts as the better option when products are equally suitable.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                val current = serverSettings.rankBy ?: "price"
+                SegmentedButton(selected = current == "price", onClick = { viewModel.setRankBy("price") }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Pack price") }
+                SegmentedButton(selected = current == "unitPrice", onClick = { viewModel.setRankBy("unitPrice") }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Price per kg / l") }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text("Loyalty cards", style = MaterialTheme.typography.titleMedium)
+            Text("Shown as a barcode from the in-store checklist for the checkout scanner. Cards stay on this phone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            var editingCard by remember { mutableStateOf<String?>(null) }
+            for (store in stores.filter { it.enabled }) {
+                val number = settings?.loyaltyCards?.get(store.code)
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    nl.baskt.ui.common.StoreLogo(store.code, stores)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(store.name)
+                        Text(number?.chunked(4)?.joinToString(" ") ?: "No card yet", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    OutlinedButton(onClick = { editingCard = store.code }) { Text(if (number == null) "Add" else "Edit") }
+                }
+            }
+            editingCard?.let { code ->
+                nl.baskt.ui.shop.LoyaltyCardEditor(code, stores, settings?.loyaltyCards?.get(code), onDismiss = { editingCard = null }) { number -> viewModel.saveLoyaltyCard(code, number); editingCard = null }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text("Learned preferences", style = MaterialTheme.typography.titleMedium)
+            Text("Every pick, thumbs up and thumbs down the matching learns from. Remove anything set by mistake.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = onMemory) { Text("View and manage") }
+            HorizontalDivider()
+            SettingsSection("Albert Heijn")
+            AhAccountSettings(viewModel, onAhLogin)
+            HorizontalDivider()
+            SettingsSection("Recipes")
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Skip ingredients I have in stock")
+                    Text("Recipe folders leave out what is in your stock list; you can add them back per folder.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = serverSettings.recipeSkipInStock ?: true, onCheckedChange = { viewModel.setSkipInStock(it) })
+            }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Default servings")
+                    Text("Recipe folders are scaled to this many people. Change it per folder any time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                val servings = serverSettings.defaultServings
+                IconButton(onClick = { viewModel.setDefaultServings(if (servings == null) null else if (servings <= 1) null else servings - 1) }) { Icon(Icons.Default.Remove, contentDescription = "Fewer") }
+                Text(servings?.toString() ?: "as written", style = MaterialTheme.typography.titleMedium)
+                IconButton(onClick = { viewModel.setDefaultServings((servings ?: 1) + 1) }) { Icon(Icons.Default.Add, contentDescription = "More") }
+            }
+            HorizontalDivider()
+            SettingsSection("Language & voice")
+            Text("Language", style = MaterialTheme.typography.titleMedium)
+            Text("Used for suggestions and for how the AI describes your ideas.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            var languageMenu by remember { mutableStateOf(false) }
+            val currentLanguage = settings?.language ?: "system"
+            val systemName = java.util.Locale.getDefault().getDisplayLanguage(java.util.Locale.getDefault())
+            // The menu must share a Box with its anchor; as a Column child it would reserve layout space and push content down.
+            Box {
+                OutlinedButton(onClick = { languageMenu = true }) {
+                    Text(LANGUAGE_OPTIONS.firstOrNull { it.first == currentLanguage }?.second?.let { if (currentLanguage == "system") "$it ($systemName)" else it } ?: currentLanguage)
+                }
+                DropdownMenu(expanded = languageMenu, onDismissRequest = { languageMenu = false }) {
+                    for ((code, label) in LANGUAGE_OPTIONS) {
+                        DropdownMenuItem(
+                            text = { Text(if (code == "system") "$label ($systemName)" else label) },
+                            onClick = { languageMenu = false; viewModel.setLanguage(code) },
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            SpeechSettings(viewModel)
+            HorizontalDivider()
+            SettingsSection("Server & sync")
             Text("Server", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(value = baseUrl, onValueChange = { baseUrl = it }, label = { Text("Base URL") }, placeholder = { Text("http://192.168.1.10:3000") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(
@@ -109,33 +209,7 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
                 OutlinedButton(onClick = { scope.launch { status = viewModel.testConnection().fold({ it }, { "Failed: ${it.message}" }) } }) { Text("Test") }
             }
             if (status != null) Text(status!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-            HorizontalDivider()
-            Text("Language", style = MaterialTheme.typography.titleMedium)
-            Text("Used for suggestions and for how the AI describes your ideas.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            var languageMenu by remember { mutableStateOf(false) }
-            val currentLanguage = settings?.language ?: "system"
-            val systemName = java.util.Locale.getDefault().getDisplayLanguage(java.util.Locale.getDefault())
-            // The menu must share a Box with its anchor; as a Column child it would reserve layout space and push content down.
-            Box {
-                OutlinedButton(onClick = { languageMenu = true }) {
-                    Text(LANGUAGE_OPTIONS.firstOrNull { it.first == currentLanguage }?.second?.let { if (currentLanguage == "system") "$it ($systemName)" else it } ?: currentLanguage)
-                }
-                DropdownMenu(expanded = languageMenu, onDismissRequest = { languageMenu = false }) {
-                    for ((code, label) in LANGUAGE_OPTIONS) {
-                        DropdownMenuItem(
-                            text = { Text(if (code == "system") "$label ($systemName)" else label) },
-                            onClick = { languageMenu = false; viewModel.setLanguage(code) },
-                        )
-                    }
-                }
-            }
-
-            HorizontalDivider()
-            SpeechSettings(viewModel)
-            HorizontalDivider()
-            val serverSettings by viewModel.basket.serverSettings.collectAsState()
-            LaunchedEffect(Unit) { viewModel.refreshStock() }
+            Spacer(Modifier.height(4.dp))
             Text("Offline changes", style = MaterialTheme.typography.titleMedium)
             val pendingOps by viewModel.pending.collectAsState()
             val isOnline by viewModel.online.collectAsState()
@@ -147,7 +221,7 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
                 }
             }
             if (pendingOps.isNotEmpty()) OutlinedButton(onClick = { viewModel.retryConnection() }) { Text(if (isOnline) "Send now" else "Retry connection") }
-            HorizontalDivider()
+            Spacer(Modifier.height(4.dp))
             Text("WhatsApp bot", style = MaterialTheme.typography.titleMedium)
             val whatsapp by viewModel.whatsapp.collectAsState()
             val qr by viewModel.whatsappQr.collectAsState()
@@ -183,80 +257,7 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
                 }
             }
             HorizontalDivider()
-            Text("Learned preferences", style = MaterialTheme.typography.titleMedium)
-            Text("Every pick, thumbs up and thumbs down the matching learns from. Remove anything set by mistake.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(onClick = onMemory) { Text("View and manage") }
-            HorizontalDivider()
-            Text("Ranking", style = MaterialTheme.typography.titleMedium)
-            Text("What counts as the better option when products are equally suitable.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                val current = serverSettings.rankBy ?: "price"
-                SegmentedButton(selected = current == "price", onClick = { viewModel.setRankBy("price") }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Pack price") }
-                SegmentedButton(selected = current == "unitPrice", onClick = { viewModel.setRankBy("unitPrice") }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Price per kg / l") }
-            }
-
-            HorizontalDivider()
-            Text("Recipes", style = MaterialTheme.typography.titleMedium)
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Skip ingredients I have in stock")
-                    Text("Recipe folders leave out what is in your stock list; you can add them back per folder.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(checked = serverSettings.recipeSkipInStock ?: true, onCheckedChange = { viewModel.setSkipInStock(it) })
-            }
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Default servings")
-                    Text("Recipe folders are scaled to this many people. Change it per folder any time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                val servings = serverSettings.defaultServings
-                IconButton(onClick = { viewModel.setDefaultServings(if (servings == null) null else if (servings <= 1) null else servings - 1) }) { Icon(Icons.Default.Remove, contentDescription = "Fewer") }
-                Text(servings?.toString() ?: "as written", style = MaterialTheme.typography.titleMedium)
-                IconButton(onClick = { viewModel.setDefaultServings((servings ?: 1) + 1) }) { Icon(Icons.Default.Add, contentDescription = "More") }
-            }
-
-            HorizontalDivider()
-            Text("Supermarkets", style = MaterialTheme.typography.titleMedium)
-            if (stores.isEmpty()) Text("Connect to the server to load the store list.", style = MaterialTheme.typography.bodySmall)
-            for (store in stores) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StoreBadge(store.code, stores)
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(store.name)
-                        if (store.coverage != "full") Text("Offers only", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Switch(
-                        checked = store.enabled,
-                        onCheckedChange = { enabled ->
-                            val codes = stores.filter { if (it.code == store.code) enabled else it.enabled }.map { it.code }
-                            if (codes.isNotEmpty()) viewModel.setEnabledStores(codes)
-                        },
-                    )
-                }
-            }
-            HorizontalDivider()
-            AhAccountSettings(viewModel, onAhLogin)
-            HorizontalDivider()
-            Text("Loyalty cards", style = MaterialTheme.typography.titleMedium)
-            Text("Shown as a barcode from the in-store checklist for the checkout scanner. Cards stay on this phone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            var editingCard by remember { mutableStateOf<String?>(null) }
-            for (store in stores.filter { it.enabled }) {
-                val number = settings?.loyaltyCards?.get(store.code)
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    nl.baskt.ui.common.StoreLogo(store.code, stores)
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(store.name)
-                        Text(number?.chunked(4)?.joinToString(" ") ?: "No card yet", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    OutlinedButton(onClick = { editingCard = store.code }) { Text(if (number == null) "Add" else "Edit") }
-                }
-            }
-            editingCard?.let { code ->
-                nl.baskt.ui.shop.LoyaltyCardEditor(code, stores, settings?.loyaltyCards?.get(code), onDismiss = { editingCard = null }) { number -> viewModel.saveLoyaltyCard(code, number); editingCard = null }
-            }
-
-            HorizontalDivider()
-            Text("Experimental", style = MaterialTheme.typography.titleMedium)
+            SettingsSection("Experimental")
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Scan with the phone, pay at the till")
@@ -290,7 +291,6 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
                 )
             }
-
             HorizontalDivider()
             Text(
                 "baskt keeps the products you pick and the ones you reject, and uses them to rank future suggestions. Matching runs on your own server; the app never talks to the supermarkets directly, except AH Zelfscan, which talks to the store's own server over its Wi-Fi.",
@@ -336,4 +336,10 @@ private fun AhAccountSettings(viewModel: AppViewModel, onLogin: () -> Unit) {
             onConfirm = { viewModel.disconnectAh() },
         )
     }
+}
+
+/** Groups related settings under one coloured label, like the system Settings app. */
+@Composable
+private fun SettingsSection(title: String) {
+    Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
 }
