@@ -136,6 +136,8 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
     val selectionMode = selection.isNotEmpty()
     var renaming by remember { mutableStateOf<BasketItem?>(null) }
     var naming by remember { mutableStateOf(false) }
+    var confirmDeleteSelected by remember { mutableStateOf(false) }
+    var confirmClearSkipped by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     fun shareLink(whatsApp: Boolean) = scope.launch {
         val link = viewModel.shareLink() ?: return@launch
@@ -148,6 +150,23 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
     }
     if (naming) {
         NameDialog(title = "New folder", initial = "", onDismiss = { naming = false }) { viewModel.groupSelected(it); naming = false }
+    }
+    if (confirmDeleteSelected) {
+        val count = selection.size
+        nl.baskt.ui.common.ConfirmDialog(
+            title = if (count == 1) "Delete 1 item?" else "Delete $count items?",
+            body = "They are removed from this basket for everyone it is shared with.",
+            confirmLabel = "Delete",
+            onDismiss = { confirmDeleteSelected = false },
+        ) { viewModel.deleteSelected() }
+    }
+    if (confirmClearSkipped) {
+        nl.baskt.ui.common.ConfirmDialog(
+            title = "Delete skipped items?",
+            body = "Everything you skipped is removed from this basket.",
+            confirmLabel = "Delete",
+            onDismiss = { confirmClearSkipped = false },
+        ) { viewModel.clearChecked() }
     }
     val whatsapp by viewModel.whatsapp.collectAsState()
     LaunchedEffect(Unit) { viewModel.loadWhatsApp() }
@@ -201,7 +220,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                         if (selectedItems.any { !it.isGroup }) IconButton(onClick = { naming = true }) { Icon(Icons.Default.CreateNewFolder, contentDescription = "Folder from selection") }
                         IconButton(onClick = { viewModel.checkSelected(selectedItems.any { !it.checked }) }) { Icon(Icons.Default.CheckCircle, contentDescription = "Skip / unskip") }
                         nl.baskt.ui.common.TransferMenu(baskets, currentBasketId) { basketId, copy -> viewModel.transferSelected(basketId, copy) }
-                        IconButton(onClick = { viewModel.deleteSelected() }) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error) }
+                        IconButton(onClick = { confirmDeleteSelected = true }) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error) }
                     },
                 )
             } else TopAppBar(
@@ -249,7 +268,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                             MenuHeader("This list")
                             if (items.any { it.isSkipped }) {
                                 DropdownMenuItem(text = { Text("Unskip all") }, leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null) }, onClick = { menu = false; viewModel.unskipAll() })
-                                DropdownMenuItem(text = { Text("Delete skipped items") }, leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }, onClick = { menu = false; viewModel.clearChecked() })
+                                DropdownMenuItem(text = { Text("Delete skipped items") }, leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }, onClick = { menu = false; confirmClearSkipped = true })
                             }
                             DropdownMenuItem(text = { Text("Refresh") }, leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }, onClick = { menu = false; viewModel.reload() })
                             androidx.compose.material3.HorizontalDivider()

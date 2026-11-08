@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.LunchDining
 import androidx.compose.material.icons.filled.RiceBowl
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -87,6 +88,7 @@ import coil3.compose.AsyncImage
 import nl.baskt.data.StockItem
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.EmptyState
+import nl.baskt.ui.common.ConfirmDialog
 import nl.baskt.ui.common.IconLabel
 
 /** The pantry groups, in the order the page shows them; keys match the server's stock categories. */
@@ -302,7 +304,15 @@ private fun StockItemSheet(
     onRemove: () -> Unit,
 ) {
     var moving by remember { mutableStateOf(false) }
+    var removing by remember { mutableStateOf(false) }
     val current = groupOf(item)
+    if (removing) ConfirmDialog(
+        title = "Remove “${item.text}”?",
+        body = "It leaves your stock, so recipes and running low stop counting it.",
+        confirmLabel = "Remove",
+        onDismiss = { removing = false },
+        onConfirm = onRemove,
+    )
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -334,10 +344,8 @@ private fun StockItemSheet(
                     )
                 }
             }
-            TextButton(onClick = onRemove) {
-                Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(8.dp))
-                Text("Remove from stock", color = MaterialTheme.colorScheme.error)
+            TextButton(onClick = { removing = true }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+                IconLabel(Icons.Default.Delete, "Remove from stock")
             }
         }
     }

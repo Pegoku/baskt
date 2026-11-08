@@ -1,5 +1,7 @@
 package nl.baskt.ui.purchases
 
+import nl.baskt.ui.common.ConfirmDialog
+import androidx.compose.material3.SheetValue
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -111,7 +113,20 @@ fun ReceiptEditor(
     var removing by remember { mutableStateOf<Int?>(null) }
     var dateText by remember(scan.purchasedAt) { mutableStateOf(scan.purchasedAt ?: "") }
     val linesTotal = scan.lines.sumOf { it.totalPriceCents }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var discarding by remember { mutableStateOf(false) }
+    // A swipe or scrim tap would throw away every correction; ask first once there is something to lose.
+    val hasWork = scan.lines.isNotEmpty()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { value ->
+        if (value == SheetValue.Hidden && hasWork) { discarding = true; false } else true
+    })
+    if (discarding) ConfirmDialog(
+        title = "Discard this receipt?",
+        body = "The scanned lines and your corrections are lost.",
+        confirmLabel = "Discard",
+        dismissLabel = "Keep",
+        onDismiss = { discarding = false },
+        onConfirm = onDismiss,
+    )
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleLarge)
@@ -168,9 +183,9 @@ fun ReceiptEditor(
             TextButton(onClick = { adding = true }) {
                 nl.baskt.ui.common.IconLabel(Icons.Default.Add, "Add a line the receipt missed")
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { onSave(store) }, enabled = scan.lines.isNotEmpty()) { Text(saveLabel) }
-                TextButton(onClick = onDismiss) { Text("Discard") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = { if (hasWork) discarding = true else onDismiss() }) { Text("Discard") }
+                Button(onClick = { onSave(store) }, enabled = hasWork) { Text(saveLabel) }
             }
         }
     }

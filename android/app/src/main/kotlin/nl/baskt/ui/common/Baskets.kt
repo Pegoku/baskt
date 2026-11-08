@@ -48,6 +48,7 @@ fun BasketSwitcherTitle(
     var open by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Basket?>(null) }
     var creating by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<Basket?>(null) }
     val current = baskets.firstOrNull { it.id == currentId }
 
     Box {
@@ -75,13 +76,21 @@ fun BasketSwitcherTitle(
                 DropdownMenuItem(
                     text = { Text("Delete “${current.name}”", color = MaterialTheme.colorScheme.error) },
                     leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                    onClick = { open = false; onDelete(current) },
+                    onClick = { open = false; deleting = current },
                 )
             }
         }
     }
     if (creating) {
         BasketDialog(title = "New basket", initialName = "", initialEmoji = "", onDismiss = { creating = false }) { name, emoji -> creating = false; onCreate(name, emoji) }
+    }
+    deleting?.let { basket ->
+        ConfirmDialog(
+            title = "Delete “${basket.name}”?",
+            body = "Every item in this basket is deleted with it. This cannot be undone.",
+            confirmLabel = "Delete",
+            onDismiss = { deleting = null },
+        ) { onDelete(basket) }
     }
     editing?.let { basket ->
         BasketDialog(title = "Rename basket", initialName = basket.name, initialEmoji = basket.emoji ?: "", onDismiss = { editing = null }) { name, emoji -> editing = null; onRename(basket, name, emoji) }
