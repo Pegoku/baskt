@@ -2,6 +2,7 @@
 
 package nl.baskt.ui.basket
 
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -197,14 +198,13 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                     Text("Waving the wand over your list…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            allKeys.isEmpty() && dealOnlyItems.isEmpty() -> Box(modifier = Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    if (distinct.isNotEmpty()) "Nothing to change. The look-alikes each have their own product, so they stay."
-                    else "Your list is already tidy: every entry reads well" + (plan?.language?.takeIf { it.isNotBlank() }?.let { " in $it" } ?: "") + ", nothing repeats and there are no new deals.",
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            allKeys.isEmpty() && dealOnlyItems.isEmpty() -> nl.baskt.ui.common.EmptyState(
+                title = "Nothing to tidy",
+                body = if (distinct.isNotEmpty()) "The look-alikes each have their own product, so they stay."
+                else "Every entry reads well" + (plan?.language?.takeIf { it.isNotBlank() }?.let { " in $it" } ?: "") + ", nothing repeats and there are no new deals.",
+                icon = Icons.Default.CheckCircle,
+                modifier = Modifier.fillMaxSize().padding(padding),
+            )
             else -> LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 16.dp)) {
                 val reply = plan?.reply
                 if (!reply.isNullOrBlank()) item { Text(reply, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.tertiary) }

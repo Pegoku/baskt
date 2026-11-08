@@ -2,6 +2,7 @@
 
 package nl.baskt.ui.basket
 
+import androidx.compose.material.icons.outlined.ShoppingBasket
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
@@ -316,25 +317,19 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
             ) { Icon(Icons.Default.AutoAwesome, contentDescription = "Assistant") }
             if (items.isEmpty()) {
                 Column(
-                    modifier = Modifier.fillMaxSize().padding(32.dp),
+                    modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     if (loading) {
                         LoadingIndicator()
                     } else {
-                        Text("Your basket of ideas is empty", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Type what you need, like \"halfvolle milk\" or \"something for pasta sauce\". baskt finds matching products at each supermarket.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        nl.baskt.ui.common.EmptyState(
+                            title = "Your basket of ideas is empty",
+                            body = "Type what you need, like \"halfvolle milk\" or \"something for pasta sauce\". baskt finds matching products at each supermarket.",
+                            icon = Icons.Outlined.ShoppingBasket,
+                            action = if (enabledStores.isEmpty()) ({ TextButton(onClick = onSettings) { Text("Connect to your baskt server") } }) else null,
                         )
-                        if (enabledStores.isEmpty()) {
-                            Spacer(Modifier.height(16.dp))
-                            TextButton(onClick = onSettings) { Text("Connect to your baskt server") }
-                        }
                     }
                 }
             } else {

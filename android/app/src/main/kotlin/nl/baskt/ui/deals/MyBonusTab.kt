@@ -1,5 +1,7 @@
 package nl.baskt.ui.deals
 
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -45,11 +47,11 @@ fun MyBonusTab(viewModel: AppViewModel, stores: List<StoreInfo>, onLogin: () -> 
     LaunchedEffect(Unit) { viewModel.loadAhAccount(); viewModel.loadAhOffers() }
     val current = account
     if (current != null && !current.connected) {
-        Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(if (current.error != null) "Your AH login expired" else "Your personal Bonus", style = MaterialTheme.typography.titleMedium)
-            Text("Log in with your Albert Heijn account to see your Bonus Box and personal offers, activate them, and have them count in your basket prices.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Button(onClick = onLogin) { Text(if (current.error != null) "Log in again" else "Log in to Albert Heijn") }
-        }
+        nl.baskt.ui.common.EmptyState(
+            title = if (current.error != null) "Your AH login expired" else "Your personal Bonus",
+            body = "Log in with your Albert Heijn account to see your Bonus Box and personal offers, activate them, and have them count in your basket prices.",
+            icon = Icons.Default.AccountCircle,
+        ) { Button(onClick = onLogin) { Text(if (current.error != null) "Log in again" else "Log in to Albert Heijn") } }
         return
     }
     Column(modifier = Modifier.fillMaxSize()) {

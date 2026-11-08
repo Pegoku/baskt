@@ -1,5 +1,6 @@
 package nl.baskt.ui.item
 
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -163,7 +164,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
         },
     ) { padding ->
         if (item == null) {
-            Column(modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp)) { Text("This item no longer exists.") }
+            nl.baskt.ui.common.EmptyState("This item no longer exists", "It was deleted or moved to another basket.", icon = Icons.Default.SearchOff, modifier = Modifier.fillMaxSize().padding(padding))
             return@Scaffold
         }
         LazyColumn(

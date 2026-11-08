@@ -143,11 +143,10 @@ fun SearchScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (Strin
                 }
                 if (scanned == null && found == null && !searching) {
                     item("hint") {
-                        Text(
-                            "Scan the barcode of something you already bought, or search a store by name. The product you pick is used for that store and the other stores are matched automatically.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(8.dp),
+                        nl.baskt.ui.common.EmptyState(
+                            title = "Find a product",
+                            body = "Scan the barcode of something you already bought, or search a store by name. The product you pick is used for that store and the other stores are matched automatically.",
+                            icon = Icons.Default.Search,
                         )
                     }
                 }

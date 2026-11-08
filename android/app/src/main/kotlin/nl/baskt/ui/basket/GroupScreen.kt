@@ -1,5 +1,6 @@
 package nl.baskt.ui.basket
 
+import androidx.compose.material.icons.filled.FolderOff
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -99,7 +100,7 @@ fun GroupScreen(viewModel: AppViewModel, groupId: String, onBack: () -> Unit, on
         },
     ) { padding ->
         if (group == null) {
-            Column(modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp)) { Text("This folder no longer exists.") }
+            nl.baskt.ui.common.EmptyState("This folder no longer exists", "It was deleted or moved to another basket.", icon = Icons.Default.FolderOff, modifier = Modifier.fillMaxSize().padding(padding))
             return@Scaffold
         }
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

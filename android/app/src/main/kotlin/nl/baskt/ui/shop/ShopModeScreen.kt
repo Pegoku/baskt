@@ -1,5 +1,6 @@
 package nl.baskt.ui.shop
 
+import androidx.compose.material.icons.filled.ShoppingCart
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -247,7 +248,13 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             val done = shopping.size - remaining.size
             LinearWavyProgressIndicator(progress = { if (shopping.isEmpty()) 0f else done.toFloat() / shopping.size }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp))
-            LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
+            if (!showArchived && shopping.isEmpty() && scansHere.isEmpty()) nl.baskt.ui.common.EmptyState(
+                title = "Nothing to buy here",
+                body = "Nothing on your list is planned for this store. Scan anything you pick up and it is added to the trip.",
+                icon = Icons.Default.ShoppingCart,
+                modifier = Modifier.weight(1f),
+            )
+            else LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
                 if (showArchived) {
                     item("h-archived") {
                         Text("Archived · not this trip", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))

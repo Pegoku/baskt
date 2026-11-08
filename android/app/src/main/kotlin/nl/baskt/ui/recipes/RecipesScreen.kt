@@ -1,5 +1,7 @@
 package nl.baskt.ui.recipes
 
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -224,7 +226,7 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
 @Composable
 private fun RecipeList(list: List<RecipeSummary>, loadingMore: Boolean, hasMore: Boolean, onLoadMore: () -> Unit, empty: String, busy: Boolean, isFavourite: (RecipeSummary) -> Boolean, onOpen: (RecipeSummary) -> Unit, onFavourite: (RecipeSummary) -> Unit, onFolder: (RecipeSummary) -> Unit) {
     if (list.isEmpty() && !busy) {
-        Text(empty, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(20.dp))
+        nl.baskt.ui.common.EmptyState(empty, icon = Icons.AutoMirrored.Filled.MenuBook)
         return
     }
     val state = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -267,7 +269,11 @@ private fun MineList(mine: List<UserRecipe>, favourites: List<RecipeSummary>, re
         )
     }
     if (mine.isEmpty() && favourites.isEmpty() && recent.isEmpty()) {
-        Text("Your own recipes, favourites and recently viewed recipes appear here. Tap \"New recipe\" to write one or let the AI draft it from a description.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(20.dp))
+        nl.baskt.ui.common.EmptyState(
+            title = "No recipes yet",
+            body = "Your own recipes, favourites and recently viewed recipes appear here. Tap \"New recipe\" to write one or let the AI draft it from a description.",
+            icon = Icons.AutoMirrored.Filled.MenuBook,
+        )
         return
     }
     LazyColumn(contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -384,17 +390,15 @@ private fun DiscoverPane(
         } else if (!params.complete) item("hint") {
             Text("Pick or type a country to see its classics.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))
         } else if (dishes != null && dishes.isEmpty()) item("empty") {
-            Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    when {
-                        params.mode == "stock" -> "Nothing fits yet. Add what you have at home under Stock, loosen the slider, or allow more time."
-                        params.maxMinutes != null -> "Nothing fits in ${params.maxMinutes} minutes. Allow more time or try another mode."
-                        else -> "No ideas came back. Try again in a moment."
-                    },
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                TextButton(onClick = onRefresh) { Text("Try again") }
-            }
+            nl.baskt.ui.common.EmptyState(
+                title = "No ideas yet",
+                body = when {
+                    params.mode == "stock" -> "Add what you have at home under Stock, loosen the slider, or allow more time."
+                    params.maxMinutes != null -> "Nothing fits in ${params.maxMinutes} minutes. Allow more time or try another mode."
+                    else -> "Nothing came back. Try again in a moment."
+                },
+                icon = Icons.Default.Restaurant,
+            ) { TextButton(onClick = onRefresh) { Text("Try again") } }
         }
         items(shown, key = { it.title }) { dish -> DishCard(dish, onSearch, onOpenDish) }
         if (!busy && shown.isNotEmpty()) item("refresh") {

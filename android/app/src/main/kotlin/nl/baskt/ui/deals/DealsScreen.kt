@@ -271,7 +271,10 @@ private fun AllDealsTab(viewModel: AppViewModel, stores: List<nl.baskt.data.Stor
         val cards = all.filter { period.period == null || it.period == period.period }.sortedByDescending { it.featured }
         val errors = data?.results?.mapNotNull { it.error } ?: emptyList()
         if (errors.isNotEmpty()) Text(errors.joinToString("; "), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp))
-        if (!loading && data != null && cards.isEmpty()) Text(if (loaded.isNotEmpty() && all.isEmpty()) "All deals here are of a hidden type." else if (period == DealPeriodFilter.Season && all.isNotEmpty()) "No seasonal deals running right now." else "No deals found.", modifier = Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!loading && data != null && cards.isEmpty()) nl.baskt.ui.common.EmptyState(
+            title = if (loaded.isNotEmpty() && all.isEmpty()) "All deals here are of a hidden type" else if (period == DealPeriodFilter.Season && all.isNotEmpty()) "No seasonal deals running right now" else "No deals found",
+            icon = Icons.Default.LocalOffer,
+        )
         if (!loading && data != null && cards.isNotEmpty() && query.isNotBlank()) Text("${cards.size} deals for “$query”" + (data?.terms?.takeIf { it.size > 1 }?.let { "  (also searched: ${it.drop(1).joinToString(", ")})" } ?: ""), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
         LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(cards, key = { "${it.store}-${it.id}" }) { card ->
