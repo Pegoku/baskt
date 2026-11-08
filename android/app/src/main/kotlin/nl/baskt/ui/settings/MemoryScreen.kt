@@ -62,7 +62,7 @@ fun MemoryScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             )
             return@Scaffold
         }
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (names.isNotEmpty()) {
                 item { Text("Wordings", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
                 items(names, key = { "name-" + it.id }) { name ->

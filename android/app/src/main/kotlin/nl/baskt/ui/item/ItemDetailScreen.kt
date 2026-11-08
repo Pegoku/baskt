@@ -172,7 +172,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
                 // Tapping anywhere outside the title ends editing and hides the keyboard.
                 detectTapGestures(onTap = { focusManager.clearFocus(force = true); keyboard?.hide() })
             },
-            contentPadding = PaddingValues(12.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { Header(item, onQuantity = { viewModel.setQuantity(item, it) }) }

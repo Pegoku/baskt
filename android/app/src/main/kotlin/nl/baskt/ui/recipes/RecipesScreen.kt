@@ -150,14 +150,14 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 placeholder = { Text("A dish in any language, or a recipe link") },
                 singleLine = true,
                 leadingIcon = { Icon(if (query.startsWith("http")) Icons.Default.Link else Icons.Default.Search, contentDescription = null) },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { submit() }),
             )
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 3)) { Text("Search") }
                 SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 3)) { Text("Library (${mine.size + favourites.size})") }
                 SegmentedButton(selected = tab == 2, onClick = { tab = 2 }, shape = SegmentedButtonDefaults.itemShape(2, 3)) { Text("Discover") }
@@ -235,7 +235,7 @@ private fun RecipeList(list: List<RecipeSummary>, loadingMore: Boolean, hasMore:
         androidx.compose.runtime.derivedStateOf { (state.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= list.size - 8 }
     }
     LaunchedEffect(nearEnd, hasMore, list.size) { if (nearEnd && hasMore && list.isNotEmpty()) onLoadMore() }
-    LazyColumn(state = state, contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 128.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(state = state, contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 128.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(list, key = { it.url }) { recipe ->
             Card(onClick = { onOpen(recipe) }) {
                 Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -276,7 +276,7 @@ private fun MineList(mine: List<UserRecipe>, favourites: List<RecipeSummary>, re
         )
         return
     }
-    LazyColumn(contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (mine.isNotEmpty()) item("h1") { Text("My recipes", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
         items(mine, key = { it.id }) { recipe ->
             Card(onClick = { onOpen(RecipeSummary(recipe.title, recipe.url, recipe.imageUrl, source = "Mine")) }) {
@@ -356,7 +356,7 @@ private fun DiscoverPane(
         val list = (dishes ?: emptyList()).distinctBy { it.title }
         if (byTime) list.sortedWith(compareBy(nullsLast()) { it.minutes }) else list
     }
-    LazyColumn(contentPadding = PaddingValues(12.dp, 4.dp, 12.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(contentPadding = PaddingValues(16.dp, 4.dp, 16.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item("mode") {
             Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = params.mode == "stock", onClick = { onParams(params.copy(mode = "stock")) }, label = { Text("From stock") }, leadingIcon = { Icon(Icons.Default.Kitchen, contentDescription = null, modifier = Modifier.size(18.dp)) })

@@ -103,7 +103,7 @@ fun GroupScreen(viewModel: AppViewModel, groupId: String, onBack: () -> Unit, on
             nl.baskt.ui.common.EmptyState("This folder no longer exists", "It was deleted or moved to another basket.", icon = Icons.Default.FolderOff, modifier = Modifier.fillMaxSize().padding(padding))
             return@Scaffold
         }
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item("header") {
                 Card {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

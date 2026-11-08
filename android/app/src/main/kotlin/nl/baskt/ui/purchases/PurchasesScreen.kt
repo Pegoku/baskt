@@ -140,7 +140,7 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             )
         },
     ) { padding ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (scanning) item("scanning") { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(8.dp)) { LoadingIndicator(); Text("Reading the receipt…") } }
             if (scanError != null) item("error") { Text(scanError!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
             val summary = spend

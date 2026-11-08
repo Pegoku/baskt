@@ -156,7 +156,7 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             nl.baskt.ui.common.OfflineBanner(viewModel)
             if (messages.isEmpty() && !busy) {
-                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("What can I do?", style = MaterialTheme.typography.titleMedium)
                     for (hint in listOf("Suggest three quick dinners for this week", "Swap the 1 kg bags for 500 g where you can", "What am I missing for pancakes?", "Remove everything that's already in stock")) {
                         AssistChip(onClick = { input = hint; send() }, label = { Text(hint) })
@@ -164,7 +164,7 @@ fun ChatScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () ->
                     Text("The assistant looks things up (your basket, stock, the stores, recipe sites) and proposes changes. Nothing changes until you confirm.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(messages, key = { it.id }) { message ->
                     if (message.role == "user") UserBubble(message.content)
                     else AssistantMessage(viewModel, message, stores, inBasket, onApply = { indices -> viewModel.applyProposal(message, indices) }, onOpenRecipe = { openRecipe = it; viewModel.openRecipe(nl.baskt.data.RecipeSummary(it.title, it.url, it.imageUrl, source = it.source)) }, onAddFolder = { viewModel.addRecipeFolder(it.url); onFolderAdded() })

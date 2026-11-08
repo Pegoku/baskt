@@ -113,7 +113,7 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
                 if (data != null && data.changes.isEmpty()) {
                     nl.baskt.ui.common.EmptyState("No price changes this week", "Nothing in your baskets got cheaper or dearer in the last week.", icon = Icons.AutoMirrored.Filled.TrendingFlat)
                 }
-                LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(data?.changes ?: emptyList(), key = { it.product.id }) { change ->
                         Card {
                             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -147,7 +147,7 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
                     icon = Icons.Default.LocalOffer,
                 ) { FilledTonalButton(onClick = { viewModel.findDeals(live = true) }) { Text("Search the stores") } }
             }
-            LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(list, key = { "${it.itemId}-${it.store}-${it.product.id}" }) { deal ->
                     Card {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -276,7 +276,7 @@ private fun AllDealsTab(viewModel: AppViewModel, stores: List<nl.baskt.data.Stor
             icon = Icons.Default.LocalOffer,
         )
         if (!loading && data != null && cards.isNotEmpty() && query.isNotBlank()) Text("${cards.size} deals for “$query”" + (data?.terms?.takeIf { it.size > 1 }?.let { "  (also searched: ${it.drop(1).joinToString(", ")})" } ?: ""), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
-        LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(cards, key = { "${it.store}-${it.id}" }) { card ->
                 DealCardView(card, stores, hidden, onAdd = { deal -> viewModel.addDeal(deal); onAdded("Added “${deal.title}” to your basket") })
             }
@@ -361,7 +361,7 @@ private fun DealSheet(card: DealCard, onAdd: () -> Unit, onDismiss: () -> Unit) 
     val translation = nl.baskt.ui.common.rememberTranslation(texts, !original)
     val shown = translation?.takeIf { !original && it.translated && it.texts.size == texts.size }?.texts ?: texts
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(if (original) "Original" else if (translation?.translated == true) "Translated" else if (translation == null) "Translating…" else "Translation unavailable · showing original", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
                 nl.baskt.ui.common.OriginalToggle(original) { original = !original }

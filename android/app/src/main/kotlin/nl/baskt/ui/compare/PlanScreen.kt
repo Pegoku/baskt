@@ -130,7 +130,7 @@ private fun PlanList(
     val byUnit = data.rankBy == "unitPrice"
     // "Everything at X" is the current plan when every open item that X stocks is assigned there.
     fun allAt(store: String) = open.isNotEmpty() && open.all { it.assignedStore == store || it.match(store)?.effective == null }
-    LazyColumn(contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item("h-stores") { SectionTitle("Where to shop") }
         val perStore = data.order.perStore
         val cheapestRow = data.items.associate { it.itemId to it.cheapestStore }

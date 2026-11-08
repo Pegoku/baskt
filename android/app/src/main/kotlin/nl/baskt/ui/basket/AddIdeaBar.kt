@@ -110,7 +110,7 @@ fun AddIdeaBar(
                     }
                 }
                 FlowRow(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                     maxLines = if (recipe != null) 5 else 2,
@@ -134,7 +134,7 @@ fun AddIdeaBar(
                 Box(Modifier.fillMaxWidth().height(56.dp), contentAlignment = Alignment.CenterStart) {
                     if (selected.isNotEmpty()) {
                         Row(
-                            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+                            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -150,13 +150,13 @@ fun AddIdeaBar(
                             "Tap to use · hold to select several",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 14.dp),
+                            modifier = Modifier.padding(horizontal = 16.dp),
                         )
                     }
                 }
             }
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {

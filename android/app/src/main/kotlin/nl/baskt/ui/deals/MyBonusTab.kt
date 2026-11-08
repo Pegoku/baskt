@@ -62,7 +62,7 @@ fun MyBonusTab(viewModel: AppViewModel, stores: List<StoreInfo>, onLogin: () -> 
         val max = data?.maximumActivations
         val used = data?.activatedCount ?: 0
         val slotsLeft = max?.let { it - used }
-        LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item(key = "box-header") {
                 Column(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
                     Text("Bonus Box", style = MaterialTheme.typography.titleMedium)

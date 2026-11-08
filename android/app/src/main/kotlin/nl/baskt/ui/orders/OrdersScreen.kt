@@ -233,7 +233,7 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), key = { days[it].toEpochDay() }, verticalAlignment = Alignment.Top) { page ->
                     val pageDay = days[page]
                     val pageScans = scansOn(pageDay)
-                    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         for (entry in purchasesOn(pageDay)) {
                             item(entry.purchase.id) { PurchaseCard(entry, products, stores, onAdd = { lines -> addLines(lines) }) }
                         }

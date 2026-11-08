@@ -350,7 +350,7 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
                     if (order != null) viewModel.reorder(order.map { it.id })
                     dragOrder = null
                 }
-                LazyColumn(state = listState, contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(state = listState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(shown, key = { it.id }) { item ->
                         val selected = item.id in selection
                         val isDragged = draggingId == item.id
