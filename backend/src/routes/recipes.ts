@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { db, newId, now } from "@/db";
 import { recipeFavourites, userRecipes, type UserRecipeRow } from "@/db/schema";
 import { appLanguage } from "@/db/settings";
-import { discoverDishes, dishQueries, dishesFromStock, draftRecipe, parseDiscoverParams } from "@/matching/cook";
+import { adaptRecipe, cleanDraft, discoverDishes, dishQueries, dishesFromStock, draftRecipe, parseDiscoverParams } from "@/matching/cook";
 import { localizeRecipe, localizeTitles } from "@/matching/localize";
 import type { Recipe } from "@/matching/recipes";
 import { fetchRecipeFromUrl, searchAllSources, SITE_SOURCES } from "@/matching/sources";
@@ -112,6 +112,17 @@ recipes.post("/generate", async (c) => {
   const hits = (await searchAllSources(understood.queries)).hits.slice(0, 8);
   const localized = await localizeTitles(hits.map((hit) => hit.title));
   return c.json({ dish: understood.dish, matches: hits.map((hit, index) => ({ ...hit, titleLocalized: localized[index] })) });
+});
+
+/** AI edit of any recipe ("without olives"): the client sends what it shows and saves the returned draft itself. */
+recipes.post("/adapt", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { recipe?: unknown; instruction?: unknown };
+  const recipe = cleanDraft(body.recipe);
+  const instruction = typeof body.instruction === "string" ? body.instruction.trim() : "";
+  if (!recipe || !instruction || instruction.length > 500) return c.json({ error: { code: "BAD_REQUEST", message: "recipe (title, ingredientLines) and instruction are required" } }, 400);
+  const adapted = await adaptRecipe(recipe, instruction);
+  if (!adapted) return c.json({ error: { code: "AI_UNAVAILABLE", message: "The AI could not change this recipe. Try again." } }, 503);
+  return c.json(adapted);
 });
 
 recipes.get("/mine", (c) => c.json({ recipes: db().select().from(userRecipes).orderBy(desc(userRecipes.updatedAt)).all() }));
