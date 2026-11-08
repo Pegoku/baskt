@@ -71,15 +71,14 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val top = backStack.lastOrNull()
     androidx.compose.runtime.LaunchedEffect(top) { focusManager.clearFocus(force = true); keyboard?.hide() }
-    // Shared-axis motion: the new screen slides in from the right over a fading old one; back mirrors it.
-    val enter = androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(380, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { it / 3 } +
-        androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(260))
-    val exit = androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(380, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { -it / 5 } +
-        androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(220))
-    val popEnter = androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(380, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { -it / 5 } +
-        androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(260))
-    val popExit = androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(380, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { it / 3 } +
-        androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(220))
+    // Shared-axis motion on the theme's expressive springs: the new screen slides in from the right over a fading old one; back mirrors it.
+    val motion = androidx.compose.material3.MaterialTheme.motionScheme
+    val slide = motion.defaultSpatialSpec<androidx.compose.ui.unit.IntOffset>()
+    val fade = motion.defaultEffectsSpec<Float>()
+    val enter = androidx.compose.animation.slideInHorizontally(slide) { it / 3 } + androidx.compose.animation.fadeIn(fade)
+    val exit = androidx.compose.animation.slideOutHorizontally(slide) { -it / 5 } + androidx.compose.animation.fadeOut(fade)
+    val popEnter = androidx.compose.animation.slideInHorizontally(slide) { -it / 5 } + androidx.compose.animation.fadeIn(fade)
+    val popExit = androidx.compose.animation.slideOutHorizontally(slide) { it / 3 } + androidx.compose.animation.fadeOut(fade)
     // Global messages: anything that fails or finishes elsewhere is announced here, on top of every screen.
     val snackbar = androidx.compose.runtime.remember { androidx.compose.material3.SnackbarHostState() }
     androidx.compose.runtime.LaunchedEffect(Unit) { viewModel.notices.collect { message -> snackbar.showSnackbar(message, withDismissAction = true) } }
