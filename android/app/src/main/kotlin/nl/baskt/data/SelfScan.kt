@@ -37,7 +37,7 @@ data class SsService(val storeNumber: Int? = null, val storeFormat: String? = nu
 
 /**
  * A variable-barcode range the store recognises. In the capture every range is `BOK` (Bonuskaart) and the member's
- * own card `2623065000013` falls inside one, so these are Bonuskaart number ranges, not weighed-product ranges.
+ * own card (a number like `2623065000013`) falls inside one, so these are Bonuskaart number ranges, not weighed-product ranges.
  */
 @Serializable
 data class SsEanRange(val minRange: String = "", val maxRange: String = "", val eanType: String? = null)

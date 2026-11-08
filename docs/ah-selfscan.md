@@ -169,7 +169,7 @@ Answered from the transcript and the APK (2026-11-03):
 
 - **No pre-registration.** `GET /sessions/{uuid}?terms=` is the first call after `/service` and works with a fresh
   UUID; `GET /trips/{uuid}` already lists the Bonuskaart as item 0, so `AH-Uid` is all the server needs.
-- **`eanRis`/`BOK` are Bonuskaart number ranges, not weighed items.** The member's card `2623065000013` lies in the
+- **`eanRis`/`BOK` are Bonuskaart number ranges, not weighed items.** A member's card (e.g. `2623065000013`) lies in the
   range `2623064040003`..`2623069039996`, and the card line in the basket carries `flags:["BOK"]`. Products carry
   `ART`; `BONUS` (+ `bonusInfo.promoLabel`) once a deal applies, `AKTIE` while a promotion is not triggered yet (one
   pizza dough of a 1+1), `PRICEFAV` (prijsfavoriet), `THT` (a best-before date was read from a GS1 code);
