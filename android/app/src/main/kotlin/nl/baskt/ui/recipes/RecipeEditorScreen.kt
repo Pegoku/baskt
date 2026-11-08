@@ -88,6 +88,14 @@ fun RecipeEditorScreen(viewModel: AppViewModel, recipeId: String?, onBack: () ->
             TopAppBar(
                 title = { Text(if (existing != null) "Edit recipe" else "New recipe") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
+                // Save lives in the bar so it stays reachable however long the steps get.
+                actions = {
+                    if (showEditor) Button(
+                        onClick = { scope.launch { if (viewModel.saveRecipe(currentDraft(), origin, existing?.id) != null) onBack() } },
+                        enabled = title.isNotBlank() && ingredients.isNotBlank() && steps.any { it.isNotBlank() },
+                        modifier = Modifier.padding(end = 8.dp),
+                    ) { Text("Save") }
+                },
             )
         },
     ) { padding ->
@@ -182,10 +190,6 @@ fun RecipeEditorScreen(viewModel: AppViewModel, recipeId: String?, onBack: () ->
                 }
                 TextButton(onClick = { steps = steps + "" }) {
                     nl.baskt.ui.common.IconLabel(Icons.Default.Add, "Add step")
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { scope.launch { if (viewModel.saveRecipe(currentDraft(), origin, existing?.id) != null) onBack() } }, enabled = title.isNotBlank() && ingredients.isNotBlank() && steps.any { it.isNotBlank() }) { Text(if (existing != null) "Save changes" else "Save recipe") }
-                    TextButton(onClick = onBack) { Text("Cancel") }
                 }
             }
         }
