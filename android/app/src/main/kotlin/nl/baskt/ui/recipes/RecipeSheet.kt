@@ -122,7 +122,7 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, exp
                     if (stepsPending) Text(if (stepsTranslation == null) "Translating steps…" else "Step translation unavailable · showing original", style = MaterialTheme.typography.labelSmall)
                     for ((index, step) in displayed.steps.withIndex()) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 4.dp)) {
-                            Text("${index + 1}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            Text("${index + 1}", style = MaterialTheme.typography.titleMediumEmphasized, color = MaterialTheme.colorScheme.primary)
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(step.text, style = MaterialTheme.typography.bodyMedium)
                                 if (step.imageUrl != null) {

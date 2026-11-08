@@ -54,7 +54,7 @@ fun BasketSwitcherTitle(
     Box {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             TextButton(onClick = { open = true }) {
-                Text(current?.label ?: "baskt", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
+                Text(current?.label ?: "baskt", style = MaterialTheme.typography.titleLargeEmphasized, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
                 Icon(Icons.Default.ArrowDropDown, contentDescription = "Switch basket", tint = MaterialTheme.colorScheme.onSurface)
             }
         }

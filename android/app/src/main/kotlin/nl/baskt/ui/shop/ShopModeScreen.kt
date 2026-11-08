@@ -330,7 +330,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                                 Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.small, modifier = Modifier.padding(top = 4.dp)) {
                                                     Text(
                                                         listOfNotNull(shown, extra).joinToString(" · "),
-                                                        style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                        style = MaterialTheme.typography.labelLargeEmphasized, color = MaterialTheme.colorScheme.onTertiaryContainer,
                                                         maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                                     )

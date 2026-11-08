@@ -123,7 +123,7 @@ fun ProductRow(product: Product, modifier: Modifier = Modifier, dealMath: Boolea
             }
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text(product.priceCents.euros(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(product.priceCents.euros(), style = MaterialTheme.typography.titleMediumEmphasized)
             if (product.regularPriceCents != null && product.regularPriceCents > product.priceCents) {
                 Text(product.regularPriceCents.euros(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

@@ -142,7 +142,7 @@ fun SelfScanBar(
                         }
                     }
                 }
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = onColor)
+                Text(title, style = MaterialTheme.typography.titleMediumEmphasized, color = onColor)
                 Text(
                     detail,
                     style = MaterialTheme.typography.bodySmall,
@@ -216,7 +216,7 @@ fun SelfScanBasketSheet(
             item("totals") {
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
                     Text("AH basket" + (state.store?.storeNumber?.let { " · store $it" } ?: ""), style = MaterialTheme.typography.labelLarge, color = colors.primary)
-                    Text((basket?.toPayCents ?: 0).euros(), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+                    Text((basket?.toPayCents ?: 0).euros(), style = MaterialTheme.typography.displaySmallEmphasized)
                     Text(
                         listOfNotNull("${basket?.itemCount ?: 0} items", basket?.savedCents?.takeIf { it > 0 }?.let { "you save ${it.euros()}" }, if (state.connectionLost) "no connection" else null).joinToString(" · "),
                         style = MaterialTheme.typography.bodyMedium, color = if (state.connectionLost) colors.error else colors.onSurfaceVariant,
@@ -269,7 +269,7 @@ fun SelfScanBasketSheet(
                     val discount = discounts[index]
                     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Surface(color = colors.tertiaryContainer, shape = MaterialTheme.shapes.small) {
-                            Text(if (discount.icon?.contains("bonus") == true) "Bonus" else "Korting", color = colors.onTertiaryContainer, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                            Text(if (discount.icon?.contains("bonus") == true) "Bonus" else "Korting", color = colors.onTertiaryContainer, style = MaterialTheme.typography.labelMediumEmphasized, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
                         }
                         Text(discount.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(horizontal = 10.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text("−${(discount.discount ?: 0).euros()}", fontWeight = FontWeight.SemiBold, color = colors.tertiary)
@@ -356,7 +356,7 @@ private fun SelfScanLine(line: SsItem, link: ListLink, sending: Boolean, onQuant
 @Composable
 private fun Chip(text: String, container: Color, content: Color) {
     Surface(color = container, shape = MaterialTheme.shapes.small) {
-        Text(text, color = content, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+        Text(text, color = content, style = MaterialTheme.typography.labelMediumEmphasized, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
     }
 }
 

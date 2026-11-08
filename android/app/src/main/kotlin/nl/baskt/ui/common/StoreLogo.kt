@@ -30,7 +30,7 @@ fun StoreLogo(code: String, stores: List<StoreInfo>, size: Int = 32, modifier: M
             AsyncImage(model = info.logoUrl, contentDescription = info.name, modifier = Modifier.size((size * 0.72f).dp))
         } else {
             Box(Modifier.size(size.dp).background(color), contentAlignment = Alignment.Center) {
-                Text((info?.name ?: code).take(1), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.Black, modifier = Modifier.padding(2.dp))
+                Text((info?.name ?: code).take(1), style = MaterialTheme.typography.titleMediumEmphasized, color = Color.Black, modifier = Modifier.padding(2.dp))
             }
         }
     }

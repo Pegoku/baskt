@@ -394,8 +394,7 @@ private fun SavingStrip(saving: DealSaving, quantity: Int) {
                     }
                     Text(
                         step.toCents.euros() + suffix,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMediumEmphasized,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
                     if (step.unit == null) Text("a pack", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
@@ -408,8 +407,7 @@ private fun SavingStrip(saving: DealSaving, quantity: Int) {
                 Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.primary) {
                     Text(
                         "−$percent%",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelLargeEmphasized,
                         color = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     )

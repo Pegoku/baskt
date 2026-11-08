@@ -317,7 +317,7 @@ private fun DealCardView(card: DealCard, stores: List<nl.baskt.data.StoreInfo>, 
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     StoreBadge(card.store, stores)
-                    if (card.dealText != null) Text(shown[2], style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    if (card.dealText != null) Text(shown[2], style = MaterialTheme.typography.labelLargeEmphasized, color = MaterialTheme.colorScheme.primary)
                 }
                 Text(shown[0], style = MaterialTheme.typography.titleSmall)
                 if (card.subtitle != null) Text(shown[1], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -367,7 +367,7 @@ private fun DealSheet(card: DealCard, onAdd: () -> Unit, onDismiss: () -> Unit) 
                 nl.baskt.ui.common.OriginalToggle(original) { original = !original }
             }
             if (card.imageUrl != null) nl.baskt.ui.common.ZoomableImage(card.imageUrl, shown[0], Modifier.fillMaxWidth().height(220.dp))
-            if (card.dealText != null) Text(shown[2], style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            if (card.dealText != null) Text(shown[2], style = MaterialTheme.typography.titleMediumEmphasized, color = MaterialTheme.colorScheme.primary)
             Text(shown[0], style = MaterialTheme.typography.headlineSmall)
             if (card.subtitle != null) Text(shown[1], color = MaterialTheme.colorScheme.onSurfaceVariant)
             val period = listOfNotNull(card.validFrom?.let { "from ${shortDate(it)}" }, card.validUntil?.let { "until ${shortDate(it)}" }).joinToString(" ")

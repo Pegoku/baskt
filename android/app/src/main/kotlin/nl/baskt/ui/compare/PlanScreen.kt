@@ -399,8 +399,7 @@ private fun StoreOption(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         (lineCents ?: product.priceCents).euros() + if (unconfirmed) "?" else "",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmallEmphasized,
                         color = if (selected || cheapest) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     )
                     if (cheapest) Text("cheapest", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)

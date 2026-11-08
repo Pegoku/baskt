@@ -143,7 +143,7 @@ fun ReceiptEditor(
                     modifier = Modifier.weight(1f),
                 )
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(linesTotal.euros(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(linesTotal.euros(), style = MaterialTheme.typography.titleMediumEmphasized)
                     val declared = scan.totalCents
                     if (declared != null && declared != linesTotal) Text("receipt says ${declared.euros()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                     else Text("${scan.lines.size} lines", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

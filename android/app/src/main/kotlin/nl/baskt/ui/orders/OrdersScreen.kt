@@ -276,7 +276,7 @@ private fun PurchaseCard(entry: PurchaseWithLines, products: Map<String, nl.bask
                         Text((when (purchase.source) { "shop" -> "In store"; "ah" -> "AH receipt"; else -> "Receipt" }) + " · $time · ${entry.lines.size} items", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                Text(purchase.totalCents.euros(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(purchase.totalCents.euros(), style = MaterialTheme.typography.titleMediumEmphasized)
             }
             HorizontalDivider()
             for (line in entry.lines) LineRow(line, products[line.productId], onAdd = { onAdd(listOf(line)) })
@@ -298,7 +298,7 @@ private fun LineRow(line: PurchaseLine, product: nl.baskt.data.Product?, onAdd: 
             val detail = listOfNotNull(product?.quantityText, line.dealText, if (line.barcode != null && line.name == line.barcode) "Unknown product · barcode only" else null).joinToString(" · ")
             if (detail.isNotBlank()) Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(if (line.totalPriceCents > 0) line.totalPriceCents.euros() else "—", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        Text(if (line.totalPriceCents > 0) line.totalPriceCents.euros() else "—", style = MaterialTheme.typography.bodyMediumEmphasized)
         IconButton(onClick = onAdd) { Icon(Icons.Default.AddShoppingCart, contentDescription = "Add ${line.name} to the basket") }
     }
 }
