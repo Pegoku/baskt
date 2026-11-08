@@ -1,5 +1,7 @@
 package nl.baskt.ui.compare
 
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -177,10 +179,12 @@ private fun PlanList(
             Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 SectionTitle("Item by item", modifier = Modifier.weight(1f))
                 Text("Cheapest by", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.width(6.dp))
-                FilterChip(selected = !byUnit, onClick = { viewModel.setRankBy("price") }, label = { Text("pack") })
-                Spacer(Modifier.width(6.dp))
-                FilterChip(selected = byUnit, onClick = { viewModel.setRankBy("unitPrice") }, label = { Text("per kg / l") })
+                Spacer(Modifier.width(8.dp))
+                // A two-way switch: a connected button group, not a pair of independent filters.
+                Row(horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
+                    ToggleButton(checked = !byUnit, onCheckedChange = { viewModel.setRankBy("price") }, shapes = ButtonGroupDefaults.connectedLeadingButtonShapes()) { Text("Pack") }
+                    ToggleButton(checked = byUnit, onCheckedChange = { viewModel.setRankBy("unitPrice") }, shapes = ButtonGroupDefaults.connectedTrailingButtonShapes()) { Text("Per kg / l") }
+                }
             }
         }
         items(listed, key = { it.id }) { item ->
@@ -260,9 +264,7 @@ private fun StoreCard(
             // One fixed-height slot for the button or the hint, so choosing a store never resizes the cards.
             Box(modifier = Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.Center) {
                 if (assigned.count > 0) Button(onClick = onShop, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
-                    Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                    Text(if (chosen) "Shop" else "Shop ${assigned.count} · ${assigned.totalCents.euros()}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    nl.baskt.ui.common.IconLabel(Icons.Default.ShoppingCart, if (chosen) "Shop" else "Shop ${assigned.count} · ${assigned.totalCents.euros()}")
                 } else Text("Tap to shop everything here", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             }
         }

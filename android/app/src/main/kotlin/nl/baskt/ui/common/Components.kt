@@ -148,5 +148,5 @@ fun Tag(text: String, modifier: Modifier = Modifier, color: Color = MaterialThem
 fun IconLabel(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) {
     androidx.compose.material3.Icon(icon, contentDescription = null, modifier = Modifier.size(androidx.compose.material3.ButtonDefaults.IconSize))
     androidx.compose.foundation.layout.Spacer(Modifier.size(androidx.compose.material3.ButtonDefaults.IconSpacing))
-    Text(label)
+    Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }

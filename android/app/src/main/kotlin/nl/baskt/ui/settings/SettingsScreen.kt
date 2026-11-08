@@ -1,5 +1,7 @@
 package nl.baskt.ui.settings
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -95,19 +97,17 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
             Text("Supermarkets", style = MaterialTheme.typography.titleMedium)
             if (stores.isEmpty()) Text("Connect to the server to load the store list.", style = MaterialTheme.typography.bodySmall)
             for (store in stores) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                val toggle = { enabled: Boolean ->
+                    val codes = stores.filter { if (it.code == store.code) enabled else it.enabled }.map { it.code }
+                    if (codes.isNotEmpty()) viewModel.setEnabledStores(codes)
+                }
+                Row(modifier = Modifier.fillMaxWidth().toggleable(value = store.enabled, role = Role.Switch, onValueChange = toggle).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     nl.baskt.ui.common.StoreLogo(store.code, stores)
                     Column(modifier = Modifier.weight(1f)) {
                         Text(store.name)
                         if (store.coverage != "full") Text("Offers only", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Switch(
-                        checked = store.enabled,
-                        onCheckedChange = { enabled ->
-                            val codes = stores.filter { if (it.code == store.code) enabled else it.enabled }.map { it.code }
-                            if (codes.isNotEmpty()) viewModel.setEnabledStores(codes)
-                        },
-                    )
+                    Switch(checked = store.enabled, onCheckedChange = null)
                 }
             }
             Spacer(Modifier.height(4.dp))
@@ -124,7 +124,11 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
             var editingCard by remember { mutableStateOf<String?>(null) }
             for (store in stores.filter { it.enabled }) {
                 val number = settings?.loyaltyCards?.get(store.code)
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                val toggle = { enabled: Boolean ->
+                    val codes = stores.filter { if (it.code == store.code) enabled else it.enabled }.map { it.code }
+                    if (codes.isNotEmpty()) viewModel.setEnabledStores(codes)
+                }
+                Row(modifier = Modifier.fillMaxWidth().toggleable(value = store.enabled, role = Role.Switch, onValueChange = toggle).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     nl.baskt.ui.common.StoreLogo(store.code, stores)
                     Column(modifier = Modifier.weight(1f)) {
                         Text(store.name)
@@ -145,13 +149,7 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
             AhAccountSettings(viewModel, onAhLogin)
             HorizontalDivider()
             SettingsSection("Recipes")
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Skip ingredients I have in stock")
-                    Text("Recipe folders leave out what is in your stock list; you can add them back per folder.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(checked = serverSettings.recipeSkipInStock ?: true, onCheckedChange = { viewModel.setSkipInStock(it) })
-            }
+            SwitchRow("Skip ingredients I have in stock", "Recipe folders leave out what is in your stock list; you can add them back per folder.", checked = serverSettings.recipeSkipInStock ?: true) { viewModel.setSkipInStock(it) }
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Default servings")
@@ -257,26 +255,8 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
             }
             HorizontalDivider()
             SettingsSection("Experimental")
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Scan with the phone, pay at the till")
-                    Text(
-                        "In shop mode, every scan is kept as read. At the checkout, a till button shows your card and then each code in turn for the scanner, so the till rings up what you scanned. Weighed items need their label scanned. Tested for Albert Heijn; check the till's total before paying.",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(checked = settings?.tillRelay == true, onCheckedChange = { viewModel.setTillRelay(it) })
-            }
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("AH Zelfscan in the store")
-                    Text(
-                        "In Albert Heijn shop mode, a Start button opens a real self-scan trip on the store's server, like the Appie app: each scan goes into the AH basket with AH's own prices and Bonus, and at checkout baskt shows your Bonuskaart for the betaalpaal. You pay there with your own card. Works only on the store Wi-Fi, and needs your AH card above.",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(checked = settings?.selfScan == true, onCheckedChange = { viewModel.setSelfScan(it) })
-            }
+            SwitchRow("Scan with the phone, pay at the till", "In shop mode, every scan is kept as read. At the checkout, a till button shows your card and then each code in turn for the scanner, so the till rings up what you scanned. Weighed items need their label scanned. Tested for Albert Heijn; check the till's total before paying.", checked = settings?.tillRelay == true) { viewModel.setTillRelay(it) }
+            SwitchRow("AH Zelfscan in the store", "In Albert Heijn shop mode, a Start button opens a real self-scan trip on the store's server, like the Appie app: each scan goes into the AH basket with AH's own prices and Bonus, and at checkout baskt shows your Bonuskaart for the betaalpaal. You pay there with your own card. Works only on the store Wi-Fi, and needs your AH card above.", checked = settings?.selfScan == true) { viewModel.setSelfScan(it) }
             if (settings?.selfScan == true) {
                 var wifiName by remember(settings?.selfScanWifi) { mutableStateOf(settings?.selfScanWifi.orEmpty()) }
                 OutlinedTextField(
@@ -311,13 +291,7 @@ private fun AhAccountSettings(viewModel: AppViewModel, onLogin: () -> Unit) {
         current == null -> Text("Connect to the server to see the account.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         current.connected -> {
             Text("Logged in" + (current.memberName?.let { " as $it" } ?: "") + ". Your personal Bonus and Bonus Box offers show under Deals → My Bonus, and activated ones count in prices.", style = MaterialTheme.typography.bodySmall)
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Auto-activate matching offers")
-                    Text("Bonus Box offers for something on a basket are activated for you, best saving first, until the weekly limit. AH does not let you undo an activation.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(checked = current.autoActivate, onCheckedChange = { viewModel.setAhAutoActivate(it) })
-            }
+            SwitchRow("Auto-activate matching offers", "Bonus Box offers for something on a basket are activated for you, best saving first, until the weekly limit. AH does not let you undo an activation.", checked = current.autoActivate) { viewModel.setAhAutoActivate(it) }
             OutlinedButton(onClick = { confirmLogout = true }) { Text("Log out") }
         }
         else -> {
@@ -333,6 +307,22 @@ private fun AhAccountSettings(viewModel: AppViewModel, onLogin: () -> Unit) {
             onDismiss = { confirmLogout = false },
             onConfirm = { viewModel.disconnectAh() },
         )
+    }
+}
+
+/** A setting that is on or off: the whole row toggles, so the target is the full width rather than the switch alone. */
+@Composable
+internal fun SwitchRow(title: String, body: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().toggleable(value = checked, role = Role.Switch, onValueChange = onChange).padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (body != null) Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 

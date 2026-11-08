@@ -205,7 +205,7 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
                     nl.baskt.ui.common.IconLabel(Icons.Default.CreateNewFolder, "Add as folder")
                 }
                 if (!current.url.startsWith("baskt://")) {
-                    IconButton(onClick = { viewModel.toggleRecipeFavourite(current) }) { Icon(if (isFavourite(current)) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "Favourite") }
+                    IconButton(onClick = { viewModel.toggleRecipeFavourite(current) }) { Icon(if (isFavourite(current)) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = if (isFavourite(current)) "Remove from favourites" else "Add to favourites") }
                     TextButton(onClick = { viewModel.saveSiteRecipeAsMine(current); selected = null; viewModel.closeRecipe() }) { Text("Copy to mine") }
                 }
             }
@@ -244,7 +244,7 @@ private fun RecipeList(list: List<RecipeSummary>, loadingMore: Boolean, hasMore:
                         nl.baskt.ui.common.TranslatedLabel(recipe.displayTitle, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(listOfNotNull(recipe.source, recipe.title.takeIf { it != recipe.displayTitle }).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    IconButton(onClick = { onFavourite(recipe) }) { Icon(if (isFavourite(recipe)) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "Favourite", tint = MaterialTheme.colorScheme.primary) }
+                    IconButton(onClick = { onFavourite(recipe) }) { Icon(if (isFavourite(recipe)) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = if (isFavourite(recipe)) "Remove from favourites" else "Add to favourites", tint = MaterialTheme.colorScheme.primary) }
                     IconButton(onClick = { onFolder(recipe) }) { Icon(Icons.Default.CreateNewFolder, contentDescription = "Add as folder") }
                 }
             }
@@ -318,7 +318,7 @@ private fun MineList(mine: List<UserRecipe>, favourites: List<RecipeSummary>, re
                         nl.baskt.ui.common.TranslatedLabel(recipe.displayTitle, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         if (recipe.source != null) Text(recipe.source, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    if (!own) IconButton(onClick = { viewModel.toggleRecipeFavourite(recipe) }) { Icon(if (isFavourite(recipe)) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "Favourite", tint = MaterialTheme.colorScheme.primary) }
+                    if (!own) IconButton(onClick = { viewModel.toggleRecipeFavourite(recipe) }) { Icon(if (isFavourite(recipe)) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = if (isFavourite(recipe)) "Remove from favourites" else "Add to favourites", tint = MaterialTheme.colorScheme.primary) }
                     IconButton(onClick = { onFolder(recipe.url) }) { Icon(Icons.Default.CreateNewFolder, contentDescription = "Add as folder") }
                 }
             }

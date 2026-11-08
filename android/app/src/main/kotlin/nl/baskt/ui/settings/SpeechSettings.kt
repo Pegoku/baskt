@@ -36,14 +36,8 @@ fun SpeechSettings(viewModel: AppViewModel) {
     val selectedVoice = settings?.ttsVoice?.takeIf { it in chosen?.voices.orEmpty() } ?: chosen?.voices?.firstOrNull()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Voice conversations", style = MaterialTheme.typography.titleMedium)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Speak replies")
-                Text("Read assistant replies aloud after you send a voice message.", style = MaterialTheme.typography.bodySmall)
-            }
-            Switch(checked = settings?.speakReplies == true, onCheckedChange = { viewModel.setSpeakReplies(it) })
-        }
-        Text("Voice messages send automatically. You can also turn spoken replies on or off below any assistant message.", style = MaterialTheme.typography.bodySmall)
+        SwitchRow("Speak replies", "Read assistant replies aloud after you send a voice message.", checked = settings?.speakReplies == true) { viewModel.setSpeakReplies(it) }
+        Text("Voice messages send automatically. You can also turn spoken replies on or off below any assistant message.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         when {
             error -> TextButton(onClick = { retry++ }) { Text("Retry loading voices") }
             catalogue == null -> Text("Loading voices…")
@@ -55,13 +49,13 @@ fun SpeechSettings(viewModel: AppViewModel) {
                     OutlinedButton(onClick = { expanded = true }) { Text(chosen.name) }
                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                         supported.forEach { model ->
-                            DropdownMenuItem(text = { Column { Text(model.name); Text(model.description, style = MaterialTheme.typography.bodySmall) } },
+                            DropdownMenuItem(text = { Column { Text(model.name); Text(model.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
                                 onClick = { expanded = false; viewModel.setSpeechVoice(model.id, model.voices.first()) })
                         }
                     }
                 }
-                Text(chosen.description, style = MaterialTheme.typography.bodySmall)
-                if (chosen.id != settings?.ttsModel) Text("Using a model that supports your language.", style = MaterialTheme.typography.bodySmall)
+                Text(chosen.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (chosen.id != settings?.ttsModel) Text("Using a model that supports your language.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 var voiceMenu by remember(chosen.id, language) { mutableStateOf(false) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) {
@@ -80,7 +74,7 @@ fun SpeechSettings(viewModel: AppViewModel) {
                         else selectedVoice?.let { viewModel.previewSpeech(chosen.id, it) }
                     }) { Text(if (speaking == "preview") "Stop preview" else "Test voice") }
                 }
-                Text("Samples are generated when played and cached for later.", style = MaterialTheme.typography.bodySmall)
+                Text("Samples are generated when played and cached for later.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

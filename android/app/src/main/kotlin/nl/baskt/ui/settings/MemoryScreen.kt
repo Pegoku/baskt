@@ -1,5 +1,10 @@
 package nl.baskt.ui.settings
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -87,13 +92,22 @@ fun MemoryScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                                 Text(choice.itemText, style = MaterialTheme.typography.titleSmall)
                                 Text(format.format(Date(choice.createdAt)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            if (choice.chosenTitle != null) Text("👍 ${choice.chosenTitle}", style = MaterialTheme.typography.bodySmall)
-                            if (choice.rejectedTitles.isNotEmpty()) Text("👎 ${choice.rejectedTitles.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (choice.chosenTitle != null) FeedbackLine(Icons.Default.ThumbUp, choice.chosenTitle, MaterialTheme.colorScheme.onSurface)
+                            if (choice.rejectedTitles.isNotEmpty()) FeedbackLine(Icons.Default.ThumbDown, choice.rejectedTitles.joinToString(", "), MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         IconButton(onClick = { viewModel.deleteMemory(choice.id) }) { Icon(Icons.Default.Delete, contentDescription = "Forget") }
                     }
                 }
             }
         }
+    }
+}
+
+/** A product the matching was told was right (thumb up) or wrong (thumb down). */
+@Composable
+private fun FeedbackLine(icon: ImageVector, text: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall, color = color)
     }
 }

@@ -66,9 +66,9 @@ fun VoiceConfirmSheet(items: List<VoiceItem>, loading: Boolean, transcript: Stri
                 }
             }
             Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { onConfirm(ordered.filter { it.text in selected }) }, enabled = !loading && selected.isNotEmpty()) { Text("Add ${selected.size}") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), modifier = Modifier.fillMaxWidth()) {
                 TextButton(onClick = onDismiss) { Text("Cancel") }
+                Button(onClick = { onConfirm(ordered.filter { it.text in selected }) }, enabled = !loading && selected.isNotEmpty()) { Text("Add ${selected.size}") }
             }
         }
     }
