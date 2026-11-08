@@ -5,7 +5,6 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.speech.RecognizerIntent
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.AlertDialog
@@ -49,7 +48,7 @@ fun rememberVoiceInput(viewModel: AppViewModel, prompt: String, onTranscript: (S
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
         }
         runCatching { speech.launch(intent) }.onFailure {
-            Toast.makeText(context, "Speech recognition is not available", Toast.LENGTH_SHORT).show()
+            viewModel.notify("Speech recognition is not available")
         }
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -67,10 +66,10 @@ fun rememberVoiceInput(viewModel: AppViewModel, prompt: String, onTranscript: (S
                 catch (_: Exception) { null }
                 finally { transcribing = false }
                 if (text == null) {
-                    Toast.makeText(context, "Server dictation unavailable, using this phone", Toast.LENGTH_SHORT).show()
+                    viewModel.notify("Server dictation unavailable, using this phone")
                     local()
                 } else if (text.isNotBlank()) deliver(text)
-                else Toast.makeText(context, "No speech detected. Please try again.", Toast.LENGTH_SHORT).show()
+                else viewModel.notify("No speech detected. Please try again.")
             }
         },
     )

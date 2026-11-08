@@ -34,7 +34,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -216,7 +216,7 @@ fun TillRelayDialog(
                 }
                 IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Black) }
             }
-            LinearProgressIndicator(progress = { if (steps.size <= 1) 1f else index.toFloat() / (steps.size - 1) }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+            LinearWavyProgressIndicator(progress = { if (steps.size <= 1) 1f else index.toFloat() / (steps.size - 1) }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
 
             if (step is TillStep.Done) {
                 DoneStep(unscanned, reported.value, onNoBarcode = { item -> reported.value = reported.value + item.id; onNoBarcode(item) }, modifier = Modifier.weight(1f))

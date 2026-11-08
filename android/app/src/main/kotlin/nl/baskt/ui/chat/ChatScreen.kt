@@ -229,7 +229,7 @@ private fun AssistantMessage(viewModel: AppViewModel, message: ChatMessage, stor
             for (card in cards) {
                 Card(onClick = { onOpenRecipe(card) }) {
                     Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        if (card.imageUrl != null) AsyncImage(model = card.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)))
+                        if (card.imageUrl != null) AsyncImage(model = card.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(56.dp).clip(MaterialTheme.shapes.medium))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(card.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             if (card.source != null) Text(card.source, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

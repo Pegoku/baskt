@@ -8,7 +8,7 @@ import androidx.compose.runtime.Composable
 
 /** A one-question dialog for things that cannot be undone; the confirming button is red for deletions. */
 @Composable
-fun ConfirmDialog(title: String, body: String, confirmLabel: String, destructive: Boolean = true, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+fun ConfirmDialog(title: String, body: String, confirmLabel: String, destructive: Boolean = true, dismissLabel: String = "Cancel", onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -18,6 +18,6 @@ fun ConfirmDialog(title: String, body: String, confirmLabel: String, destructive
                 Text(confirmLabel, color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(dismissLabel) } },
     )
 }

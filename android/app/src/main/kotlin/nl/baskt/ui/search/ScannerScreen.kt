@@ -95,7 +95,7 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
                     Text("Scan products", color = Color.White, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                     TextButton(onClick = { paused = !paused }, enabled = !reviewing) { Text(if (paused) "Resume" else "Pause", color = Color.White) }
                 }
-                if (!online) Surface(color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer, shape = RoundedCornerShape(16.dp),
+                if (!online) Surface(color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer, shape = MaterialTheme.shapes.large,
                     modifier = Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars).padding(top = 56.dp)) {
                     Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Icon(Icons.Default.CloudOff, null, modifier = Modifier.size(16.dp))
@@ -227,7 +227,7 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
 private fun ScanLabel(label: nl.baskt.data.ScannedLabel?) {
     if (label == null) return
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (label.imageUrl != null) Surface(color = Color.White, shape = RoundedCornerShape(12.dp), modifier = Modifier.size(56.dp)) {
+        if (label.imageUrl != null) Surface(color = Color.White, shape = MaterialTheme.shapes.medium, modifier = Modifier.size(56.dp)) {
             coil3.compose.AsyncImage(model = label.imageUrl, contentDescription = label.title, modifier = Modifier.padding(4.dp))
         }
         Column(Modifier.weight(1f)) {

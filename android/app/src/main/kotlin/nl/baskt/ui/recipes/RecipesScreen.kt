@@ -16,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -235,7 +234,7 @@ private fun RecipeList(list: List<RecipeSummary>, loadingMore: Boolean, hasMore:
         items(list, key = { it.url }) { recipe ->
             Card(onClick = { onOpen(recipe) }) {
                 Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)))
+                    if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(MaterialTheme.shapes.medium))
                     Column(modifier = Modifier.weight(1f)) {
                         nl.baskt.ui.common.TranslatedLabel(recipe.displayTitle, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(listOfNotNull(recipe.source, recipe.title.takeIf { it != recipe.displayTitle }).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -273,7 +272,7 @@ private fun MineList(mine: List<UserRecipe>, favourites: List<RecipeSummary>, re
         items(mine, key = { it.id }) { recipe ->
             Card(onClick = { onOpen(RecipeSummary(recipe.title, recipe.url, recipe.imageUrl, source = "Mine")) }) {
                 Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)))
+                    if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(MaterialTheme.shapes.medium))
                     Column(modifier = Modifier.weight(1f)) {
                         nl.baskt.ui.common.TranslatedLabel(recipe.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(listOfNotNull("${recipe.ingredientLines.size} ingredients", recipe.servings?.let { "$it servings" }, when (recipe.origin) { "ai" -> "written by AI"; "site" -> "copied from a site"; else -> null }).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -288,7 +287,7 @@ private fun MineList(mine: List<UserRecipe>, favourites: List<RecipeSummary>, re
         items(favourites, key = { "fav-" + it.url }) { recipe ->
             Card(onClick = { onOpen(recipe) }) {
                 Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)))
+                    if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(MaterialTheme.shapes.medium))
                     nl.baskt.ui.common.TranslatedLabel(recipe.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                     IconButton(onClick = { viewModel.toggleRecipeFavourite(recipe) }) { Icon(Icons.Default.Favorite, contentDescription = "Remove favourite", tint = MaterialTheme.colorScheme.primary) }
                     IconButton(onClick = { onFolder(recipe.url) }) { Icon(Icons.Default.CreateNewFolder, contentDescription = "Add as folder") }
@@ -305,7 +304,7 @@ private fun MineList(mine: List<UserRecipe>, favourites: List<RecipeSummary>, re
             val own = recipe.url.startsWith("baskt://recipe/")
             Card(onClick = { onOpen(recipe) }) {
                 Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)))
+                    if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(MaterialTheme.shapes.medium))
                     Column(modifier = Modifier.weight(1f)) {
                         nl.baskt.ui.common.TranslatedLabel(recipe.displayTitle, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         if (recipe.source != null) Text(recipe.source, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)

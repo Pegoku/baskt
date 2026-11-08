@@ -323,12 +323,12 @@ private fun AhAccountSettings(viewModel: AppViewModel, onLogin: () -> Unit) {
         }
     }
     if (confirmLogout) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { confirmLogout = false },
-            title = { Text("Log out of Albert Heijn?") },
-            text = { Text("Personal offers stop showing and prices go back to the regular Bonus.") },
-            confirmButton = { androidx.compose.material3.TextButton(onClick = { confirmLogout = false; viewModel.disconnectAh() }) { Text("Log out") } },
-            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmLogout = false }) { Text("Cancel") } },
+        nl.baskt.ui.common.ConfirmDialog(
+            title = "Log out of Albert Heijn?",
+            body = "Personal offers stop showing and prices go back to the regular Bonus.",
+            confirmLabel = "Log out",
+            onDismiss = { confirmLogout = false },
+            onConfirm = { viewModel.disconnectAh() },
         )
     }
 }

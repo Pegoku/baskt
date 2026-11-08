@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
@@ -85,7 +84,7 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, exp
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(modifier = Modifier.fillMaxHeight(0.92f).padding(horizontal = 20.dp).padding(bottom = 32.dp).verticalScroll(rememberScrollState()).animateContentSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text("Recipe", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Text("Recipe", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                 nl.baskt.ui.common.OriginalToggle(original) { original = !original }
             }
             if (!original && source != null && translation?.translated != true) Text(if (translation == null) "Translating…" else "Translation unavailable · showing original", style = MaterialTheme.typography.labelSmall)
@@ -97,7 +96,7 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, exp
             }
             val image = displayed?.imageUrl
             if (image != null) {
-                nl.baskt.ui.common.ZoomableImage(image, displayed?.title ?: title, modifier = Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(16.dp)))
+                nl.baskt.ui.common.ZoomableImage(image, displayed?.title ?: title, modifier = Modifier.fillMaxWidth().height(180.dp).clip(MaterialTheme.shapes.large))
             }
             Text(displayed?.title ?: title, style = MaterialTheme.typography.titleLarge)
             displayed?.description?.takeIf { it.isNotBlank() }?.let { nl.baskt.ui.common.DescriptionText(it) }
@@ -127,7 +126,7 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, exp
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(step.text, style = MaterialTheme.typography.bodyMedium)
                                 if (step.imageUrl != null) {
-                                    nl.baskt.ui.common.ZoomableImage(step.imageUrl, displayed.title, modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(12.dp)))
+                                    nl.baskt.ui.common.ZoomableImage(step.imageUrl, displayed.title, modifier = Modifier.fillMaxWidth().height(160.dp).clip(MaterialTheme.shapes.medium))
                                 }
                             }
                         }

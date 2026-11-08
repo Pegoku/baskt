@@ -35,7 +35,7 @@ import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -116,7 +116,7 @@ fun SelfScanBar(
         ) {
             val onColor = if (active) colors.onPrimaryContainer else colors.onSurface
             when (state.phase) {
-                SelfScanPhase.CONNECTING -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 3.dp)
+                SelfScanPhase.CONNECTING -> LoadingIndicator(modifier = Modifier.size(24.dp))
                 SelfScanPhase.NO_WIFI, SelfScanPhase.FAILED -> Icon(Icons.Default.WifiOff, contentDescription = null, tint = colors.error)
                 SelfScanPhase.ACTIVE -> Icon(if (state.connectionLost) Icons.Default.WifiOff else Icons.Default.ShoppingCartCheckout, contentDescription = null, tint = if (state.connectionLost) colors.error else onColor)
                 SelfScanPhase.OFF -> Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = colors.primary)
@@ -160,7 +160,7 @@ fun SelfScanBar(
                     Button(onClick = onStart) { Text("Retry") }
                     IconButton(onClick = onStop) { Icon(Icons.Default.Close, contentDescription = "Stop self-scan") }
                 }
-                SelfScanPhase.ACTIVE -> if (state.sending.isNotEmpty()) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                SelfScanPhase.ACTIVE -> if (state.sending.isNotEmpty()) LoadingIndicator(modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -195,12 +195,13 @@ fun SelfScanBasketSheet(
     val basket = state.basket
     val colors = MaterialTheme.colorScheme
     var confirmStop by remember { mutableStateOf(false) }
-    if (confirmStop) AlertDialog(
-        onDismissRequest = { confirmStop = false },
-        title = { Text("Stop self-scan?") },
-        text = { Text(if ((basket?.products?.size ?: 0) > 0) "The AH basket keeps its items on the store server. Start self-scan again in this store to carry on, or hand the phone to staff if you leave it." else "You can start it again any time on the store Wi-Fi.") },
-        confirmButton = { TextButton(onClick = { confirmStop = false; onStop() }) { Text("Stop") } },
-        dismissButton = { TextButton(onClick = { confirmStop = false }) { Text("Keep scanning") } },
+    if (confirmStop) nl.baskt.ui.common.ConfirmDialog(
+        title = "Stop self-scan?",
+        body = if ((basket?.products?.size ?: 0) > 0) "The AH basket keeps its items on the store server. Start self-scan again in this store to carry on, or hand the phone to staff if you leave it." else "You can start it again any time on the store Wi-Fi.",
+        confirmLabel = "Stop",
+        dismissLabel = "Keep scanning",
+        onDismiss = { confirmStop = false },
+        onConfirm = onStop,
     )
     fun linkOf(line: SsItem): ListLink {
         val gtin = productGtin(line.barcode) ?: line.barcode
@@ -222,7 +223,7 @@ fun SelfScanBasketSheet(
             }
             state.notice?.message?.takeIf { it.isNotBlank() }?.let { text ->
                 item("notice") {
-                    Surface(color = colors.secondaryContainer, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                    Surface(color = colors.secondaryContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 14.dp)) {
                             Icon(Icons.Default.Info, contentDescription = null, tint = colors.onSecondaryContainer)
                             Text(translated(text) ?: text, color = colors.onSecondaryContainer, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 10.dp))
@@ -232,7 +233,7 @@ fun SelfScanBasketSheet(
                 }
             }
             items(state.issues, key = { "issue-${it.id}" }) { issue ->
-                Surface(color = colors.errorContainer, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+                Surface(color = colors.errorContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 14.dp, top = 6.dp, bottom = 6.dp)) {
                         Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = colors.onErrorContainer)
                         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
@@ -265,7 +266,7 @@ fun SelfScanBasketSheet(
                 items(discounts.size, key = { "discount-$it" }) { index ->
                     val discount = discounts[index]
                     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Surface(color = colors.tertiaryContainer, shape = RoundedCornerShape(8.dp)) {
+                        Surface(color = colors.tertiaryContainer, shape = MaterialTheme.shapes.small) {
                             Text(if (discount.icon?.contains("bonus") == true) "Bonus" else "Korting", color = colors.onTertiaryContainer, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
                         }
                         Text(discount.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(horizontal = 10.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -318,7 +319,7 @@ private fun SelfScanLine(line: SsItem, link: ListLink, sending: Boolean, onQuant
     }
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         if (product != null) ProductThumb(product, size = 44)
-        else Surface(color = colors.surfaceContainerHigh, shape = RoundedCornerShape(12.dp), modifier = Modifier.size(44.dp)) {
+        else Surface(color = colors.surfaceContainerHigh, shape = MaterialTheme.shapes.medium, modifier = Modifier.size(44.dp)) {
             Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = colors.onSurfaceVariant) }
         }
         Column(Modifier.weight(1f)) {
@@ -342,7 +343,7 @@ private fun SelfScanLine(line: SsItem, link: ListLink, sending: Boolean, onQuant
                 IconButton(onClick = { onQuantity(quantity - 1) }, enabled = !sending, modifier = Modifier.size(36.dp)) {
                     Icon(if (quantity <= 1) Icons.Default.Delete else Icons.Default.Remove, contentDescription = if (quantity <= 1) "Remove" else "One less")
                 }
-                if (sending) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                if (sending) LoadingIndicator(modifier = Modifier.size(16.dp))
                 else Text("$quantity", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 4.dp))
                 IconButton(onClick = { onQuantity(quantity + 1) }, enabled = !sending && line.plusAllowed && line.weightText() == null, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Default.Add, contentDescription = "One more")
@@ -354,7 +355,7 @@ private fun SelfScanLine(line: SsItem, link: ListLink, sending: Boolean, onQuant
 
 @Composable
 private fun Chip(text: String, container: Color, content: Color) {
-    Surface(color = container, shape = RoundedCornerShape(8.dp)) {
+    Surface(color = container, shape = MaterialTheme.shapes.small) {
         Text(text, color = content, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
     }
 }
@@ -391,7 +392,7 @@ fun SelfScanCheckoutDialog(checkout: SelfScanCheckout, card: String?, onRetry: (
             }
             Spacer(Modifier.weight(1f))
             when {
-                checkout.loading -> CircularProgressIndicator()
+                checkout.loading -> LoadingIndicator()
                 checkout.error != null && checkout.totals == null -> {
                     Text(translated(checkout.error) ?: checkout.error, color = Color.Black, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(12.dp))

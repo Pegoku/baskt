@@ -62,7 +62,7 @@ private fun Color.luminance() = 0.2126f * red + 0.7152f * green + 0.0722f * blue
 @Composable
 fun ItemThumb(imageUrl: String?, contentDescription: String?, size: Int = 44, modifier: Modifier = Modifier) {
     Surface(
-        shape = RoundedCornerShape((size / 4).dp),
+        shape = MaterialTheme.shapes.medium,
         color = if (imageUrl != null) Color.White else MaterialTheme.colorScheme.surfaceVariant,
         modifier = modifier.size(size.dp),
     ) {
@@ -75,7 +75,7 @@ fun ItemThumb(imageUrl: String?, contentDescription: String?, size: Int = 44, mo
 @Composable
 fun ProductThumb(product: Product, size: Int = 56, onOpen: (() -> Unit)? = null) {
     var details by androidx.compose.runtime.remember(product.id) { androidx.compose.runtime.mutableStateOf(false) }
-    Surface(shape = RoundedCornerShape(12.dp), color = Color.White, modifier = Modifier.size(size.dp).clickable { if (onOpen != null) onOpen() else details = true }) {
+    Surface(shape = MaterialTheme.shapes.medium, color = Color.White, modifier = Modifier.size(size.dp).clickable { if (onOpen != null) onOpen() else details = true }) {
         if (product.imageUrl != null) AsyncImage(model = product.imageUrl, contentDescription = "View ${product.title}", modifier = Modifier.padding(4.dp))
         else Box(contentAlignment = Alignment.Center) { Text("🛒", textAlign = TextAlign.Center) }
     }

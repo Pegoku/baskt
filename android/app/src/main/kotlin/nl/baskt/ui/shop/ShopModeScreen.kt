@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Archive
@@ -295,7 +294,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                     ) {
                                         Checkbox(checked = item.isBought, onCheckedChange = { toggle(item, product) }, modifier = Modifier.padding(4.dp))
                                         if (product != null) ProductThumb(product, size = 44)
-                                        else Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(12.dp), modifier = Modifier.size(44.dp)) {
+                                        else Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.medium, modifier = Modifier.size(44.dp)) {
                                             Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.SearchOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                                         }
                                         Column(modifier = Modifier.weight(1f)) {
@@ -321,7 +320,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                                 val shown = nl.baskt.ui.common.rememberTranslation(listOf(dealText))?.takeIf { it.translated }?.texts?.firstOrNull() ?: dealText
                                                 val free = product.freeExtra(item.quantity)
                                                 val extra = if (free != null) "+$free free" else product.dealPricing()?.let { "${it.eachCents.euros()} each" }
-                                                Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                                                Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.small, modifier = Modifier.padding(top = 4.dp)) {
                                                     Text(
                                                         listOfNotNull(shown, extra).joinToString(" · "),
                                                         style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -362,7 +361,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                     val product = scan.product
                                     val label = scan.label
                                     if (product != null) ProductThumb(product, size = 44)
-                                    else if (label?.imageUrl != null) Surface(color = Color.White, shape = RoundedCornerShape(12.dp), modifier = Modifier.size(44.dp)) {
+                                    else if (label?.imageUrl != null) Surface(color = Color.White, shape = MaterialTheme.shapes.medium, modifier = Modifier.size(44.dp)) {
                                         coil3.compose.AsyncImage(model = label.imageUrl, contentDescription = label.title, modifier = Modifier.padding(4.dp))
                                     }
                                     else Icon(if (scan.synced) Icons.Default.QrCodeScanner else Icons.Default.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(28.dp))
@@ -445,7 +444,7 @@ private fun TillHint(item: BasketItem, coded: Boolean, kind: String?) {
     val colors = MaterialTheme.colorScheme
     Surface(
         color = when { coded -> colors.primaryContainer; warn -> colors.errorContainer; else -> colors.surfaceContainerHigh },
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.small,
         modifier = Modifier.padding(top = 4.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {

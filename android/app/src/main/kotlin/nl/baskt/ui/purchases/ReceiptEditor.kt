@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -188,12 +187,13 @@ fun ReceiptEditor(
         adding = false
     }
     removing?.let { index ->
-        AlertDialog(
-            onDismissRequest = { removing = null },
-            title = { Text("Remove this line?") },
-            text = { Text(scan.lines[index].name) },
-            confirmButton = { TextButton(onClick = { onChange(scan.copy(lines = scan.lines.filterIndexed { i, _ -> i != index })); removing = null }) { Text("Remove") } },
-            dismissButton = { TextButton(onClick = { removing = null }) { Text("Keep") } },
+        nl.baskt.ui.common.ConfirmDialog(
+            title = "Remove this line?",
+            body = scan.lines[index].name,
+            confirmLabel = "Remove",
+            dismissLabel = "Keep",
+            onDismiss = { removing = null },
+            onConfirm = { onChange(scan.copy(lines = scan.lines.filterIndexed { i, _ -> i != index })) },
         )
     }
 }
@@ -205,7 +205,7 @@ private fun Modifier.rememberHorizontalScroll(): Modifier = this.horizontalScrol
 @Composable
 internal fun LineThumb(product: Product?, size: Int) {
     if (product != null) ProductThumb(product, size = size)
-    else Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.size(size.dp)) {
+    else Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.size(size.dp)) {
         Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Receipt, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }

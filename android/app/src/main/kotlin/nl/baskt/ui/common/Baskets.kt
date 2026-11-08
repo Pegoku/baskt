@@ -101,7 +101,7 @@ private fun BasketDialog(title: String, initialName: String, initialEmoji: Strin
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.weight(1f))
             }
         },
-        confirmButton = { TextButton(onClick = { if (name.isNotBlank()) onSave(name.trim(), emoji.trim().ifBlank { null }) }) { Text("Save") } },
+        confirmButton = { TextButton(onClick = { onSave(name.trim(), emoji.trim().ifBlank { null }) }, enabled = name.isNotBlank()) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
