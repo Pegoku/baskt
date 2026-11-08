@@ -385,12 +385,13 @@ private fun BarcodeDialog(onClose: () -> Unit, onCode: (String) -> Unit) {
                     Text("Allow camera access to scan the barcode", color = Color.White)
                     Spacer(Modifier.height(8.dp))
                     Button(onClick = { permission.launch(Manifest.permission.CAMERA) }) { Text("Allow camera") }
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    TextButton(onClick = { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}"))) }) { Text("Open settings") }
                 }
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close scanner", tint = Color.White) }
-                    Text("Scan the product's barcode", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                    Text("Scan the product's barcode", color = Color.White, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                 }
-                OutlinedButton(onClick = onClose, modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp)) { Text("Cancel", color = Color.White) }
             }
         }
     }

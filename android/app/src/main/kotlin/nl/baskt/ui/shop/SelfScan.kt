@@ -108,7 +108,7 @@ fun SelfScanBar(
     val active = state.active
     Surface(
         color = if (active) colors.primaryContainer else colors.surfaceContainerHigh,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        shape = androidx.compose.material3.BottomSheetDefaults.ExpandedShape,
         modifier = Modifier.fillMaxWidth().then(if (active) Modifier.clickable(onClick = onOpenBasket) else Modifier),
     ) {
         Row(
@@ -385,7 +385,7 @@ fun SelfScanCheckoutDialog(checkout: SelfScanCheckout, card: String?, onRetry: (
         onDispose { window?.let { it.attributes = it.attributes.apply { screenBrightness = previous ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE } } }
     }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        Column(Modifier.fillMaxSize().background(Color.White).safeDrawingPadding().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.fillMaxSize().background(Color.White).safeDrawingPadding().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(if (checkout.paid) "Paid" else "Pay at a betaalpaal", style = MaterialTheme.typography.titleLarge, color = Color.Black, modifier = Modifier.weight(1f))
                 IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Black) }
@@ -415,7 +415,7 @@ fun SelfScanCheckoutDialog(checkout: SelfScanCheckout, card: String?, onRetry: (
                         Spacer(Modifier.height(24.dp))
                         BarcodeImage(code, modifier = Modifier.fillMaxWidth().aspectRatio(2.6f))
                         Spacer(Modifier.height(12.dp))
-                        Text(code.chunked(4).joinToString(" "), color = Color.Black, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, letterSpacing = 2.sp)
+                        Text(code.chunked(4).joinToString(" "), color = Color.Black, style = tillNumberStyle())
                     }
                 }
             }

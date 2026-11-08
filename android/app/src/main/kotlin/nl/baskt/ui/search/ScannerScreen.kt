@@ -1,5 +1,7 @@
 package nl.baskt.ui.search
 
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -87,6 +89,7 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
             Box(Modifier.fillMaxWidth().weight(if (reviewing) .3f else 1.4f)) {
                 if (!granted) Column(Modifier.align(Alignment.Center).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Allow camera access to scan products", color = Color.White)
+                    Spacer(Modifier.height(8.dp))
                     Button(onClick = { permission.launch(Manifest.permission.CAMERA) }) { Text("Allow camera") }
                     TextButton(onClick = { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }) { Text("Open settings") }
                 }
@@ -108,7 +111,7 @@ fun ScannerScreen(viewModel: AppViewModel, onClose: () -> Unit) {
             }
             Box(Modifier.fillMaxWidth().weight(1f)) {
               BasktTheme(darkTheme = true) {
-               Surface(color = Color(0xFF484848).copy(alpha = .78f), contentColor = Color.White, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), modifier = Modifier.fillMaxSize()) {
+               Surface(color = Color(0xFF484848).copy(alpha = .78f), contentColor = Color.White, shape = androidx.compose.material3.BottomSheetDefaults.ExpandedShape, modifier = Modifier.fillMaxSize()) {
                 Column(Modifier.navigationBarsPadding()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {

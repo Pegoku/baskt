@@ -93,7 +93,7 @@ fun LoyaltyCardDialog(store: String, stores: List<StoreInfo>, number: String, on
     }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Column(
-            modifier = Modifier.fillMaxSize().background(Color.White).safeDrawingPadding().padding(20.dp),
+            modifier = Modifier.fillMaxSize().background(Color.White).safeDrawingPadding().padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -102,9 +102,9 @@ fun LoyaltyCardDialog(store: String, stores: List<StoreInfo>, number: String, on
                 IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Black) }
             }
             Spacer(Modifier.weight(1f))
-            BarcodeImage(number, modifier = Modifier.fillMaxWidth().aspectRatio(2.6f).clip(RoundedCornerShape(8.dp)))
+            BarcodeImage(number, modifier = Modifier.fillMaxWidth().aspectRatio(2.6f))
             Spacer(Modifier.height(16.dp))
-            Text(number.chunked(4).joinToString(" "), color = Color.Black, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, letterSpacing = 2.sp, textAlign = TextAlign.Center)
+            Text(number.chunked(4).joinToString(" "), color = Color.Black, style = tillNumberStyle(), textAlign = TextAlign.Center)
             Spacer(Modifier.weight(1f))
             Text("Hold the screen to the scanner at the checkout", color = Color.DarkGray, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
             TextButton(onClick = onEdit) { Text("Change card number", color = Color.Black) }
@@ -146,3 +146,7 @@ fun LoyaltyCardEditor(store: String, stores: List<StoreInfo>, initial: String?, 
         },
     )
 }
+
+/** How a card or payment number is printed under its barcode on the white till screens, so all of them read the same. */
+@Composable
+internal fun tillNumberStyle() = MaterialTheme.typography.titleLarge.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, letterSpacing = 2.sp)
