@@ -46,14 +46,20 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, exp
     val originalMissing = detail?.original == null && detail?.originalTitle != null && detail.originalTitle != detail.title
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
     var original by androidx.compose.runtime.saveable.rememberSaveable(detail?.sourceUrl, title) { androidx.compose.runtime.mutableStateOf(false) }
-    val texts = source?.let { listOf(it.title) + it.ingredientLines + it.steps.map { step -> step.text } + listOf(it.servings.orEmpty(), it.totalTime.orEmpty(), it.description.orEmpty()) } ?: emptyList()
+    // Two smaller requests instead of one: the ingredients (with title and description) show first, and the steps
+    // are only asked for once those arrived. Both are usually on disk already, warmed by the recipe list.
+    val texts = source?.let { nl.baskt.data.recipeHeadTexts(it) } ?: emptyList()
     val translation = nl.baskt.ui.common.rememberTranslation(texts, source != null && !original, descriptionIndices = if (texts.isEmpty()) emptyList() else listOf(texts.lastIndex))
-    val displayed = if (source != null && !original && translation?.translated == true) {
+    val headTranslated = source != null && !original && translation?.translated == true
+    val stepTexts = source?.steps?.map { it.text } ?: emptyList()
+    val stepsTranslation = nl.baskt.ui.common.rememberTranslation(stepTexts, headTranslated && stepTexts.isNotEmpty())
+    val displayed = if (source != null && headTranslated) {
         var index = 0
-        source.copy(title = translation.texts[index++], ingredientLines = source.ingredientLines.map { translation.texts[index++] },
-            steps = source.steps.map { it.copy(text = translation.texts[index++]) },
-            servings = translation.texts[index++].ifBlank { null }, totalTime = translation.texts[index++].ifBlank { null }, description = translation.texts[index].ifBlank { null })
+        source.copy(title = translation!!.texts[index++], ingredientLines = source.ingredientLines.map { translation.texts[index++] },
+            servings = translation.texts[index++].ifBlank { null }, totalTime = translation.texts[index++].ifBlank { null }, description = translation.texts[index].ifBlank { null },
+            steps = if (stepsTranslation?.translated == true) source.steps.mapIndexed { step, value -> value.copy(text = stepsTranslation.texts[step]) } else source.steps)
     } else source
+    val stepsPending = headTranslated && stepTexts.isNotEmpty() && stepsTranslation?.translated != true
     var tab by remember { mutableIntStateOf(0) }
     // Fixed sheet height: it opens half-way and can be dragged up (or straight to full height when [expanded]);
     // content changes animate instead of jumping.
@@ -102,6 +108,7 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, exp
                         }
                     }
                 } else {
+                    if (stepsPending) Text(if (stepsTranslation == null) "Translating steps…" else "Step translation unavailable · showing original", style = MaterialTheme.typography.labelSmall)
                     for ((index, step) in displayed.steps.withIndex()) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 4.dp)) {
                             Text("${index + 1}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)

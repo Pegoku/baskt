@@ -4,6 +4,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 
+/**
+ * What the recipe sheet translates first: title, ingredients, servings, time and description (always last, it is
+ * the description field). Steps are a second request, only made once this one came back translated.
+ */
+fun recipeHeadTexts(recipe: RecipeDetail): List<String> =
+    listOf(recipe.title) + recipe.ingredientLines + listOf(recipe.servings.orEmpty(), recipe.totalTime.orEmpty(), recipe.description.orEmpty())
+
 /** Durable recipe library. Saving a favourite also downloads its full cooking instructions. */
 class RecipeLibrary(private val api: BasktApi, private val offline: OfflineStore, private val basket: BasketRepository, private val cacheImages: (List<String>) -> Unit = {}) {
     val mine = MutableStateFlow<List<UserRecipe>>(emptyList())
