@@ -96,6 +96,9 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
     suspend fun addStock(text: String, quantityText: String? = null, productId: String? = null, imageUrl: String? = null, barcode: String? = null): StockItem =
         client.post(url("/stock")) { auth(); contentType(ContentType.Application.Json); setBody(StockRequest(text, quantityText, productId, imageUrl, barcode)) }.expect()
 
+    suspend fun updateStock(id: String, patch: StockPatch): StockItem =
+        client.patch(url("/stock/$id")) { auth(); contentType(ContentType.Application.Json); setBody(patch) }.expect()
+
     suspend fun removeStock(id: String) {
         client.delete(url("/stock/$id")) { auth() }.expect<Unit>()
     }

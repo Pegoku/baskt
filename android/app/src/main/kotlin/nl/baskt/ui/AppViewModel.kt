@@ -967,7 +967,12 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     fun switchBasket(id: String) = viewModelScope.launch { basket.switchBasket(id) }
     fun refreshStock() = viewModelScope.launch { basket.refreshStock(); basket.refreshServerSettings() }
-    fun addStock(text: String) = viewModelScope.launch { basket.addStock(text) }
+    fun addStock(text: String) = viewModelScope.launch {
+        basket.addStock(text)
+        // The server sorts free text into a category in the background; pick that up once it has had a moment.
+        kotlinx.coroutines.delay(2_000); basket.refreshStock()
+        kotlinx.coroutines.delay(6_000); basket.refreshStock()
+    }
     fun addProductToStock(product: Product, barcode: String?) = viewModelScope.launch { basket.addProductToStock(product, barcode) }
     fun stockEntryFor(product: Product, barcode: String?): StockItem? = basket.stock.value.firstOrNull { it.productId == product.id || (barcode != null && it.barcode == barcode) }
     fun addToStockFromItem(item: BasketItem) = viewModelScope.launch { basket.addItemToStock(item) }
@@ -1084,6 +1089,12 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     val lastAdded get() = basket.lastAdded
     fun consumeLastAdded() { basket.lastAdded.value = null }
     fun removeStock(item: StockItem) = viewModelScope.launch { basket.removeStock(item) }
+    fun moveStock(item: StockItem, category: String) = viewModelScope.launch { basket.updateStock(item, category = category) }
+    /** Running low puts it on the basket and keeps it in stock until it is bought again. */
+    fun setRunningLow(item: StockItem, low: Boolean) = viewModelScope.launch {
+        basket.updateStock(item, runningLow = low)
+        if (low && basket.items.value.none { !it.checked && it.text.equals(item.text, ignoreCase = true) }) basket.add(item.text, 1)
+    }
     fun setSkipInStock(enabled: Boolean) = viewModelScope.launch { basket.setSkipInStock(enabled) }
     fun addSkipped(group: BasketItem) = viewModelScope.launch { basket.addSkipped(group) }
     fun setDefaultServings(servings: Int?) = viewModelScope.launch { basket.setDefaultServings(servings) }

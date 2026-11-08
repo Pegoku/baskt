@@ -179,6 +179,7 @@ class BasketRepository(
                             op.itemId?.let { idMap[it] = created.id }
                         }
                         "stockRemove" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.removeStock(it) }
+                        "stockUpdate" -> real(op.itemId)?.takeUnless { it.startsWith("local-") }?.let { api.updateStock(it, StockPatch(category = op.text, runningLow = op.checked)) }
                         "feedback" -> api.feedback(real(op.itemId)!!, op.store!!, op.productId!!, op.checked == true)
                         "unskip" -> api.unskip(real(op.itemId)!!, op.store!!)
                         "basketCreate" -> { val created = api.createBasket(op.text!!, op.emoji); idMap[op.itemId!!] = created.id }
@@ -232,7 +233,7 @@ class BasketRepository(
                     if (isConnectivityError(e)) { online.value = false; return }
                     // Deleting an already absent object is successful, and so is a till-code note to a server that
                     // predates the map (it is a hint, not data); every other failure stays reviewable.
-                    if (!(e is ApiException && e.status == 404 && op.type in setOf("delete", "unscan", "barcodeKind", "stockRemove", "basketDelete", "recipeDelete", "favouriteDelete", "purchaseDelete", "memoryDelete", "nameDelete"))) {
+                    if (!(e is ApiException && e.status == 404 && op.type in setOf("delete", "unscan", "barcodeKind", "stockRemove", "stockUpdate", "basketDelete", "recipeDelete", "favouriteDelete", "purchaseDelete", "memoryDelete", "nameDelete"))) {
                         pending.update { list -> list.map { if (it.id == op.id) it.copy(failure = e.message ?: "Sync failed") else it } }
                         offline?.saveOps(pending.value)
                         _error.value = "Could not sync ${op.label}: ${e.message}"
@@ -360,6 +361,17 @@ class BasketRepository(
     suspend fun addProductToStock(product: Product, barcode: String?) = stockAdd(StockItem(
         id = localId(), text = product.title, quantityText = product.quantityText, productId = product.id, imageUrl = product.imageUrl, barcode = barcode,
     ))
+    /** Moves an entry to another group by hand ([category]) and/or flags it as running low ([runningLow]). */
+    suspend fun updateStock(item: StockItem, category: String? = null, runningLow: Boolean? = null) {
+        queued(PendingOp(type = "stockUpdate", itemId = item.id, text = category, checked = runningLow), optimistic = {
+            _stock.update { list ->
+                list.map {
+                    if (it.id != item.id) it
+                    else it.copy(category = category ?: it.category, categorySource = if (category != null) "manual" else it.categorySource, runningLow = runningLow ?: it.runningLow)
+                }
+            }
+        })
+    }
     suspend fun removeStock(item: StockItem) {
         queued(PendingOp(type = "stockRemove", itemId = item.id), optimistic = { _stock.update { list -> list.filterNot { it.id == item.id } } })
     }

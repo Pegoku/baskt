@@ -135,7 +135,24 @@ data class RecipeInfo(
 )
 
 @Serializable
-data class StockItem(val id: String, val text: String, val canonical: String = "", val quantityText: String? = null, val productId: String? = null, val imageUrl: String? = null, val barcode: String? = null, val addedAt: Long = 0, val updatedAt: Long = 0)
+data class StockItem(
+    val id: String,
+    val text: String,
+    val canonical: String = "",
+    val quantityText: String? = null,
+    val productId: String? = null,
+    val imageUrl: String? = null,
+    val barcode: String? = null,
+    /** A stock group key (produce, dairy, …); null while the server is still sorting it. */
+    val category: String? = null,
+    val categorySource: String? = null,
+    val runningLow: Boolean = false,
+    val addedAt: Long = 0,
+    val updatedAt: Long = 0,
+)
+
+@Serializable
+data class StockPatch(val category: String? = null, val runningLow: Boolean? = null)
 
 @Serializable
 data class StockResponse(val items: List<StockItem>)
