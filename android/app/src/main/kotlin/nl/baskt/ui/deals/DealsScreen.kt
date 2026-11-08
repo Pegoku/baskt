@@ -168,11 +168,11 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
                                 }
                                 LaunchedEffect(Unit) { if (viewModel.ahOffers.value == null) viewModel.loadAhOffers() }
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                                 if (deal.currentProductId != deal.product.id) {
                                     Button(onClick = { viewModel.takeDeal(deal); notify("Switched “${deal.itemText}” to ${deal.product.title}") }) { Text("Use this deal") }
                                 } else {
-                                    Text("Already your pick", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
+                                    Text("Already your pick", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 TextButton(onClick = { onOpenItem(deal.itemId) }) { Text("Open item") }
                             }

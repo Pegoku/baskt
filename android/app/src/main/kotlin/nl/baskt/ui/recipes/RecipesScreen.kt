@@ -154,7 +154,6 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
                 leadingIcon = { Icon(if (query.startsWith("http")) Icons.Default.Link else Icons.Default.Search, contentDescription = null) },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { submit() }),
-                trailingIcon = { IconButton(onClick = { submit() }) { Icon(Icons.Default.Search, contentDescription = "Search") } },
             )
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                 SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 3)) { Text("Search") }

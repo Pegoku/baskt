@@ -100,7 +100,7 @@ fun StockScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                     ListItem(
                         headlineContent = { Text(item.text) },
                         supportingContent = item.quantityText?.let { { Text(it) } },
-                        leadingContent = item.imageUrl?.let { url -> { coil3.compose.AsyncImage(model = url, contentDescription = null, modifier = Modifier.padding(2.dp).then(Modifier.size(44.dp))) } },
+                        leadingContent = { nl.baskt.ui.common.ItemThumb(item.imageUrl, contentDescription = null) },
                         trailingContent = {
                             Row {
                                 IconButton(onClick = { viewModel.add(item.text, 1) }) { Icon(Icons.Default.AddShoppingCart, contentDescription = "Add to shopping list") }

@@ -89,7 +89,7 @@ fun SearchScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (Strin
                     value = query,
                     onValueChange = { query = it },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Search products, e.g. pindakaas") },
+                    placeholder = { Text("Search, e.g. pindakaas") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { if (query.isNotBlank()) viewModel.searchProducts(query.trim()) }),

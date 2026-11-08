@@ -53,7 +53,6 @@ import androidx.compose.foundation.layout.size
 import kotlinx.coroutines.launch
 import nl.baskt.data.LANGUAGE_OPTIONS
 import nl.baskt.ui.AppViewModel
-import nl.baskt.ui.common.StoreBadge
 
 @Composable
 fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> Unit = {}, onAhLogin: () -> Unit = {}) {
@@ -97,7 +96,7 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
             if (stores.isEmpty()) Text("Connect to the server to load the store list.", style = MaterialTheme.typography.bodySmall)
             for (store in stores) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StoreBadge(store.code, stores)
+                    nl.baskt.ui.common.StoreLogo(store.code, stores)
                     Column(modifier = Modifier.weight(1f)) {
                         Text(store.name)
                         if (store.coverage != "full") Text("Offers only", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -307,7 +306,6 @@ private fun AhAccountSettings(viewModel: AppViewModel, onLogin: () -> Unit) {
     val account by viewModel.ahAccount.collectAsState()
     LaunchedEffect(Unit) { viewModel.loadAhAccount() }
     var confirmLogout by remember { mutableStateOf(false) }
-    Text("Albert Heijn account", style = MaterialTheme.typography.titleMedium)
     val current = account
     when {
         current == null -> Text("Connect to the server to see the account.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
