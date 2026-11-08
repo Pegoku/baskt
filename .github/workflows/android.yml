@@ -31,20 +31,24 @@ jobs:
       # platform and build tools the project asks for (compileSdk 37) on its own.
       - name: Set up Android SDK
         env:
-          CMDLINE_TOOLS_URL: https://dl.google.com/android/repository/commandlinetools-linux-16111833_latest.zip
+          # Pinned: newer command-line tools make "sdkmanager --licenses" a no-op, which leaves Gradle
+          # unable to download the platform and build tools.
+          CMDLINE_TOOLS_VERSION: "13114758"
         run: |
           sdk="${RUNNER_TOOL_CACHE:-$HOME/.cache}/android-sdk"
-          if [ ! -x "$sdk/cmdline-tools/latest/bin/sdkmanager" ]; then
+          tools="$sdk/cmdline-tools/$CMDLINE_TOOLS_VERSION"
+          if [ ! -x "$tools/bin/sdkmanager" ]; then
             tmp="$RUNNER_TEMP/cmdline-tools"
             rm -rf "$tmp" && mkdir -p "$tmp" "$sdk/cmdline-tools"
-            curl -fsSL "$CMDLINE_TOOLS_URL" -o "$tmp/tools.zip"
+            curl -fsSL "https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS_VERSION}_latest.zip" -o "$tmp/tools.zip"
             python3 -m zipfile -e "$tmp/tools.zip" "$tmp"
             chmod +x "$tmp"/cmdline-tools/bin/*
-            rm -rf "$sdk/cmdline-tools/latest" && mv "$tmp/cmdline-tools" "$sdk/cmdline-tools/latest"
+            rm -rf "$tools" && mv "$tmp/cmdline-tools" "$tools"
           fi
           echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"
-          yes | "$sdk/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          yes | "$tools/bin/sdkmanager" --sdk_root="$sdk" --licenses > /dev/null || true
+          test -f "$sdk/licenses/android-sdk-license" || { echo "Android SDK licences were not accepted"; exit 1; }
       # Releases are signed with the same debug key as local builds, so the phone takes them as in-place updates.
       # Without the secret (pull requests from forks) Gradle falls back to a throwaway key.
       # The key lives in the job's temp folder, which the runner wipes after every job, so it never
