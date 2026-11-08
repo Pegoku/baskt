@@ -114,14 +114,20 @@ recipes.post("/generate", async (c) => {
   return c.json({ dish: understood.dish, matches: hits.map((hit, index) => ({ ...hit, titleLocalized: localized[index] })) });
 });
 
-/** AI edit of any recipe ("without olives"): the client sends what it shows and saves the returned draft itself. */
+/**
+ * Ask about or change any recipe: `{answer}` for a question ("how long do I boil the egg?"), `{draft, summary}`
+ * for a change ("without olives"). The client sends what it shows and saves a returned draft itself.
+ */
 recipes.post("/adapt", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { recipe?: unknown; instruction?: unknown };
+  const body = (await c.req.json().catch(() => ({}))) as { recipe?: unknown; instruction?: unknown; history?: unknown };
   const recipe = cleanDraft(body.recipe);
   const instruction = typeof body.instruction === "string" ? body.instruction.trim() : "";
   if (!recipe || !instruction || instruction.length > 500) return c.json({ error: { code: "BAD_REQUEST", message: "recipe (title, ingredientLines) and instruction are required" } }, 400);
-  const adapted = await adaptRecipe(recipe, instruction);
-  if (!adapted) return c.json({ error: { code: "AI_UNAVAILABLE", message: "The AI could not change this recipe. Try again." } }, 503);
+  const history = (Array.isArray(body.history) ? body.history : [])
+    .filter((turn): turn is { question: string; answer: string } => !!turn && typeof turn.question === "string" && typeof turn.answer === "string")
+    .slice(-6).map((turn) => ({ question: turn.question.slice(0, 500), answer: turn.answer.slice(0, 2000) }));
+  const adapted = await adaptRecipe(recipe, instruction, history);
+  if (!adapted) return c.json({ error: { code: "AI_UNAVAILABLE", message: "The AI could not answer. Try again." } }, 503);
   return c.json(adapted);
 });
 
