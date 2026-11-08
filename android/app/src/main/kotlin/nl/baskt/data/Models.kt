@@ -434,10 +434,14 @@ data class UserRecipesResponse(val recipes: List<UserRecipe> = emptyList())
 data class RecipeDraft(val title: String, val description: String? = null, val servings: String? = null, val ingredientLines: List<String> = emptyList(), val steps: List<RecipeStep> = emptyList())
 
 @Serializable
-data class AdaptRecipeRequest(val recipe: RecipeDraft, val instruction: String)
+data class RecipeTurn(val question: String, val answer: String)
 
 @Serializable
-data class AdaptRecipeResponse(val draft: RecipeDraft, val summary: String = "")
+data class AdaptRecipeRequest(val recipe: RecipeDraft, val instruction: String, val history: List<RecipeTurn> = emptyList())
+
+/** Either [answer] (a question about the recipe) or [draft] with [summary] (the recipe was changed). */
+@Serializable
+data class AdaptRecipeResponse(val draft: RecipeDraft? = null, val summary: String = "", val answer: String? = null)
 
 @Serializable
 data class GenerateResponse(val dish: String? = null, val matches: List<RecipeSummary> = emptyList(), val draft: RecipeDraft? = null)

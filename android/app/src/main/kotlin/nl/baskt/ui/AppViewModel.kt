@@ -319,24 +319,29 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     private val _recipeUndo = MutableStateFlow<RecipeUndo?>(null)
     val recipeUndo: StateFlow<RecipeUndo?> = _recipeUndo
 
+    /** What the recipe AI box did: answered a question, or changed the recipe (now shown as [opened]). */
+    data class RecipeAiResult(val answer: String? = null, val opened: RecipeSummary? = null)
+
     /**
-     * AI edit ("without olives", "vegetarian"): my recipes change in place; a site recipe is saved as a changed
-     * copy in my recipes. Returns the recipe now shown, or null when it failed (with a notice).
+     * Recipe AI box. A question ("how long do I boil the egg?") just gets an answer. A change ("without olives")
+     * edits my recipes in place, or saves a changed copy of a site recipe in my recipes. Null when it failed (with a notice).
      */
-    suspend fun adaptRecipe(recipe: RecipeSummary, detail: RecipeDetail, instruction: String): RecipeSummary? {
+    suspend fun askRecipe(recipe: RecipeSummary, detail: RecipeDetail, message: String, history: List<nl.baskt.data.RecipeTurn>): RecipeAiResult? {
         val current = RecipeDraft(detail.title, detail.description, detail.servings, detail.ingredientLines, detail.steps)
-        val adapted = attempt("Changing the recipe") { container.api.adaptRecipe(current, instruction) } ?: return null
+        val reply = attempt("Recipe AI") { container.api.adaptRecipe(current, message, history) } ?: return null
+        reply.answer?.let { return RecipeAiResult(answer = it) }
+        val draft = reply.draft ?: run { notify("Recipe AI gave no answer, try again"); return null }
         val ownId = recipe.url.removePrefix("baskt://recipe/").takeIf { recipe.url.startsWith("baskt://recipe/") }
         val saved = try {
-            container.recipes.save(adapted.draft, "ai", existingId = ownId)
+            container.recipes.save(draft, "ai", existingId = ownId)
         } catch (e: kotlinx.coroutines.CancellationException) { throw e }
         catch (e: Exception) { notify(e.message ?: "Could not save the recipe"); return null }
-        _recipeUndo.value = if (ownId != null) RecipeUndo(saved.id, current, adapted.summary) else null
-        if (ownId == null) notify(adapted.summary.ifBlank { "Saved a changed copy in My recipes" })
+        _recipeUndo.value = if (ownId != null) RecipeUndo(saved.id, current, reply.summary) else null
+        if (ownId == null) notify(reply.summary.ifBlank { "Saved a changed copy in My recipes" })
         val summary = RecipeSummary(saved.title, saved.url, saved.imageUrl, source = "Mine")
         container.recipes.recordViewed(summary)
         _recipeDetail.value = container.recipes.detail(saved.url)
-        return summary
+        return RecipeAiResult(opened = summary)
     }
 
     fun undoRecipeEdit() = viewModelScope.launch {
