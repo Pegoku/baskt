@@ -60,6 +60,24 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, exp
             steps = if (stepsTranslation?.translated == true) source.steps.mapIndexed { step, value -> value.copy(text = stepsTranslation.texts[step]) } else source.steps)
     } else source
     val stepsPending = headTranslated && stepTexts.isNotEmpty() && stepsTranslation?.translated != true
+    // "In stock" / "In basket" per ingredient line. Every wording of the line is compared with every owned item,
+    // so words are extracted once per text and the result only recomputed when its inputs change (it used to run
+    // on each recomposition and froze the sheet's opening for over a second).
+    val ingredientVariants = displayed?.ingredientLines?.indices?.map { index ->
+        listOfNotNull(displayed.ingredientLines[index], source?.ingredientLines?.getOrNull(index), detail?.ingredientLines?.getOrNull(index), translation?.texts?.getOrNull(index + 1)).distinct()
+    } ?: emptyList()
+    val availability by androidx.compose.runtime.produceState(emptyList<Pair<Boolean, Boolean>>(), ingredientVariants, ownedTexts, ownedTranslation, stock.size) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            val owned = ownedTexts.indices.map { position ->
+                listOfNotNull(ownedTexts[position], ownedTranslation?.texts?.getOrNull(position)).map { nl.baskt.data.ingredientWords(it) }
+            }
+            ingredientVariants.map { variants ->
+                val words = variants.map { nl.baskt.data.ingredientWords(it) }
+                fun matches(position: Int) = words.any { line -> owned[position].any { nl.baskt.data.ingredientWordsMatch(line, it) } }
+                (stock.indices.any { matches(it) }) to (owned.indices.drop(stock.size).any { matches(it) })
+            }
+        }
+    }
     var tab by remember { mutableIntStateOf(0) }
     // Fixed sheet height: it opens half-way and can be dragged up (or straight to full height when [expanded]);
     // content changes animate instead of jumping.
@@ -94,13 +112,7 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, exp
                 }
                 if (tab == 0) {
                     for ((index, line) in displayed.ingredientLines.withIndex()) {
-                        val variants = listOfNotNull(line, source?.ingredientLines?.getOrNull(index), detail?.ingredientLines?.getOrNull(index), translation?.texts?.getOrNull(index + 1))
-                        fun matches(position: Int): Boolean = variants.any { ingredient ->
-                            nl.baskt.data.ingredientMatches(ingredient, ownedTexts[position]) ||
-                                ownedTranslation?.texts?.getOrNull(position)?.let { nl.baskt.data.ingredientMatches(ingredient, it) } == true
-                        }
-                        val inStock = stock.indices.any { matches(it) }
-                        val inBasket = shopping.indices.any { matches(stock.size + it) }
+                        val (inStock, inBasket) = availability.getOrElse(index) { false to false }
                         Column {
                             Text("• $line", style = MaterialTheme.typography.bodyMedium)
                             val labels = listOfNotNull(if (inStock) "In stock" else null, if (inBasket) "In basket" else null)
