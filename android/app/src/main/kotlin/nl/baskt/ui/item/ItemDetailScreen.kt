@@ -23,7 +23,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DriveFileMove
+import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -148,7 +148,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
                                 androidx.compose.material3.DropdownMenuItem(text = { Text("Match again") }, leadingIcon = { Icon(Icons.Default.Autorenew, contentDescription = null) }, onClick = { menuOpen = false; viewModel.rematch(item) })
                                 androidx.compose.material3.DropdownMenuItem(text = { Text("Add to stock") }, leadingIcon = { Icon(Icons.Default.Kitchen, contentDescription = null) }, onClick = { menuOpen = false; viewModel.addToStockFromItem(item) })
                                 for (basket in baskets.filter { it.id != currentBasketId }) {
-                                    androidx.compose.material3.DropdownMenuItem(text = { Text("Move to ${basket.label}") }, leadingIcon = { Icon(Icons.Default.DriveFileMove, contentDescription = null) }, onClick = { menuOpen = false; viewModel.transfer(item, basket.id, copy = false); onBack() })
+                                    androidx.compose.material3.DropdownMenuItem(text = { Text("Move to ${basket.label}") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = null) }, onClick = { menuOpen = false; viewModel.transfer(item, basket.id, copy = false); onBack() })
                                 }
                                 androidx.compose.material3.HorizontalDivider()
                                 androidx.compose.material3.DropdownMenuItem(

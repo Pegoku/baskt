@@ -7,7 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DriveFileMove
+import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileCopy
 import androidx.compose.material.icons.filled.MoreVert
@@ -129,7 +129,7 @@ fun TransferMenu(baskets: List<Basket>, currentId: String, onTransfer: (String, 
             for (basket in others) {
                 DropdownMenuItem(
                     text = { Text(basket.label) },
-                    leadingIcon = { Icon(if (copyMode) Icons.Default.FileCopy else Icons.Default.DriveFileMove, contentDescription = null) },
+                    leadingIcon = { Icon(if (copyMode) Icons.Default.FileCopy else Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = null) },
                     onClick = { open = false; onTransfer(basket.id, copyMode) },
                 )
             }

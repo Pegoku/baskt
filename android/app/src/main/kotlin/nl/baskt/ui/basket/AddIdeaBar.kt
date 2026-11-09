@@ -78,7 +78,7 @@ fun AddIdeaBar(
     var text by remember { mutableStateOf("") }
     val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     val wantsFocus = focusRequest?.collectAsState()?.value ?: false
-    LaunchedEffect(wantsFocus) { if (wantsFocus) { focusRequester.requestFocus(); focusRequest?.value = false } }
+    LaunchedEffect(wantsFocus) { if (wantsFocus) { focusRequester.requestFocus(); focusRequest.value = false } }
     var quantity by remember { mutableIntStateOf(1) }
     var selected by remember { mutableStateOf(setOf<String>()) }
     val chips = if (recipe != null) recipe.ingredients else suggestions

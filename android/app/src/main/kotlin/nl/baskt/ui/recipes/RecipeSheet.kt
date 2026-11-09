@@ -54,7 +54,7 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, exp
     val stepsTranslation = nl.baskt.ui.common.rememberTranslation(stepTexts, headTranslated && stepTexts.isNotEmpty())
     val displayed = if (source != null && headTranslated) {
         var index = 0
-        source.copy(title = translation!!.texts[index++], ingredientLines = source.ingredientLines.map { translation.texts[index++] },
+        source.copy(title = translation.texts[index++], ingredientLines = source.ingredientLines.map { translation.texts[index++] },
             servings = translation.texts[index++].ifBlank { null }, totalTime = translation.texts[index++].ifBlank { null }, description = translation.texts[index].ifBlank { null },
             steps = if (stepsTranslation?.translated == true) source.steps.mapIndexed { step, value -> value.copy(text = stepsTranslation.texts[step]) } else source.steps)
     } else source
@@ -90,13 +90,13 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, exp
             if (!original && source != null && translation?.translated != true) Text(if (translation == null) "Translating…" else "Translation unavailable · showing original", style = MaterialTheme.typography.labelSmall)
             if (original && originalMissing) {
                 Text("The original was not saved with this older download.", style = MaterialTheme.typography.bodySmall)
-                detail?.sourceUrl?.takeIf { it.startsWith("https://") }?.let { url ->
+                detail.sourceUrl?.takeIf { it.startsWith("https://") }?.let { url ->
                     androidx.compose.material3.TextButton(onClick = { uri.openUri(url) }) { Text("View original recipe page") }
                 }
             }
             val image = displayed?.imageUrl
             if (image != null) {
-                nl.baskt.ui.common.ZoomableImage(image, displayed?.title ?: title, modifier = Modifier.fillMaxWidth().height(180.dp).clip(MaterialTheme.shapes.large))
+                nl.baskt.ui.common.ZoomableImage(image, displayed.title, modifier = Modifier.fillMaxWidth().height(180.dp).clip(MaterialTheme.shapes.large))
             }
             Text(displayed?.title ?: title, style = MaterialTheme.typography.titleLarge)
             displayed?.description?.takeIf { it.isNotBlank() }?.let { nl.baskt.ui.common.DescriptionText(it) }
