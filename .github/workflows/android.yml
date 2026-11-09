@@ -22,6 +22,9 @@ jobs:
         with:
           # The version code is the commit count, which needs the whole history.
           fetch-depth: 0
+          # The runners are persistent, so keeping build/ and .gradle/ between jobs lets Kotlin compile
+          # incrementally and Gradle reuse its configuration cache.
+          clean: false
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -64,7 +67,12 @@ jobs:
           fi
           echo "ANDROID_USER_HOME=$home" >> "$GITHUB_ENV"
       - uses: gradle/actions/setup-gradle@v5
-      - run: ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleOptimized --no-daemon
+      # A Gradle daemon that outlives the job keeps its JIT-warmed JVM (and the Kotlin daemon) for the next
+      # build. Clearing RUNNER_TRACKING_ID stops the runner from killing it as an orphan when the job ends.
+      # Kept workspace plus warm daemon took a benchmarked build from about 230 s to about 120 s.
+      - run: ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleOptimized
+        env:
+          RUNNER_TRACKING_ID: ""
       - uses: actions/upload-artifact@v5
         with:
           name: baskt-optimized-apk
@@ -84,7 +92,7 @@ jobs:
           "$apksigner" verify --print-certs app/build/outputs/apk/optimized/app-optimized.apk | grep -q "SHA-256 digest: $EXPECTED_CERT" \
             || { echo "APK is not signed with the release key; is DEBUG_KEYSTORE_BASE64 set?"; exit 1; }
           version="0.1.$(git rev-list --count HEAD)"
-          cp app/build/outputs/apk/optimized/app-optimized.apk "baskt-$version.apk"
+          cp app/build/outputs/apk/optimized/app-optimized.apk "$RUNNER_TEMP/baskt-$version.apk"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           git log -1 --format=%s > "$RUNNER_TEMP/release-notes.txt"
       # The self-hosted runners have no gh CLI, so the release goes through an action instead.
@@ -96,5 +104,5 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: baskt ${{ steps.release.outputs.version }}
           body_path: ${{ runner.temp }}/release-notes.txt
-          files: android/baskt-${{ steps.release.outputs.version }}.apk
+          files: ${{ runner.temp }}/baskt-${{ steps.release.outputs.version }}.apk
           fail_on_unmatched_files: true
