@@ -48,7 +48,7 @@ import androidx.compose.material.icons.filled.LocalDrink
 import androidx.compose.material.icons.filled.LunchDining
 import androidx.compose.material.icons.filled.RiceBowl
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalButton
@@ -205,7 +205,7 @@ fun StockScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             ) {
                 if (low.isNotEmpty() && filter == null) {
                     item("low-header", span = { GridItemSpan(maxLineSpan) }) {
-                        GroupHeader("Running low", Icons.Default.TrendingDown, low.size, color = MaterialTheme.colorScheme.tertiary)
+                        GroupHeader("Running low", Icons.AutoMirrored.Filled.TrendingDown, low.size, color = MaterialTheme.colorScheme.tertiary)
                     }
                     items(low, key = { "low-${it.id}" }) { item -> StockTile(item, onOpen = { open = item }) }
                 }
@@ -258,7 +258,7 @@ private fun StockTile(item: StockItem, onOpen: () -> Unit) {
                     color = colors.tertiary,
                     contentColor = colors.onTertiary,
                     modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
-                ) { Icon(Icons.Default.TrendingDown, contentDescription = "Running low", modifier = Modifier.padding(2.dp).size(16.dp)) }
+                ) { Icon(Icons.AutoMirrored.Filled.TrendingDown, contentDescription = "Running low", modifier = Modifier.padding(2.dp).size(16.dp)) }
             }
             Spacer(Modifier.height(6.dp))
             Text(
@@ -330,7 +330,7 @@ private fun StockItemSheet(
                 Text("Running low: it is on the basket and stays here until you buy it again.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.tertiary)
                 OutlinedButton(onClick = { onRunningLow(false) }, modifier = Modifier.fillMaxWidth()) { Text("I still have enough") }
             } else {
-                FilledTonalButton(onClick = { onRunningLow(true) }, modifier = Modifier.fillMaxWidth()) { IconLabel(Icons.Default.TrendingDown, "Running low · add to basket") }
+                FilledTonalButton(onClick = { onRunningLow(true) }, modifier = Modifier.fillMaxWidth()) { IconLabel(Icons.AutoMirrored.Filled.TrendingDown, "Running low · add to basket") }
                 OutlinedButton(onClick = onAddToBasket, modifier = Modifier.fillMaxWidth()) { IconLabel(Icons.Default.AddShoppingCart, "Add to basket") }
             }
             TextButton(onClick = { moving = !moving }) { IconLabel(Icons.Default.Category, if (moving) "Keep it in ${current.label}" else "Move to another category") }
