@@ -237,7 +237,7 @@ fun StockScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 item = live,
                 onDismiss = { open = null },
                 onRunningLow = { viewModel.setRunningLow(live, it) },
-                onAddToBasket = { viewModel.add(live.text, 1); open = null },
+                onAddToBasket = { viewModel.addFromStock(live); open = null },
                 onMove = { viewModel.moveStock(live, it) },
                 onRemove = { viewModel.removeStock(live); open = null },
             )

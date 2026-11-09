@@ -356,10 +356,10 @@ class BasketRepository(
     }
     suspend fun addStock(text: String) = stockAdd(StockItem(id = localId(), text = text, canonical = text.lowercase()))
     suspend fun addItemToStock(item: BasketItem, product: Product? = item.anyProduct) = stockAdd(StockItem(
-        id = localId(), text = item.parsed?.canonicalName ?: item.text, quantityText = product?.quantityText, productId = product?.id, imageUrl = product?.imageUrl,
+        id = localId(), text = product?.title ?: item.parsed?.canonicalName ?: item.text, quantityText = product?.quantityText, productId = product?.id, imageUrl = product?.imageUrl, product = product,
     ))
     suspend fun addProductToStock(product: Product, barcode: String?) = stockAdd(StockItem(
-        id = localId(), text = product.title, quantityText = product.quantityText, productId = product.id, imageUrl = product.imageUrl, barcode = barcode,
+        id = localId(), text = product.title, quantityText = product.quantityText, productId = product.id, imageUrl = product.imageUrl, barcode = barcode, product = product,
     ))
     /** Moves an entry to another group by hand ([category]) and/or flags it as running low ([runningLow]). */
     suspend fun updateStock(item: StockItem, category: String? = null, runningLow: Boolean? = null) {
@@ -624,7 +624,7 @@ class BasketRepository(
             patchLocal(item.id) { it.copy(checked = true, boughtAt = at, assignedStore = store) }
             if (product != null) _stock.update { list ->
                 if (list.any { it.productId == product.id }) list
-                else list + StockItem(id = localId(), text = item.parsed?.canonicalName ?: item.text, quantityText = product.quantityText, productId = product.id, imageUrl = product.imageUrl)
+                else list + StockItem(id = localId(), text = product.title, quantityText = product.quantityText, productId = product.id, imageUrl = product.imageUrl, product = product)
             }
         })
     }
@@ -980,6 +980,15 @@ class BasketRepository(
         val label = knownLabel(gtin) ?: runCatching { barcodes.resolve(gtin, _stock.value) }.getOrNull()
         val local = localItem(label?.title ?: gtin, 1, parentId).copy(barcode = gtin)
         queued(PendingOp(type = "barcodeAdd", itemId = local.id, text = gtin, quantity = 1, basketId = _currentBasketId.value, parentId = parentId, scanLabel = label), { _items.update { it + local } })
+    }
+
+    suspend fun addFromStock(item: StockItem) {
+        val product = item.product
+        if (product != null) addFromProduct(product)
+        else if (item.productId != null) {
+            val local = localItem(item.text, 1, null)
+            queued(PendingOp(type = "productAdd", itemId = local.id, productId = item.productId, quantity = 1, basketId = _currentBasketId.value), { _items.update { it + local } })
+        } else add(item.text, 1)
     }
 
     suspend fun addFromProduct(product: Product, parentId: String? = null, quantity: Int = 1) {

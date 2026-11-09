@@ -151,6 +151,8 @@ data class StockItem(
     val searchTerms: String = "",
     val addedAt: Long = 0,
     val updatedAt: Long = 0,
+    val product: Product? = null,
+    val searchPending: Boolean = false,
 )
 
 @Serializable
