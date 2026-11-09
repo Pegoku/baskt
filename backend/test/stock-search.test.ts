@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { resetPoolStats } from "@/ai/pool";
 import { db, resetDbForTests } from "@/db";
-import { products } from "@/db/schema";
+import { products, stock } from "@/db/schema";
 import { env } from "@/env";
 import { addStock, listStock, stockView, tagStockForSearch } from "@/stock";
 
@@ -31,6 +31,29 @@ function answerWith(byText: Record<string, string>, seen: string[] = []) {
 }
 
 describe("stock search words", () => {
+  test("rice finds arroz redondo before tagging and after an old empty result", () => {
+    const row = addStock("arroz redondo");
+    expect(stockView()[0].searchTerms.split(" ")).toContain("rice");
+    db().update(stock).set({ searchTerms: "" }).run();
+    expect(stockView()[0].searchTerms.split(" ")).toContain("rice");
+    expect(listStock()[0].id).toBe(row.id);
+  });
+
+  test("existing generic stock displays its linked purchased product and retains its old search name", () => {
+    db().insert(products).values({ id: "AH:2", store: "AH", sourceId: "2", title: "AH Ronde rijst", quantityText: "1 kg", priceCents: 199, imageUrl: "https://example.com/rice.jpg", fetchedAt: 0 }).run();
+    const row = addStock("arroz redondo");
+    db().update(stock).set({ productId: "AH:2" }).run();
+    const view = stockView()[0];
+    expect(view.text).toBe("AH Ronde rijst");
+    expect(view.imageUrl).toBe("https://example.com/rice.jpg");
+    expect(view.searchTerms.split(" ")).toContain("rice");
+    expect(view.product?.id).toBe("AH:2");
+    addStock({ text: "rice", productId: "AH:2" });
+    expect(listStock()).toHaveLength(1);
+    expect(listStock()[0].id).toBe(row.id);
+    expect(listStock()[0].text).toBe("AH Ronde rijst");
+  });
+
   test("the AI's translations and kinds become searchable, once per entry", async () => {
     addStock("atún en aceite de oliva");
     addStock("sal");
@@ -46,11 +69,14 @@ describe("stock search words", () => {
     expect(seen.length).toBe(1); // nothing left to tag
   });
 
-  test("an entry the AI skipped is marked done instead of asked about forever", async () => {
+  test("an entry the AI skipped remains eligible for a later retry", async () => {
     addStock("mystery");
     answerWith({});
     await tagStockForSearch();
-    expect(listStock()[0].searchTerms).toBe("");
+    expect(listStock()[0].searchTerms).toBeNull();
+    answerWith({ mystery: "food eten comida" });
+    await tagStockForSearch();
+    expect(listStock()[0].searchTerms).toBe("food eten comida");
   });
 
   test("a failed call leaves entries untagged for a later retry", async () => {
@@ -64,6 +90,7 @@ describe("stock search words", () => {
   test("a linked product's own title is searchable even without the AI", () => {
     db().insert(products).values({ id: "AH:1", store: "AH", sourceId: "1", title: "Statesman Tonijnstukken in olijfolie", brand: "Statesman", quantityText: "160 g", priceCents: 199, fetchedAt: 0 }).run();
     addStock({ text: "atún en aceite de oliva", productId: "AH:1" });
-    expect(stockView()[0].searchTerms).toBe("statesman tonijnstukken in olijfolie");
+    expect(stockView()[0].text).toBe("Statesman Tonijnstukken in olijfolie");
+    expect(stockView()[0].product?.id).toBe("AH:1");
   });
 });
