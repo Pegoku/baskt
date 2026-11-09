@@ -36,7 +36,7 @@ fun rememberTranslation(texts: List<String>, enabled: Boolean = true, descriptio
 @Composable
 fun OriginalToggle(showOriginal: Boolean, onToggle: () -> Unit) {
     val label = if (showOriginal) "Show translation" else "Show original"
-    TooltipBox(positionProvider = TooltipDefaults.rememberTooltipPositionProvider(), tooltip = { PlainTooltip { Text(label) } }, state = rememberTooltipState()) {
+    TooltipBox(positionProvider = TooltipDefaults.rememberTooltipPositionProvider(androidx.compose.material3.TooltipAnchorPosition.Above), tooltip = { PlainTooltip { Text(label) } }, state = rememberTooltipState()) {
         IconButton(onClick = onToggle) {
             Icon(if (showOriginal) Icons.Default.Translate else Icons.Default.Description, contentDescription = label)
         }

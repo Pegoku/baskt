@@ -19,7 +19,7 @@ fun SpeechToggle(viewModel: AppViewModel, message: ChatMessage) {
     val enabled = settings?.speakReplies == true
     val label = if (enabled) "Turn off spoken replies" else "Turn on spoken replies and read this message"
     Row {
-        TooltipBox(positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+        TooltipBox(positionProvider = TooltipDefaults.rememberTooltipPositionProvider(androidx.compose.material3.TooltipAnchorPosition.Above),
             tooltip = { PlainTooltip { Text(label) } }, state = rememberTooltipState()) {
             IconButton(onClick = { viewModel.toggleMessageSpeech(message) }) {
                 Icon(if (enabled) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff, label)

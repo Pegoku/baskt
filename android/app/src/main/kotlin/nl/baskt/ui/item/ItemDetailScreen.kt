@@ -396,7 +396,7 @@ private fun OptionRow(product: Product, equivalence: String?, selected: Boolean,
 @Composable
 private fun TooltipIconButton(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tint: androidx.compose.ui.graphics.Color, enabled: Boolean = true, onClick: () -> Unit) {
     androidx.compose.material3.TooltipBox(
-        positionProvider = androidx.compose.material3.TooltipDefaults.rememberTooltipPositionProvider(),
+        positionProvider = androidx.compose.material3.TooltipDefaults.rememberTooltipPositionProvider(androidx.compose.material3.TooltipAnchorPosition.Above),
         tooltip = { PlainTooltip { Text(text) } },
         state = androidx.compose.material3.rememberTooltipState(),
     ) {
