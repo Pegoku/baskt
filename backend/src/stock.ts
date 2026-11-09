@@ -3,6 +3,7 @@ import { chatJson } from "@/ai/client";
 import { db, newId, now } from "@/db";
 import { products, stock, type StockRow } from "@/db/schema";
 import { aiConfigured } from "@/env";
+import { appLanguageName } from "@/db/settings";
 import { STOCK_CATEGORIES, categoryFromStore, isStockCategory, type StockCategory } from "@/stock-categories";
 import { expandTokens, normalizeText, tokenize } from "@/lib/text";
 
@@ -55,6 +56,7 @@ export function addStock(
     ...patch,
     category: null,
     categorySource: null,
+    searchTerms: null,
     addedAt: now(),
     updatedAt: now(),
   };
@@ -76,29 +78,44 @@ export function stockForProduct(
   );
 }
 
-export type StockView = StockRow & { category: StockCategory | null; runningLow: boolean };
+export type StockView = StockRow & { category: StockCategory | null; runningLow: boolean; searchTerms: string };
 
-/** The product category behind each linked stock row, folded onto the stock groups. */
-function productCategories(rows: StockRow[]) {
+type LinkedProduct = { category: StockCategory | null; words: string };
+
+/** The store product behind each linked stock row: its aisle folded onto the stock groups, and its full title. */
+function linkedProducts(rows: StockRow[]) {
   const ids = [...new Set(rows.map((row) => row.productId).filter((id): id is string => !!id))];
-  if (!ids.length) return new Map<string, StockCategory>();
-  const found = db().select({ id: products.id, category: products.category }).from(products).where(inArray(products.id, ids)).all();
-  const map = new Map<string, StockCategory>();
+  const map = new Map<string, LinkedProduct>();
+  if (!ids.length) return map;
+  const found = db()
+    .select({ id: products.id, category: products.category, title: products.title, brand: products.brand })
+    .from(products)
+    .where(inArray(products.id, ids))
+    .all();
   for (const product of found) {
-    const category = categoryFromStore(product.category);
-    if (category) map.set(product.id, category);
+    map.set(product.id, { category: categoryFromStore(product.category), words: [product.brand, product.title].filter(Boolean).join(" ") });
   }
   return map;
 }
 
+/**
+ * Everything a search on the stock page may hit besides the visible name: the AI's translations and kinds
+ * ("tuna atun tonijn fish canned") plus the linked product's own title ("Statesman Tonijnstukken in olijfolie").
+ */
+function searchWords(row: StockRow, product: LinkedProduct | null) {
+  const words = new Set(tokenize(`${row.searchTerms ?? ""} ${product?.words ?? ""}`));
+  for (const token of tokenize(row.text)) words.delete(token);
+  return [...words].join(" ");
+}
+
 /** A hand-picked group wins, then the product's own aisle, then the AI's guess; null while still unsorted. */
 export function stockView(rows: StockRow[] = listStock()): StockView[] {
-  const fromProducts = productCategories(rows);
+  const linked = linkedProducts(rows);
   return rows.map((row) => {
-    const fromProduct = row.productId ? fromProducts.get(row.productId) ?? null : null;
+    const product = row.productId ? linked.get(row.productId) ?? null : null;
     const stored = isStockCategory(row.category) ? row.category : null;
-    const category = row.categorySource === "manual" ? stored : fromProduct ?? stored;
-    return { ...row, category, runningLow: row.lowAt != null };
+    const category = row.categorySource === "manual" ? stored : product?.category ?? stored;
+    return { ...row, category, runningLow: row.lowAt != null, searchTerms: searchWords(row, product) };
   });
 }
 
@@ -141,6 +158,44 @@ export function sortUnsortedStock(): Promise<void> {
     }
   })().finally(() => { sorting = null; });
   return sorting;
+}
+
+let tagging: Promise<void> | null = null;
+
+/** Small batches keep each answer short enough for a free-tier token budget and a cheap retry. */
+const TAG_BATCH = 20;
+
+/**
+ * Asks the AI for the words someone might search their pantry with, for every entry that has none yet:
+ * the name in a few languages and what kind of thing it is, so "tuna" or "fish" finds "atún en aceite".
+ * Single-flight; a failed batch stays untagged and is retried on a later load.
+ */
+export function tagStockForSearch(): Promise<void> {
+  if (tagging) return tagging;
+  tagging = (async () => {
+    if (!aiConfigured()) return;
+    const untagged = listStock().filter((row) => row.searchTerms == null);
+    const languages = [...new Set(["English", "Spanish", "Dutch", appLanguageName()])].join(", ");
+    for (let start = 0; start < untagged.length; start += TAG_BATCH) {
+      const batch = untagged.slice(start, start + TAG_BATCH);
+      const lines = batch.map((row, index) => `${index + 1}. ${row.text}`).join("\n");
+      const result = await chatJson<{ terms?: Record<string, string> }>([
+        {
+          role: "system",
+          content: `You help search a home pantry. For each item, list the lowercase words someone would really type to find it: first what it is, named in each of ${languages} (singular, plus a common synonym), then the plain kinds it belongs to (e.g. fish, seafood, tin, dairy, fruit, sweets, spice). No brands, sizes, adjectives, nutrition facts or meal ideas. 6 to 16 words per item, separated by spaces. Example: "atún en aceite de oliva" -> "tuna tonijn fish pescado vis seafood tin lata blik". Reply as JSON: {"terms": {"<number>": "<words>"}}.`,
+        },
+        { role: "user", content: lines },
+      ], { maxTokens: 400 + batch.length * 100 }).catch((error) => { console.warn("stock tagging failed", String(error)); return null; });
+      if (!result) return;
+      const answer = result.terms ?? {};
+      for (const [index, row] of batch.entries()) {
+        const words = answer[String(index + 1)];
+        const terms = typeof words === "string" ? tokenize(words).slice(0, 40).join(" ") : "";
+        db().update(stock).set({ searchTerms: terms }).where(eq(stock.id, row.id)).run();
+      }
+    }
+  })().finally(() => { tagging = null; });
+  return tagging;
 }
 
 export function removeStock(id: string) {

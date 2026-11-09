@@ -704,9 +704,9 @@ describe("api", () => {
     expect(inStock("1 pinch of salt")?.text).toBe("salt");
     const { inStockParsed } = await import("@/stock");
     const rows = [
-      { id: "1", text: "Tonijn in olijfolie", canonical: "", quantityText: null, productId: null, imageUrl: null, barcode: null, category: null, categorySource: null, lowAt: null, addedAt: 0, updatedAt: 0 },
-      { id: "2", text: "Keukenzout met jodium", canonical: "", quantityText: null, productId: null, imageUrl: null, barcode: null, category: null, categorySource: null, lowAt: null, addedAt: 0, updatedAt: 0 },
-      { id: "3", text: "aceite de oliva", canonical: "", quantityText: null, productId: null, imageUrl: null, barcode: null, category: null, categorySource: null, lowAt: null, addedAt: 0, updatedAt: 0 },
+      { id: "1", text: "Tonijn in olijfolie", canonical: "", quantityText: null, productId: null, imageUrl: null, barcode: null, category: null, categorySource: null, lowAt: null, searchTerms: null, addedAt: 0, updatedAt: 0 },
+      { id: "2", text: "Keukenzout met jodium", canonical: "", quantityText: null, productId: null, imageUrl: null, barcode: null, category: null, categorySource: null, lowAt: null, searchTerms: null, addedAt: 0, updatedAt: 0 },
+      { id: "3", text: "aceite de oliva", canonical: "", quantityText: null, productId: null, imageUrl: null, barcode: null, category: null, categorySource: null, lowAt: null, searchTerms: null, addedAt: 0, updatedAt: 0 },
     ];
     expect(inStock("1 chorro de Aceite", rows)?.text).toBe("aceite de oliva");
     expect(inStockParsed({ canonicalName: "sal", queries: { AH: "zout" }, fallbackQuery: "zout" }, rows)?.text).toBe("Keukenzout met jodium");

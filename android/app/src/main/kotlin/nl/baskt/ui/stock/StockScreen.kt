@@ -90,6 +90,7 @@ import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.EmptyState
 import nl.baskt.ui.common.ConfirmDialog
 import nl.baskt.ui.common.IconLabel
+import java.text.Normalizer
 
 /** The pantry groups, in the order the page shows them; keys match the server's stock categories. */
 private data class StockGroup(val key: String, val label: String, val icon: ImageVector)
@@ -117,6 +118,17 @@ private fun StockItem.isBareCode() = text.all { it.isDigit() } && text.length >=
 private fun StockItem.title() = if (isBareCode()) "Scanned item" else text
 private fun StockItem.subtitle() = if (isBareCode()) text else quantityText
 
+/** Lowercase without accents, so "tun" finds "atún" and "creme" finds "crème". */
+private fun fold(text: String) =
+    Normalizer.normalize(text, Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").lowercase()
+
+/** Every word of the query has to appear in the name, the size, or the search words, so "tuna" finds atún. */
+private fun StockItem.matches(words: List<String>): Boolean {
+    if (words.isEmpty()) return true
+    val haystack = fold(listOfNotNull(text, quantityText, searchTerms).joinToString(" "))
+    return words.all { it in haystack }
+}
+
 /** What you already have at home, as a pantry of tiles grouped by aisle. Recipe folders skip these ingredients. */
 @Composable
 fun StockScreen(viewModel: AppViewModel, onBack: () -> Unit) {
@@ -128,7 +140,8 @@ fun StockScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     var adding by remember { mutableStateOf(false) }
     var open by remember { mutableStateOf<StockItem?>(null) }
 
-    val matching = stock.filter { query.isBlank() || it.text.contains(query.trim(), ignoreCase = true) || it.quantityText?.contains(query.trim(), ignoreCase = true) == true }
+    val words = fold(query).split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
+    val matching = stock.filter { it.matches(words) }
     val low = matching.filter { it.runningLow }
     val byGroup = matching.groupBy { groupOf(it).key }
     val present = GROUPS.filter { byGroup[it.key]?.isNotEmpty() == true }

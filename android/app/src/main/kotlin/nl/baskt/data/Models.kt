@@ -147,6 +147,8 @@ data class StockItem(
     val category: String? = null,
     val categorySource: String? = null,
     val runningLow: Boolean = false,
+    /** Extra words a search can hit: the name in other languages, what kind of food it is, the product title. */
+    val searchTerms: String = "",
     val addedAt: Long = 0,
     val updatedAt: Long = 0,
 )
