@@ -80,6 +80,8 @@ export const stock = sqliteTable("stock", {
   categorySource: text("category_source"),
   /** When it was marked as running low (and put on the basket); cleared when it is bought again. */
   lowAt: integer("low_at"),
+  /** Words someone might search for it with (translations, kind of food), from the AI; null until tagged. */
+  searchTerms: text("search_terms"),
   addedAt: integer("added_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

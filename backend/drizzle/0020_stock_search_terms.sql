@@ -1,0 +1,1 @@
+ALTER TABLE `stock` ADD `search_terms` text;

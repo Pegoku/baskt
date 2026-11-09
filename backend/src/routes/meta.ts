@@ -8,7 +8,7 @@ import { aiStats } from "@/ai/client";
 import { db, now } from "@/db";
 import { aiCache, basketItems, basketMatches, priceHistory, products, searchCache } from "@/db/schema";
 import { appLanguage, defaultServings, enabledStoreCodes, rankBy, setSetting, skipInStock } from "@/db/settings";
-import { addStock, removeStock, sortUnsortedStock, stockView, updateStock } from "@/stock";
+import { addStock, removeStock, sortUnsortedStock, stockView, tagStockForSearch, updateStock } from "@/stock";
 import { deleteChoice, listChoices } from "@/matching/memory";
 import { deleteName, listNames } from "@/matching/naming";
 import { allStores, hasStore, storeHealth } from "@/stores/registry";
@@ -54,6 +54,8 @@ meta.get("/stock", (c) => {
   const items = stockView();
   // Unsorted entries get a group in the background; the next load shows it.
   if (items.some((row) => row.category == null && row.categorySource == null)) void sortUnsortedStock();
+  // Same for the search words behind each new entry (translations, kinds of food); a no-op once all are tagged.
+  void tagStockForSearch();
   return c.json({ items });
 });
 
