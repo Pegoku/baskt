@@ -239,6 +239,14 @@ export class AhAdapter implements StoreAdapter {
         await this.accessToken(true);
         return this.get<T>(path, false);
       }
+      // AH's search answers a perfectly valid query with a bare 400 now and then (the same URL works a moment
+      // later), so one retry on a fresh token turns that blip into a normal result instead of an item error.
+      if (error instanceof HttpError && error.status === 400 && retryAuth) {
+        console.warn(`[AH] 400 for ${path}, retrying once: ${error.body.slice(0, 200) || "(empty body)"}`);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await this.accessToken(true);
+        return this.get<T>(path, false);
+      }
       throw error;
     }
   }
