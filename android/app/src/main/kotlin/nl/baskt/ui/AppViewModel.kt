@@ -50,6 +50,9 @@ import nl.baskt.data.RecipeSuggestion
 import nl.baskt.data.StockItem
 import nl.baskt.data.VoiceItem
 
+/** A line for the global snackbar, optionally with one action such as Undo. */
+data class Notice(val message: String, val actionLabel: String? = null, val onAction: (() -> Unit)? = null)
+
 class AppViewModel(val container: AppContainer) : ViewModel() {
     val basket = container.basket
 
@@ -184,8 +187,11 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     val recipesBusy: StateFlow<Boolean> = _recipesBusy
 
     /** One-line messages for the user (failures, outcomes), shown by a global snackbar. */
-    val notices = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 8)
-    fun notify(message: String) { notices.tryEmit(message) }
+    val notices = kotlinx.coroutines.flow.MutableSharedFlow<Notice>(extraBufferCapacity = 8)
+    fun notify(message: String) { notices.tryEmit(Notice(message)) }
+    /** A message with one button, e.g. "Removed “milk”" with Undo. The app's rule: reversible actions act at once and offer this. */
+    fun notify(message: String, actionLabel: String, onAction: () -> Unit) { notices.tryEmit(Notice(message, actionLabel, onAction)) }
+    fun notifyUndo(message: String, undo: () -> Unit) = notify(message, "Undo", undo)
     init { viewModelScope.launch { basket.notices.collect { notify(it) } } }
 
     /** Runs a server call and turns any failure into a visible message instead of silence. */

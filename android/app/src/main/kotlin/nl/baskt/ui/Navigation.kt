@@ -1,5 +1,6 @@
 package nl.baskt.ui
 
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -38,7 +39,6 @@ import nl.baskt.ui.ah.AhLoginScreen
 @Serializable data object BasketRoute : NavKey
 @Serializable data class ItemRoute(val itemId: String) : NavKey
 @Serializable data class GroupRoute(val groupId: String) : NavKey
-@Serializable data object CompareRoute : NavKey
 @Serializable data object SettingsRoute : NavKey
 @Serializable data object StockRoute : NavKey
 @Serializable data object SearchRoute : NavKey
@@ -57,7 +57,8 @@ import nl.baskt.ui.ah.AhLoginScreen
 @Composable
 fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
     val backStack = rememberNavBackStack(BasketRoute)
-    if (startAtSettings && backStack.size == 1) backStack.add(SettingsRoute)
+    // Once per launch: an unconfigured install opens on Settings, and Back from there must stay back.
+    androidx.compose.runtime.LaunchedEffect(Unit) { if (startAtSettings && backStack.size == 1) backStack.add(SettingsRoute) }
     // A receipt shared from another app lands on the receipts screen, where the scan result shows up.
     val openReceipts by viewModel.openReceiptsRequest.collectAsState()
     androidx.compose.runtime.LaunchedEffect(openReceipts) {
@@ -81,7 +82,13 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
     val popExit = androidx.compose.animation.slideOutHorizontally(slide) { it / 3 } + androidx.compose.animation.fadeOut(fade)
     // Global messages: anything that fails or finishes elsewhere is announced here, on top of every screen.
     val snackbar = androidx.compose.runtime.remember { androidx.compose.material3.SnackbarHostState() }
-    androidx.compose.runtime.LaunchedEffect(Unit) { viewModel.notices.collect { message -> snackbar.showSnackbar(message, withDismissAction = true) } }
+    // Each message replaces the one on screen instead of queueing behind it; one with an action (Undo) stays longer.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.notices.collectLatest { notice ->
+            val result = snackbar.showSnackbar(notice.message, actionLabel = notice.actionLabel, withDismissAction = true, duration = if (notice.actionLabel != null) androidx.compose.material3.SnackbarDuration.Long else androidx.compose.material3.SnackbarDuration.Short)
+            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) notice.onAction?.invoke()
+        }
+    }
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(androidx.compose.material3.MaterialTheme.colorScheme.background)) {
     NavDisplay(
         backStack = backStack,
@@ -112,9 +119,6 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
                 GroupScreen(viewModel, route.groupId, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) })
             }
             entry<ItemRoute> { route -> ItemDetailScreen(viewModel, route.itemId, onBack = { backStack.removeLastOrNull() }) }
-            entry<CompareRoute> {
-                HomePager(viewModel, startPage = 1, onOpenItem = { backStack.add(ItemRoute(it)) }, onOpenGroup = { backStack.add(GroupRoute(it)) }, onSettings = { backStack.add(SettingsRoute) }, onStock = { backStack.add(StockRoute) }, onSearch = { backStack.add(SearchRoute) }, onDeals = { backStack.add(DealsRoute) }, onRecipes = { backStack.add(RecipesRoute) }, onShop = { backStack.add(ShopRoute(it)) }, onPurchases = { backStack.add(PurchasesRoute) }, onScan = { backStack.add(ScannerRoute) })
-            }
             entry<TidyRoute> { TidyScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
             entry<ScannerRoute> { ScannerScreen(viewModel, onClose = { backStack.removeLastOrNull() }) }
             entry<PurchasesRoute> { PurchasesScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
