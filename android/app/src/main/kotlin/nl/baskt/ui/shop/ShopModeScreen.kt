@@ -1,6 +1,5 @@
 package nl.baskt.ui.shop
 
-import androidx.compose.material.icons.filled.ShoppingCart
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,44 +8,50 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CardMembership
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Kitchen
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.SearchOff
-import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.Unarchive
+import androidx.compose.material.icons.filled.RemoveShoppingCart
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -55,30 +60,42 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
 import nl.baskt.data.BasketItem
+import nl.baskt.data.Product
 import nl.baskt.data.TripScan
+import nl.baskt.data.dealPricing
 import nl.baskt.data.euros
 import nl.baskt.data.freeExtra
-import nl.baskt.data.dealPricing
 import nl.baskt.ui.AppViewModel
-import nl.baskt.ui.common.ProductThumb
+import nl.baskt.ui.common.ConfirmDialog
+import nl.baskt.ui.common.EmptyState
+import nl.baskt.ui.common.ItemThumb
+import nl.baskt.ui.common.SectionHeader
+import nl.baskt.ui.common.SheetBody
+import nl.baskt.ui.common.Spacing
 import nl.baskt.ui.common.StoreBadge
+import nl.baskt.ui.common.Tag
+import nl.baskt.ui.common.rememberTranslation
+import nl.baskt.ui.common.storeName
 
 /**
- * In-store mode: big checkboxes, items grouped by aisle (product category), screen stays on. Ticking records the
- * item on today's trip (it moves to the orders page); swiping a row sideways archives it for this trip (it is
- * crossed out on the main list and can be brought back from the archive button); the scan button adds things
- * picked up that were not on the list (a swipe takes a scan back); the card button shows the store's loyalty card for the checkout.
+ * In-store mode: big checkboxes, items grouped by aisle (product category), screen stays on. Checking an item off
+ * records it on today's trip (it moves to the orders page); skipping it (row menu or a sideways swipe) leaves it
+ * out of this trip, crossed out in the basket, until it is unskipped from the skipped button; the scan button
+ * adds things picked up that were not in the basket (its row menu or a swipe takes a scan back); the card button
+ * shows the store's loyalty card for the checkout.
  */
 @Composable
 fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
@@ -89,37 +106,41 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
     val tillCodes by viewModel.tillCodes.collectAsState()
     val barcodeKinds by viewModel.barcodeKinds.collectAsState()
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val snackbar = remember { SnackbarHostState() }
     DisposableEffect(Unit) {
         val window = (context as? android.app.Activity)?.window
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
-    // When the order step assigned stores, shop only those items; otherwise everything matched here. Ticking an
-    // item assigns it to this store, so bought items never count as "the order step ran".
+    // When the order step assigned stores, shop only those items; otherwise everything matched here. Checking an
+    // item off assigns it to this store, so bought items never count as "the order step ran".
     val assigned = items.any { !it.isGroup && !it.isBought && it.assignedStore != null }
     val candidates = items.filter { !it.isGroup && !it.isSkipped && (it.isBought || !assigned || it.assignedStore == store) }
     // Items without a product here stay on the trip as well (in their own section at the end), so they can still be
-    // looked for on the shelf and ticked off.
+    // looked for on the shelf and checked off.
     val shopping = candidates.filter { !it.isBought || it.assignedStore == store }.map { item -> item to item.match(store)?.effective }
     val remaining = shopping.filter { !it.first.isBought }
-    val total = shopping.sumOf { (item, product) -> (product?.priceCents ?: 0) * item.quantity }
+    // The bar pairs "N left" with what those N still cost, not with the whole trip.
+    val remainingTotal = remaining.sumOf { (item, product) -> (product?.priceCents ?: 0) * item.quantity }
     val (found, notFound) = shopping.partition { it.second != null }
-    val sections = found.groupBy { it.second?.category?.substringBefore(" / ")?.ifBlank { null } ?: "Other" }.toSortedMap().toList() +
-        listOfNotNull(notFound.takeIf { it.isNotEmpty() }?.let { "Not found at this store" to it })
+    val categories = found.groupBy { it.second?.category?.substringBefore(" / ")?.ifBlank { null } }.toList().sortedBy { it.first ?: "￿" }
+    // The stores name their aisles in Dutch: shown in the app's language like the deal texts, when it can be translated.
+    val categoryNames = categories.mapNotNull { it.first }
+    val translatedNames = rememberTranslation(categoryNames, enabled = categoryNames.isNotEmpty())?.takeIf { it.translated }?.texts
+    val sections = categories.map { (name, entries) -> Triple(name ?: "other", name?.let { translatedNames?.getOrNull(categoryNames.indexOf(it)) ?: it } ?: "Other", entries) } +
+        listOfNotNull(notFound.takeIf { it.isNotEmpty() }?.let { Triple("not-found", "Not found at this store", it) })
     val card = settings?.loyaltyCards?.get(store)
     val relay = settings?.tillRelay == true
     LaunchedEffect(store, relay) { if (relay) viewModel.loadBarcodeKinds(store) }
     val tripWindow = 12 * 60 * 60 * 1000L
     val codesHere = if (relay) tillCodes.filter { it.store == store && System.currentTimeMillis() - it.at < tripWindow } else emptyList()
     val codedItems = codesHere.mapNotNull { it.itemId }.toSet()
-    // A scan the phone already put on a list item is shown on that item, not again as an extra.
+    // A scan the phone already put on a basket item is shown on that item, not again as an extra.
     val scansHere = tripScans.filter { scan -> scan.store == store && System.currentTimeMillis() - scan.at < tripWindow && codesHere.none { it.scanId == scan.id && it.itemId != null } }
-    fun kindOf(item: BasketItem, product: nl.baskt.data.Product?) = barcodeKinds.firstOrNull { it.store == store && product != null && it.productId == product.id }?.kind
+    fun kindOf(item: BasketItem, product: Product?) = barcodeKinds.firstOrNull { it.store == store && product != null && it.productId == product.id }?.kind
         ?: barcodeKinds.firstOrNull { it.store == store && it.itemText.equals(item.text, ignoreCase = true) }?.kind
-    var linking by remember { mutableStateOf<TripScan?>(null) }
-    var showTill by remember { mutableStateOf(false) }
+    // Everything that is open on top of the list is saved, so turning the phone at the till keeps the barcode up.
+    var linkingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showTill by rememberSaveable { mutableStateOf(false) }
     if (showTill) TillRelayDialog(
         card = card,
         codes = nl.baskt.data.tillSequence(codesHere, items),
@@ -130,48 +151,39 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
         onPaid = { viewModel.clearTillCodes(store); showTill = false },
         onDismiss = { showTill = false },
     )
-    linking?.let { scan ->
-        LinkScanDialog(scan, remaining.map { it.first }, onDismiss = { linking = null }) { item -> viewModel.linkScan(scan, item, store); linking = null }
+    scansHere.firstOrNull { it.id == linkingId }?.let { scan ->
+        LinkScanSheet(scan, remaining.map { it.first }, onDismiss = { linkingId = null }) { item -> viewModel.linkScan(scan, item, store); linkingId = null }
     }
-    val archived = items.filter { !it.isGroup && it.isSkipped }
-    var showArchived by remember { mutableStateOf(false) }
+    val skipped = items.filter { !it.isGroup && it.isSkipped }
+    var showSkipped by rememberSaveable { mutableStateOf(false) }
 
-    var showCard by remember { mutableStateOf(false) }
-    var editCard by remember { mutableStateOf(false) }
+    val cardName = "${storeName(store, stores)} card"
+    var showCard by rememberSaveable { mutableStateOf(false) }
+    var editCard by rememberSaveable { mutableStateOf(false) }
     if (showCard && card != null) LoyaltyCardDialog(store, stores, card, onDismiss = { showCard = false }, onEdit = { showCard = false; editCard = true })
     if (editCard) LoyaltyCardEditor(store, stores, card, onDismiss = { editCard = false }) { number -> viewModel.saveLoyaltyCard(store, number); editCard = false; if (number != null) showCard = true }
 
-    /** Archiving and un-ticking are both one swipe or tap away, so both offer an immediate undo. */
-    fun undoable(message: String, undo: () -> Unit) = scope.launch {
-        val result = snackbar.showSnackbar(message, actionLabel = "Undo", duration = SnackbarDuration.Short, withDismissAction = true)
-        if (result == SnackbarResult.ActionPerformed) undo()
-    }
-
-    fun archive(item: BasketItem) {
+    /** Skipping and unchecking are both one tap or swipe away, so both act at once and offer an undo. */
+    fun skip(item: BasketItem) {
         viewModel.skip(item, true)
-        undoable("Archived “${item.text}”") { viewModel.restore(item, store) }
+        viewModel.notifyUndo("Skipped “${item.text}”") { viewModel.restore(item, store) }
     }
 
-    // One tap can reach both the checkbox and the row underneath it; without this an item could be ticked and
-    // immediately un-ticked again, which silently drops it off the trip.
-    val lastToggle = remember { mutableMapOf<String, Long>() }
-    fun toggle(item: BasketItem, product: nl.baskt.data.Product?) {
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (now - (lastToggle[item.id] ?: 0L) < 700) return
-        lastToggle[item.id] = now
+    fun toggle(item: BasketItem, product: Product?) {
         if (item.isBought) {
             viewModel.unbuy(item)
-            undoable("Unticked “${item.text}”") { viewModel.markBought(item, store, product) }
+            viewModel.notifyUndo("Unchecked “${item.text}”") { viewModel.markBought(item, store, product) }
         } else {
             viewModel.markBought(item, store, product)
         }
     }
 
-    // AH self-scan (experimental): while a trip runs, every scan goes to the AH basket first, then to the list.
+    // AH self-scan (experimental): while a trip runs, every scan goes to the AH basket first, then to the baskt basket.
     val selfScanOn = store == "AH" && settings?.selfScan == true
     val selfScan by viewModel.selfScan.collectAsState()
     val tickedByBarcode by viewModel.tickedByBarcode.collectAsState()
-    var showSelfScanBasket by remember { mutableStateOf(false) }
+    var showSelfScanBasket by rememberSaveable { mutableStateOf(false) }
+    var confirmStopSelfScan by rememberSaveable { mutableStateOf(false) }
     val openScanner = nl.baskt.ui.common.rememberBarcodeScannerWithFormat { raw, format ->
         if (selfScanOn && selfScan.active) viewModel.selfScanItem(store, raw, format.takeIf { relay })
         else viewModel.scanItem(store, raw, format.takeIf { relay })
@@ -187,8 +199,17 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
         onDismissIssue = { viewModel.dismissSelfScanIssue(it) },
         onDismissNotice = { viewModel.dismissSelfScanNotice() },
         onCheckout = { viewModel.selfScanCheckout() },
-        onStop = { showSelfScanBasket = false; viewModel.stopSelfScan() },
+        // The question is asked after the sheet has closed, so a dialog never sits on top of a sheet.
+        onStop = { showSelfScanBasket = false; confirmStopSelfScan = true },
         onDismiss = { showSelfScanBasket = false },
+    )
+    if (confirmStopSelfScan) ConfirmDialog(
+        title = "Stop self-scan?",
+        body = if ((selfScan.basket?.products?.size ?: 0) > 0) "Scanned items stay in the AH basket until you start again in this store." else "You can start again any time on the store Wi-Fi.",
+        confirmLabel = "Stop",
+        dismissLabel = "Keep scanning",
+        onDismiss = { confirmStopSelfScan = false },
+        onConfirm = { viewModel.stopSelfScan() },
     )
     if (selfScanOn) selfScan.checkout?.let { checkout ->
         SelfScanCheckoutDialog(checkout, card, onRetry = { viewModel.selfScanCheckout() }, onClose = { showSelfScanBasket = false; viewModel.closeSelfScanCheckout() })
@@ -196,32 +217,41 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
 
     fun removeScan(scan: TripScan) {
         viewModel.removeScan(scan)
-        undoable("Removed “${scan.product?.title ?: scan.label?.title ?: scan.barcode}”") { viewModel.restoreScan(scan) }
+        viewModel.notifyUndo("Removed “${scan.product?.title ?: scan.label?.title ?: scan.barcode}”") { viewModel.restoreScan(scan) }
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
-                title = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { StoreBadge(store, stores); Text("${remaining.size} left · ${total.euros()}", style = MaterialTheme.typography.titleLargeEmphasized) } },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StoreBadge(store, stores)
+                        Text(
+                            listOfNotNull("${remaining.size} left", remainingTotal.takeIf { it > 0 }?.euros()).joinToString(" · "),
+                            style = MaterialTheme.typography.titleLargeEmphasized, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
                 actions = {
-                    if (archived.isNotEmpty() || showArchived) IconButton(onClick = { showArchived = !showArchived }) {
-                        BadgedBox(badge = { if (archived.isNotEmpty()) Badge { Text("${archived.size}") } }) {
-                            Icon(
-                                if (showArchived) Icons.Default.Unarchive else Icons.Default.Archive,
-                                contentDescription = if (showArchived) "Hide archived items" else "Show ${archived.size} archived items",
-                                tint = if (showArchived) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                    if (skipped.isNotEmpty() || showSkipped) {
+                        val label = if (showSkipped) "Hide skipped" else "Show skipped"
+                        Tip(label) {
+                            IconToggleButton(checked = showSkipped, onCheckedChange = { showSkipped = it }) {
+                                BadgedBox(badge = { if (skipped.isNotEmpty()) Badge { Text("${skipped.size}") } }) { Icon(Icons.Default.RemoveShoppingCart, contentDescription = label) }
+                            }
                         }
                     }
-                    if (relay) IconButton(onClick = { showTill = true }) {
-                        BadgedBox(badge = { if (codesHere.isNotEmpty()) Badge { Text("${codesHere.size}") } }) {
-                            Icon(Icons.Default.PointOfSale, contentDescription = "Show codes at the till", tint = MaterialTheme.colorScheme.primary)
+                    if (relay) Tip("At the till") {
+                        IconButton(onClick = { showTill = true }) {
+                            BadgedBox(badge = { if (codesHere.isNotEmpty()) Badge { Text("${codesHere.size}") } }) { Icon(Icons.Default.PointOfSale, contentDescription = "Show codes at the till") }
                         }
                     }
-                    IconButton(onClick = { if (card != null) showCard = true else editCard = true }) {
-                        Icon(Icons.Default.CardMembership, contentDescription = if (card != null) "Show loyalty card" else "Add loyalty card", tint = if (card != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                    Tip(cardName) {
+                        IconButton(onClick = { if (card != null) showCard = true else editCard = true }) {
+                            Icon(Icons.Default.CardMembership, contentDescription = if (card != null) "Show $cardName" else "Add $cardName")
+                        }
                     }
                 },
             )
@@ -245,45 +275,47 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
             ExtendedFloatingActionButton(onClick = { openScanner() }, icon = { Icon(Icons.Default.QrCodeScanner, contentDescription = null) }, text = { Text("Scan") })
         },
     ) { padding ->
+        // The Scaffold's padding already ends above the self-scan bar; the list adds the room the Scan button takes.
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             val done = shopping.size - remaining.size
-            LinearWavyProgressIndicator(progress = { if (shopping.isEmpty()) 0f else done.toFloat() / shopping.size }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp))
-            if (!showArchived && shopping.isEmpty() && scansHere.isEmpty()) nl.baskt.ui.common.EmptyState(
+            LinearWavyProgressIndicator(progress = { if (shopping.isEmpty()) 0f else done.toFloat() / shopping.size }, modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.Screen, vertical = 8.dp))
+            if (!showSkipped && shopping.isEmpty() && scansHere.isEmpty()) EmptyState(
                 title = "Nothing to buy here",
-                body = "Nothing on your list is planned for this store. Scan anything you pick up and it is added to the trip.",
+                body = "Scan anything you pick up to add it.",
                 icon = Icons.Default.ShoppingCart,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).fillMaxSize(),
             )
-            else LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
-                if (showArchived) {
-                    item("h-archived") {
-                        Text("Archived · not this trip", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
+            else LazyColumn(contentPadding = PaddingValues(bottom = Spacing.FabClearance)) {
+                // Said once for the whole list, and only until the first scan shows the shopper knows how.
+                if (relay && codesHere.isEmpty() && remaining.isNotEmpty()) item("scan-hint") {
+                    Text("Scan each item as you pick it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = Spacing.Screen))
+                }
+                if (showSkipped) {
+                    item("h-skipped") { TripHeader("Skipped") }
+                    if (skipped.isEmpty()) item("skipped-empty") {
+                        Text("Nothing skipped", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = Spacing.Screen, vertical = 8.dp))
                     }
-                    if (archived.isEmpty()) item("archived-empty") {
-                        Text("Swipe an item sideways to archive it.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                    }
-                    items(archived, key = { "archived-${it.id}" }) { item ->
-                        Row(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Column(Modifier.weight(1f)) {
-                                Text(item.text, style = MaterialTheme.typography.titleMedium, textDecoration = TextDecoration.LineThrough, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(item.match(store)?.effective?.quantityText ?: "Archived this trip", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            TextButton(onClick = { viewModel.restore(item, store) }) { Text("Restore") }
-                        }
-                        HorizontalDivider()
+                    items(skipped, key = { "skipped-${it.id}" }) { item ->
+                        val product = item.match(store)?.effective
+                        TripRow(
+                            imageUrl = product?.imageUrl,
+                            title = item.text,
+                            subtitle = product?.quantityText,
+                            struck = true,
+                            modifier = Modifier.animateItem(),
+                            trailing = { TextButton(onClick = { viewModel.restore(item, store) }) { Text("Unskip") } },
+                        )
                     }
                 }
-                for ((section, entries) in sections) {
-                    item("h-$section") {
-                        Text(section, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
-                    }
+                for ((sectionKey, section, entries) in sections) {
+                    item("h-$sectionKey") { TripHeader(section) }
                     items(entries, key = { it.first.id }) { (item, product) ->
-                        // Buying (ticking) here records the purchase and puts the product in stock; ticking again undoes it.
-                        // A sideways swipe archives the item instead: off this trip, crossed out on the main list.
+                        // Checking an item off records the purchase and puts the product in stock; checking it again undoes that.
+                        // A sideways swipe (or the row menu) skips the item instead: off this trip, crossed out in the basket.
                         key(item.id) {
                             val dismiss = rememberSwipeToDismissBoxState(
                                 confirmValueChange = { value ->
-                                    if (value == SwipeToDismissBoxValue.Settled) false else { archive(item); true }
+                                    if (value == SwipeToDismissBoxValue.Settled) false else { skip(item); true }
                                 },
                             )
                             SwipeToDismissBox(
@@ -291,67 +323,48 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                 modifier = Modifier.animateItem(),
                                 enableDismissFromStartToEnd = !item.isBought,
                                 enableDismissFromEndToStart = !item.isBought,
-                                backgroundContent = { ArchiveBackground(dismiss.dismissDirection) },
+                                backgroundContent = { SwipeBackground(dismiss.dismissDirection, "Skip", Icons.Default.RemoveShoppingCart, destructive = false) },
                             ) {
                                 Surface {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().clickable { toggle(item, product) }.padding(horizontal = 8.dp, vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    ) {
-                                        Checkbox(checked = item.isBought, onCheckedChange = { toggle(item, product) }, modifier = Modifier.padding(4.dp))
-                                        if (product != null) ProductThumb(product, size = 44)
-                                        else Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.medium, modifier = Modifier.size(44.dp)) {
-                                            Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.SearchOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-                                        }
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                (if (item.quantity > 1) "${item.quantity}× " else "") + (product?.title ?: item.text),
-                                                style = MaterialTheme.typography.titleMedium,
-                                                textDecoration = if (item.isBought) TextDecoration.LineThrough else null,
-                                                color = if (item.isBought) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                                            )
-                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                if (item.isBought) Icon(Icons.Default.Kitchen, contentDescription = "In stock", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                Text(
-                                                    when {
-                                                        item.isBought -> "Bought · in stock · in today's order"
-                                                        product == null -> "No product matched here · tick it if you find it"
-                                                        else -> "${product.quantityText} · for “${item.text}”"
-                                                    },
-                                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            }
+                                    val actions = if (item.isBought) emptyList() else listOf("Skip" to { skip(item) })
+                                    TripRow(
+                                        imageUrl = product?.imageUrl,
+                                        title = (if (item.quantity > 1) "${item.quantity}× " else "") + (product?.title ?: item.text),
+                                        subtitle = when {
+                                            item.isBought -> "Bought"
+                                            product == null -> null
+                                            differs(product.title, item.text) -> "${product.quantityText} · for “${item.text}”"
+                                            else -> product.quantityText
+                                        },
+                                        checked = item.isBought,
+                                        struck = item.isBought,
+                                        price = product?.let { (it.priceCents * item.quantity).euros() },
+                                        // The whole row is the checkbox: one target, one action, so a tap can never toggle twice.
+                                        modifier = Modifier
+                                            .toggleable(value = item.isBought, role = Role.Checkbox, onValueChange = { toggle(item, product) })
+                                            .semantics { customActions = actions.map { (label, action) -> CustomAccessibilityAction(label) { action(); true } } },
+                                        tags = {
                                             // The deal on the shelf label (1+1 gratis, 15% korting), so it is taken at the till: one line, in the app's language.
                                             val dealText = product?.dealText?.substringBefore("•")?.trim()?.takeIf { it.isNotEmpty() && !item.isBought && !it.matches(PRICE_ONLY_DEAL) }
                                             if (dealText != null) {
-                                                val shown = nl.baskt.ui.common.rememberTranslation(listOf(dealText))?.takeIf { it.translated }?.texts?.firstOrNull() ?: dealText
+                                                val shown = rememberTranslation(listOf(dealText))?.takeIf { it.translated }?.texts?.firstOrNull() ?: dealText
                                                 val free = product.freeExtra(item.quantity)
                                                 val extra = if (free != null) "+$free free" else product.dealPricing()?.let { "${it.eachCents.euros()} each" }
-                                                Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.small, modifier = Modifier.padding(top = 4.dp)) {
-                                                    Text(
-                                                        listOfNotNull(shown, extra).joinToString(" · "),
-                                                        style = MaterialTheme.typography.labelLargeEmphasized, color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                                    )
-                                                }
+                                                Tag(listOfNotNull(shown, extra).joinToString(" · "), color = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer)
                                             }
-                                            if (relay) TillHint(item, coded = item.id in codedItems, kind = kindOf(item, product))
-                                        }
-                                        if (product != null) Text((product.priceCents * item.quantity).euros(), fontWeight = FontWeight.SemiBold)
-                                    }
+                                            if (relay) TillTag(item, coded = item.id in codedItems, kind = kindOf(item, product))
+                                        },
+                                        trailing = if (actions.isEmpty()) null else ({ RowMenu("More for ${item.text}", actions) }),
+                                    )
                                 }
                             }
                         }
-                        HorizontalDivider()
                     }
                 }
                 if (scansHere.isNotEmpty()) {
-                    item("h-scanned") {
-                        Text("Scanned here", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
-                    }
-                    // A sideways swipe takes a scan back (wrong code, scanned twice); a code no store knows also offers
-                    // a second try, since a crumpled or glared barcode often reads as something else.
+                    item("h-scanned") { TripHeader("Scanned here") }
+                    // A sideways swipe or the row menu takes a scan back (wrong code, scanned twice); a code no store
+                    // knows also offers a second try, since a crumpled or glared barcode often reads as something else.
                     items(scansHere, key = { it.id }) { scan ->
                         val dismiss = rememberSwipeToDismissBoxState(
                             confirmValueChange = { value ->
@@ -361,39 +374,34 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                         SwipeToDismissBox(
                             state = dismiss,
                             modifier = Modifier.animateItem(),
-                            backgroundContent = { RemoveBackground(dismiss.dismissDirection) },
+                            backgroundContent = { SwipeBackground(dismiss.dismissDirection, "Remove", Icons.Default.Delete, destructive = true) },
                         ) {
                             Surface {
-                                Row(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    val product = scan.product
-                                    val label = scan.label
-                                    if (product != null) ProductThumb(product, size = 44)
-                                    else if (label?.imageUrl != null) Surface(color = Color.White, shape = MaterialTheme.shapes.medium, modifier = Modifier.size(44.dp)) {
-                                        coil3.compose.AsyncImage(model = label.imageUrl, contentDescription = label.title, modifier = Modifier.padding(4.dp))
-                                    }
-                                    else Icon(if (scan.synced) Icons.Default.QrCodeScanner else Icons.Default.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(28.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(product?.title ?: label?.title ?: scan.barcode, style = MaterialTheme.typography.titleMedium)
-                                        Text(
-                                            when {
-                                                product != null -> "${product.quantityText} · in today's order and in stock"
-                                                label != null && !scan.synced -> listOfNotNull(label.quantityText, "recognised by your phone · price follows when online").joinToString(" · ")
-                                                label != null -> listOfNotNull(label.quantityText, "no store price for this code").joinToString(" · ")
-                                                scan.synced -> "Unknown product · swipe to remove"
-                                                else -> "Waiting for connection · stocked once online"
-                                            },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    if (product != null) Text(product.priceCents.euros(), fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(end = 8.dp))
-                                    // The relay needs every code on its item: a weighed label no store knows is said by hand.
-                                    if (relay && remaining.isNotEmpty()) TextButton(onClick = { linking = scan }) { Text("This is…") }
-                                    else if (product == null && scan.synced) TextButton(onClick = { viewModel.removeScan(scan); openScanner() }) { Text("Scan again") }
-                                }
+                                val product = scan.product
+                                val label = scan.label
+                                val title = product?.title ?: label?.title ?: scan.barcode
+                                val actions = listOfNotNull(
+                                    // The relay needs every code on its item: a weighed label no store knows is linked by hand.
+                                    if (relay && remaining.isNotEmpty()) "Link to item" to { linkingId = scan.id } else null,
+                                    if (product == null && scan.synced) "Scan again" to { removeScan(scan); openScanner() } else null,
+                                    "Remove" to { removeScan(scan) },
+                                )
+                                TripRow(
+                                    imageUrl = product?.imageUrl ?: label?.imageUrl,
+                                    title = title,
+                                    subtitle = when {
+                                        product != null -> product.quantityText
+                                        label != null && !scan.synced -> listOfNotNull(label.quantityText, "No price until you’re online").joinToString(" · ")
+                                        label != null -> listOfNotNull(label.quantityText, "No price at this store").joinToString(" · ")
+                                        scan.synced -> "Unknown product"
+                                        else -> "Waiting for connection"
+                                    },
+                                    price = product?.priceCents?.euros(),
+                                    modifier = Modifier.semantics { customActions = actions.map { (label, action) -> CustomAccessibilityAction(label) { action(); true } } },
+                                    trailing = { RowMenu("More for $title", actions) },
+                                )
                             }
                         }
-                        HorizontalDivider()
                     }
                 }
             }
@@ -401,32 +409,76 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
     }
 }
 
-/** Follows the row as it slides away, so it is obvious the swipe archives instead of deleting. */
+/** A top-bar icon's name on long-press or hover, for the icons whose meaning is not obvious. */
 @Composable
-private fun ArchiveBackground(direction: SwipeToDismissBoxValue) {
-    val alignment = if (direction == SwipeToDismissBoxValue.EndToStart) Alignment.CenterEnd else Alignment.CenterStart
-    Box(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.secondaryContainer).padding(horizontal = 24.dp),
-        contentAlignment = alignment,
+private fun Tip(text: String, content: @Composable () -> Unit) {
+    TooltipBox(positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below), tooltip = { PlainTooltip { Text(text) } }, state = rememberTooltipState(), content = content)
+}
+
+@Composable
+private fun TripHeader(text: String) = SectionHeader(text, modifier = Modifier.padding(start = Spacing.Screen, end = Spacing.Screen, top = 16.dp, bottom = 4.dp))
+
+/**
+ * The one row of the trip list, for items, skipped items and scans alike: optional checkbox, picture, title with
+ * a line of facts and tags under it, price, and the row's own action at the end. The checkbox only shows the
+ * state; the caller makes the whole row the target through [modifier].
+ */
+@Composable
+private fun TripRow(
+    imageUrl: String?,
+    title: String,
+    subtitle: String?,
+    modifier: Modifier = Modifier,
+    checked: Boolean? = null,
+    struck: Boolean = false,
+    price: String? = null,
+    tags: (@Composable () -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    val quiet = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        modifier = modifier.fillMaxWidth().heightIn(min = 60.dp).padding(start = Spacing.Screen, end = if (trailing == null) Spacing.Screen else 4.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Default.Archive, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
-            Text("Archive", color = MaterialTheme.colorScheme.onSecondaryContainer, style = MaterialTheme.typography.labelLarge)
+        if (checked != null) Checkbox(checked = checked, onCheckedChange = null)
+        ItemThumb(imageUrl, contentDescription = null)
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column {
+                Text(title, style = MaterialTheme.typography.titleMedium, textDecoration = if (struck) TextDecoration.LineThrough else null, color = if (struck) quiet else MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (!subtitle.isNullOrBlank()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = quiet, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            tags?.invoke()
+        }
+        if (price != null) Text(price, style = MaterialTheme.typography.titleMediumEmphasized, color = if (struck) quiet else MaterialTheme.colorScheme.onSurface)
+        trailing?.invoke()
+    }
+}
+
+/** The visible way to what a swipe does (skip an item, remove a scan), plus the row's other actions. */
+@Composable
+private fun RowMenu(label: String, actions: List<Pair<String, () -> Unit>>) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) { Icon(Icons.Default.MoreVert, contentDescription = label) }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            for ((text, action) in actions) DropdownMenuItem(text = { Text(text) }, onClick = { open = false; action() })
         }
     }
 }
 
-/** Behind a scanned row as it slides away: unlike list items, a scan is taken back, not archived. */
+/** Follows the row as it slides away and names what the swipe does: skipping keeps the item, removing drops the scan. */
 @Composable
-private fun RemoveBackground(direction: SwipeToDismissBoxValue) {
-    val alignment = if (direction == SwipeToDismissBoxValue.EndToStart) Alignment.CenterEnd else Alignment.CenterStart
+private fun SwipeBackground(direction: SwipeToDismissBoxValue, label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, destructive: Boolean) {
+    val colors = MaterialTheme.colorScheme
+    val content = if (destructive) colors.onErrorContainer else colors.onSecondaryContainer
     Box(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.errorContainer).padding(horizontal = 24.dp),
-        contentAlignment = alignment,
+        modifier = Modifier.fillMaxSize().background(if (destructive) colors.errorContainer else colors.secondaryContainer).padding(horizontal = 24.dp),
+        contentAlignment = if (direction == SwipeToDismissBoxValue.EndToStart) Alignment.CenterEnd else Alignment.CenterStart,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
-            Text("Remove", color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.labelLarge)
+            Icon(icon, contentDescription = null, tint = content)
+            Text(label, color = content, style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -435,54 +487,48 @@ private fun RemoveBackground(direction: SwipeToDismissBoxValue) {
 private val PRICE_ONLY_DEAL = Regex("""(?i)^(nu\s+)?voor\s*€?\s*\d+([.,]\d{2})?$""")
 
 /**
- * What the till relay still needs from this item: scanned already, a pack barcode to scan when picking it, a label
- * to scan after weighing it, nothing to scan at all, or not known yet (scanning it teaches baskt).
+ * Whether the product's name says something else than what was written in the basket ("AH halfvolle melk" for
+ * "milk"): only then is the written text worth repeating under the product.
+ */
+private fun differs(productTitle: String, itemText: String): Boolean {
+    val words = itemText.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.length >= 3 }
+    return words.isNotEmpty() && words.none { productTitle.lowercase().contains(it) }
+}
+
+/**
+ * What the till relay knows about this item, as a short fact: scanned already, checked off without a scan,
+ * weighed (its label is scanned after weighing), or without a barcode. An ordinary pack says nothing: the
+ * instruction to scan is given once above the list.
  */
 @Composable
-private fun TillHint(item: BasketItem, coded: Boolean, kind: String?) {
-    val (text, warn) = when {
-        coded -> "Scanned for the till" to false
-        item.isBought -> "Not scanned · show it at the till" to true
-        kind == "label" -> "Weighed · scan the label after weighing" to false
-        kind == "pack" -> "Scan the barcode on the pack" to false
-        kind == "none" -> "No barcode · the till does this one" to false
-        else -> "Scan it when you pick it" to false
-    }
+private fun TillTag(item: BasketItem, coded: Boolean, kind: String?) {
     val colors = MaterialTheme.colorScheme
-    Surface(
-        color = when { coded -> colors.primaryContainer; warn -> colors.errorContainer; else -> colors.surfaceContainerHigh },
-        shape = MaterialTheme.shapes.small,
-        modifier = Modifier.padding(top = 4.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
-            Icon(if (coded) Icons.Default.PointOfSale else Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(14.dp), tint = when { coded -> colors.onPrimaryContainer; warn -> colors.onErrorContainer; else -> colors.onSurfaceVariant })
-            Text(text, style = MaterialTheme.typography.labelMedium, color = when { coded -> colors.onPrimaryContainer; warn -> colors.onErrorContainer; else -> colors.onSurfaceVariant })
-        }
+    when {
+        coded -> Tag("Scanned", color = colors.primaryContainer, contentColor = colors.onPrimaryContainer)
+        item.isBought -> Tag("Not scanned", color = colors.errorContainer, contentColor = colors.onErrorContainer)
+        kind == "label" -> Tag("Weigh it, then scan the label")
+        kind == "none" -> Tag("No barcode")
     }
 }
 
-/** Says which list item a scan stands for, typically a weighed label no store can look up. */
+/** Says which basket item a scan stands for, typically a weighed label no store can look up. */
 @Composable
-private fun LinkScanDialog(scan: TripScan, open: List<BasketItem>, onDismiss: () -> Unit, onPick: (BasketItem) -> Unit) {
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Which item is this?") },
-        text = {
+private fun LinkScanSheet(scan: TripScan, open: List<BasketItem>, onDismiss: () -> Unit, onPick: (BasketItem) -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        SheetBody(title = "Which item is this?", actions = { TextButton(onClick = onDismiss) { Text("Cancel") } }) {
+            Text(scan.product?.title ?: scan.label?.title ?: scan.barcode, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Column {
-                Text(scan.product?.title ?: scan.label?.title ?: scan.barcode, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                LazyColumn(modifier = Modifier.padding(top = 8.dp)) {
-                    items(open, key = { it.id }) { item ->
-                        Text(
-                            (if (item.quantity > 1) "${item.quantity}× " else "") + item.text,
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.fillMaxWidth().clickable { onPick(item) }.padding(vertical = 12.dp),
-                        )
-                        HorizontalDivider()
+                for (item in open) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { onPick(item) }.heightIn(min = 56.dp).padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        ItemThumb(item.match(scan.store)?.effective?.imageUrl, contentDescription = null)
+                        Text((if (item.quantity > 1) "${item.quantity}× " else "") + item.text, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     }
                 }
             }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+        }
+    }
 }

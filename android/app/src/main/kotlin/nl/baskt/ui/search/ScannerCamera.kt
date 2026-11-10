@@ -17,11 +17,11 @@ import androidx.camera.core.UseCaseGroup
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,7 +33,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.geometry.CornerRadius
@@ -41,6 +40,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -73,17 +74,22 @@ internal fun ScannerCamera(paused: Boolean, cameraFraction: Float, onScan: (Stri
     var capture by remember { mutableStateOf<CaptureFeedback?>(null) }
     val frameProgress = remember { Animatable(0f) }
     val freezeOpacity = remember { Animatable(1f) }
+    // The frame moves with the theme's spatial motion and the frozen picture fades with its effects motion.
+    val frameSpec = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
+    val fadeSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
+    val colors = MaterialTheme.colorScheme
+    val frameShape = MaterialTheme.shapes.medium
     LaunchedEffect(capture, paused, retry) {
         if (paused) { capture = null; return@LaunchedEffect }
         if (capture == null) return@LaunchedEffect
         frameProgress.snapTo(0f)
         freezeOpacity.snapTo(1f)
         // Lock onto the label, briefly hold confirmation, then blend back into live scanning.
-        frameProgress.animateTo(1f, tween(220, easing = FastOutSlowInEasing))
+        frameProgress.animateTo(1f, frameSpec)
         delay(120)
         coroutineScope {
-            launch { freezeOpacity.animateTo(0f, tween(180)) }
-            launch { frameProgress.animateTo(0f, tween(180, easing = FastOutSlowInEasing)) }
+            launch { freezeOpacity.animateTo(0f, fadeSpec) }
+            launch { frameProgress.animateTo(0f, frameSpec) }
         }
         capture = null
     }
@@ -131,7 +137,7 @@ internal fun ScannerCamera(paused: Boolean, cameraFraction: Float, onScan: (Stri
                                             return bufferBounds
                                         }
                                         // Accept labels up to 65% of the guide's height above and below it.
-                                        // Use the exposed camera area, so labels hidden by the batch panel never scan.
+                                        // Use the exposed camera area, so labels hidden by the panel of scans never scan.
                                         val visibleHeight = previewView.height * currentCameraFraction
                                         val target = RectF(previewView.width * .1f, visibleHeight * (.35f - .3f * .65f), previewView.width * .9f, visibleHeight * (.65f + .3f * .65f))
                                         val inside = codes.mapNotNull { code ->
@@ -160,7 +166,7 @@ internal fun ScannerCamera(paused: Boolean, cameraFraction: Float, onScan: (Stri
                                         }
                                     }
                                 }
-                                .addOnFailureListener { if (!disposed) error = "Barcode scanning stopped. Try again." }
+                                .addOnFailureListener { if (!disposed) error = "Barcode scanning stopped" }
                                 .addOnCompleteListener { proxy.close() }
                         }
                         val group = UseCaseGroup.Builder().addUseCase(preview).addUseCase(analysis)
@@ -168,7 +174,7 @@ internal fun ScannerCamera(paused: Boolean, cameraFraction: Float, onScan: (Stri
                         camera = provider!!.bindToLifecycle(lifecycle, CameraSelector.DEFAULT_BACK_CAMERA, group.build())
                         camera?.cameraControl?.enableTorch(torch)
                         camera?.cameraControl?.setZoomRatio(zoom)
-                    } catch (_: Exception) { error = "Camera couldn’t start. Try again." }
+                    } catch (_: Exception) { error = "Camera couldn’t start" }
                 }
             }, ContextCompat.getMainExecutor(context))
         }
@@ -203,7 +209,7 @@ internal fun ScannerCamera(paused: Boolean, cameraFraction: Float, onScan: (Stri
             val bottom = size.height * interpolate(.65f * cameraFraction, bounds?.bottom)
             val width = right - left
             val height = bottom - top
-            val radius = CornerRadius(12.dp.toPx())
+            val radius = CornerRadius(frameShape.topStart.toPx(Size(width, height), this))
             // One continuous mask avoids seams between separate dimming rectangles and
             // covers the corners outside the rounded target during the capture animation.
             val mask = Path().apply {
@@ -211,26 +217,29 @@ internal fun ScannerCamera(paused: Boolean, cameraFraction: Float, onScan: (Stri
                 addRect(Rect(Offset.Zero, size))
                 addRoundRect(RoundRect(Rect(left, top, right, bottom), radius))
             }
-            drawPath(mask, Color.Black.copy(alpha = .55f))
-            drawRoundRect(Color.White, Offset(left, top), Size(width, height), cornerRadius = radius, style = Stroke(2.dp.toPx()))
+            drawPath(mask, colors.scrim.copy(alpha = .55f))
+            drawRoundRect(colors.onSurface, Offset(left, top), Size(width, height), cornerRadius = radius, style = Stroke(2.dp.toPx()))
         }
-        if (paused || error != null) Surface(color = Color(0xFF383838).copy(alpha = .9f), modifier = Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxWidth().fillMaxHeight(cameraFraction).wrapContentSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(error ?: "Scanning paused", color = Color.White)
-                if (error != null) TextButton(onClick = { retry++ }) { Text("Try again") }
+        // Dims the camera while it is not reading, see-through so the picture behind stays recognisable.
+        if (paused || error != null) Surface(color = colors.surfaceContainer.copy(alpha = .9f), modifier = Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxWidth().fillMaxHeight(cameraFraction).wrapContentSize()) {
+                val failure = error
+                if (failure != null) nl.baskt.ui.common.EmptyState(title = failure, action = { FilledTonalButton(onClick = { retry++ }) { Text("Try again") } })
+                else Text("Paused", style = MaterialTheme.typography.titleMedium)
             }
         }
         Box(Modifier.fillMaxWidth().fillMaxHeight(cameraFraction)) {
-        if (!paused && error == null) Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (camera?.cameraInfo?.hasFlashUnit() == true) FilledTonalButton(enabled = capture == null, onClick = {
-                torch = !torch; camera?.cameraControl?.enableTorch(torch)
-            }) { Text(if (torch) "Light on" else "Light off") }
-            val maxZoom = camera?.cameraInfo?.zoomState?.value?.maxZoomRatio ?: 1f
-            if (maxZoom >= 2f) FilledTonalButton(enabled = capture == null, onClick = {
-                zoom = if (zoom == 1f) 2f else 1f
-                camera?.cameraControl?.setZoomRatio(zoom)
-            }) { Text("${zoom.toInt()}× zoom") }
-        }
+            // Light and zoom are switches: the checked look says they are on, the label never changes.
+            if (!paused && error == null) Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (camera?.cameraInfo?.hasFlashUnit() == true) FilledTonalIconToggleButton(checked = torch, enabled = capture == null, onCheckedChange = {
+                    torch = it; camera?.cameraControl?.enableTorch(it)
+                }) { Icon(Icons.Default.FlashlightOn, contentDescription = "Light") }
+                val maxZoom = camera?.cameraInfo?.zoomState?.value?.maxZoomRatio ?: 1f
+                if (maxZoom >= 2f) FilledTonalIconToggleButton(checked = zoom == 2f, enabled = capture == null, onCheckedChange = {
+                    zoom = if (it) 2f else 1f
+                    camera?.cameraControl?.setZoomRatio(zoom)
+                }, modifier = Modifier.semantics { contentDescription = "2× zoom" }) { Text("2×", style = MaterialTheme.typography.labelLarge) }
+            }
         }
     }
 }

@@ -94,7 +94,7 @@ class SelfScanSession(private val context: Context, private val scope: Coroutine
     }
 
     private suspend fun connect() {
-        _state.update { it.copy(phase = SelfScanPhase.CONNECTING, step = "Looking for the AH store server", error = null) }
+        _state.update { it.copy(phase = SelfScanPhase.CONNECTING, step = "Looking for the store", error = null) }
         val device = SelfScanDevice.current(settings.selfScanDeviceUuid())
         var found = probeAll(device)
         if (found == null && ssid.isNotEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -119,9 +119,9 @@ class SelfScanSession(private val context: Context, private val scope: Coroutine
             _state.update { it.copy(phase = SelfScanPhase.ACTIVE, step = null, basket = basket.result?.basket, notice = basket.message, connectionLost = false) }
             startHeartbeat()
         } catch (e: SelfScanHttpException) {
-            fail(e.ahMessage?.message ?: "The store server refused the trip (HTTP ${e.status})")
+            fail(e.ahMessage?.message ?: "The store refused the trip (HTTP ${e.status})")
         } catch (e: IOException) {
-            fail("Lost the store server while starting: ${e.message ?: "no answer"}")
+            fail("Lost the connection while starting: ${e.message ?: "no answer"}")
         }
     }
 
@@ -277,7 +277,7 @@ class SelfScanSession(private val context: Context, private val scope: Coroutine
             false
         } catch (e: IOException) {
             _state.update { it.copy(connectionLost = true) }
-            issue(code, "Not sent: no answer from the store server", "Scan it again once the connection is back.")
+            issue(code, "Not sent: couldn’t reach the store", "Scan it again once the connection is back.")
             false
         } finally {
             _state.update { it.copy(sending = it.sending - code) }
@@ -313,7 +313,7 @@ class SelfScanSession(private val context: Context, private val scope: Coroutine
             false
         } catch (e: IOException) {
             _state.update { it.copy(connectionLost = true) }
-            issue(barcode, "Not changed: no answer from the store server")
+            issue(barcode, "Not changed: couldn’t reach the store")
             false
         } finally {
             _state.update { it.copy(sending = it.sending - barcode) }
@@ -339,7 +339,7 @@ class SelfScanSession(private val context: Context, private val scope: Coroutine
                 _state.update { it.copy(checkout = it.checkout?.copy(loading = false, totals = totals.result, message = totals.message)) }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                val text = (e as? SelfScanHttpException)?.ahMessage?.message ?: e.message ?: "No answer from the store server"
+                val text = (e as? SelfScanHttpException)?.ahMessage?.message ?: e.message ?: "Couldn’t reach the store"
                 _state.update { it.copy(checkout = it.checkout?.copy(loading = false, error = text)) }
             }
             while (isActive && _state.value.checkout?.paid != true) {
