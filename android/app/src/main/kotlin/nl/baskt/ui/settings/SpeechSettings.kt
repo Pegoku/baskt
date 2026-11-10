@@ -1,15 +1,37 @@
 package nl.baskt.ui.settings
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import nl.baskt.data.SpeechModels
 import nl.baskt.ui.AppViewModel
+import nl.baskt.ui.common.DropdownPicker
+import nl.baskt.ui.common.IconLabel
+import nl.baskt.ui.common.LoadingRow
+import nl.baskt.ui.common.SwitchRow
 
+/** The voice rows of "Language & voice": whether replies are spoken, and with which voice. */
 @Composable
 fun SpeechSettings(viewModel: AppViewModel) {
     val settings by viewModel.settings.collectAsState()
@@ -34,47 +56,39 @@ fun SpeechSettings(viewModel: AppViewModel) {
         }
     }
     val selectedVoice = settings?.ttsVoice?.takeIf { it in chosen?.voices.orEmpty() } ?: chosen?.voices?.firstOrNull()
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Voice conversations", style = MaterialTheme.typography.titleMedium)
-        SwitchRow("Speak replies", "Read assistant replies aloud after you send a voice message.", checked = settings?.speakReplies == true) { viewModel.setSpeakReplies(it) }
-        Text("Voice messages send automatically. You can also turn spoken replies on or off below any assistant message.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        SwitchRow("Speak replies", "Reads the assistant’s reply aloud after a voice message", checked = settings?.speakReplies == true, modifier = Modifier.heightIn(min = 48.dp)) { viewModel.setSpeakReplies(it) }
         when {
-            error -> TextButton(onClick = { retry++ }) { Text("Retry loading voices") }
-            catalogue == null -> Text("Loading voices…")
-            catalogue?.configured != true -> Text("Speech is not configured on this server.")
-            chosen == null -> Text("No voice supports your selected language.")
+            error -> {
+                Text("Couldn’t load the voices", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = { retry++ }) { Text("Try again") }
+            }
+            catalogue == null -> LoadingRow("Loading voices…", modifier = Modifier.heightIn(min = 48.dp))
+            catalogue?.configured != true -> Text("Voice replies aren’t available", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            chosen == null -> Text("No voice speaks your suggestion language", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             else -> {
-                var expanded by remember { mutableStateOf(false) }
-                Box {
-                    OutlinedButton(onClick = { expanded = true }) { Text(chosen.name) }
-                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        supported.forEach { model ->
-                            DropdownMenuItem(text = { Column { Text(model.name); Text(model.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
-                                onClick = { expanded = false; viewModel.setSpeechVoice(model.id, model.voices.first()) })
-                        }
+                DropdownPicker(
+                    label = "Voice model",
+                    options = supported,
+                    selected = chosen,
+                    optionLabel = { it.name },
+                    onPick = { viewModel.setSpeechVoice(it.id, it.voices.first()) },
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                DropdownPicker(
+                    label = "Voice",
+                    options = sortedVoices,
+                    selected = selectedVoice,
+                    optionLabel = { chosen.voiceNames[it] ?: it },
+                    onPick = { viewModel.setSpeechVoice(chosen.id, it) },
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                    val playing = speaking == "preview"
+                    TextButton(onClick = { if (playing) viewModel.stopSpeaking() else selectedVoice?.let { viewModel.previewSpeech(chosen.id, it) } }) {
+                        IconLabel(if (playing) Icons.Default.Stop else Icons.Default.PlayArrow, if (playing) "Stop" else "Test voice")
                     }
                 }
-                Text(chosen.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (chosen.id != settings?.ttsModel) Text("Using a model that supports your language.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                var voiceMenu by remember(chosen.id, language) { mutableStateOf(false) }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f)) {
-                        OutlinedButton(onClick = { voiceMenu = true }) {
-                            Text(chosen.voiceNames[selectedVoice] ?: selectedVoice.orEmpty())
-                        }
-                        DropdownMenu(expanded = voiceMenu, onDismissRequest = { voiceMenu = false }, modifier = Modifier.heightIn(max = 320.dp)) {
-                            sortedVoices.forEach { voice ->
-                                DropdownMenuItem(text = { Text(chosen.voiceNames[voice] ?: voice) },
-                                    onClick = { voiceMenu = false; viewModel.setSpeechVoice(chosen.id, voice) })
-                            }
-                        }
-                    }
-                    TextButton(onClick = {
-                        if (speaking == "preview") viewModel.stopSpeaking()
-                        else selectedVoice?.let { viewModel.previewSpeech(chosen.id, it) }
-                    }) { Text(if (speaking == "preview") "Stop preview" else "Test voice") }
-                }
-                Text("Samples are generated when played and cached for later.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

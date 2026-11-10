@@ -1,79 +1,100 @@
 package nl.baskt.ui.settings
 
-import androidx.compose.ui.semantics.Role
-import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.MediumFlexibleTopAppBar
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.MediumFlexibleTopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.foundation.layout.size
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import nl.baskt.data.AppSettings
 import nl.baskt.data.LANGUAGE_OPTIONS
+import nl.baskt.data.SettingsStore
+import nl.baskt.data.StoreInfo
 import nl.baskt.ui.AppViewModel
+import nl.baskt.ui.common.ChoiceGroup
+import nl.baskt.ui.common.ConfirmDialog
+import nl.baskt.ui.common.DropdownPicker
+import nl.baskt.ui.common.LoadingRow
+import nl.baskt.ui.common.NavRow
+import nl.baskt.ui.common.SectionHeader
+import nl.baskt.ui.common.SheetBody
+import nl.baskt.ui.common.Spacing
+import nl.baskt.ui.common.Stepper
+import nl.baskt.ui.common.StoreLogo
+import nl.baskt.ui.common.SwitchRow
 
+/** Every settings row is at least a full touch target, also when it has a title only. */
+private val RowHeight = Modifier.heightIn(min = 48.dp)
+
+/**
+ * Settings as six groups of rows, one coloured header each. A phone that has no server yet shows the server
+ * group first, because nothing else on the screen works until that is filled in.
+ */
 @Composable
 fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> Unit = {}, onAhLogin: () -> Unit = {}) {
     val settings by viewModel.settings.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
-    val scope = rememberCoroutineScope()
-    var baseUrl by remember { mutableStateOf("") }
-    var token by remember { mutableStateOf("") }
-    var status by remember { mutableStateOf<String?>(null) }
-    var loaded by remember { mutableStateOf(false) }
-
-    LaunchedEffect(settings) {
-        val current = settings ?: return@LaunchedEffect
-        if (!loaded) {
-            baseUrl = current.baseUrl
-            token = current.token
-            loaded = true
-        }
-    }
+    // Decided once, when the screen opens: the group must not jump away under the user's finger after saving.
+    val serverFirst = rememberSaveable { settings?.let { it.token.isBlank() && it.baseUrl == SettingsStore.DEFAULT_BASE_URL } == true }
+    LaunchedEffect(Unit) { viewModel.refreshStock() }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
@@ -88,195 +109,101 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
         },
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = Spacing.Screen, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            val serverSettings by viewModel.basket.serverSettings.collectAsState()
-            LaunchedEffect(Unit) { viewModel.refreshStock() }
-            SettingsSection("Shopping")
-            Text("Supermarkets", style = MaterialTheme.typography.titleMedium)
-            if (stores.isEmpty()) Text("Connect to the server to load the store list.", style = MaterialTheme.typography.bodySmall)
-            for (store in stores) {
-                val toggle = { enabled: Boolean ->
-                    val codes = stores.filter { if (it.code == store.code) enabled else it.enabled }.map { it.code }
-                    if (codes.isNotEmpty()) viewModel.setEnabledStores(codes)
-                }
-                Row(modifier = Modifier.fillMaxWidth().toggleable(value = store.enabled, role = Role.Switch, onValueChange = toggle).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    nl.baskt.ui.common.StoreLogo(store.code, stores)
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(store.name)
-                        if (store.coverage != "full") Text("Offers only", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Switch(checked = store.enabled, onCheckedChange = null)
-                }
-            }
-            Spacer(Modifier.height(4.dp))
-            Text("Ranking", style = MaterialTheme.typography.titleMedium)
-            Text("What counts as the better option when products are equally suitable.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                val current = serverSettings.rankBy ?: "price"
-                SegmentedButton(selected = current == "price", onClick = { viewModel.setRankBy("price") }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Pack price") }
-                SegmentedButton(selected = current == "unitPrice", onClick = { viewModel.setRankBy("unitPrice") }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Price per kg / l") }
-            }
-            Spacer(Modifier.height(4.dp))
-            Text("Loyalty cards", style = MaterialTheme.typography.titleMedium)
-            Text("Shown as a barcode from the in-store checklist for the checkout scanner. Cards stay on this phone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            var editingCard by remember { mutableStateOf<String?>(null) }
-            for (store in stores.filter { it.enabled }) {
-                val number = settings?.loyaltyCards?.get(store.code)
-                val toggle = { enabled: Boolean ->
-                    val codes = stores.filter { if (it.code == store.code) enabled else it.enabled }.map { it.code }
-                    if (codes.isNotEmpty()) viewModel.setEnabledStores(codes)
-                }
-                Row(modifier = Modifier.fillMaxWidth().toggleable(value = store.enabled, role = Role.Switch, onValueChange = toggle).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    nl.baskt.ui.common.StoreLogo(store.code, stores)
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(store.name)
-                        Text(number?.chunked(4)?.joinToString(" ") ?: "No card yet", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    OutlinedButton(onClick = { editingCard = store.code }) { Text(if (number == null) "Add" else "Edit") }
-                }
-            }
-            editingCard?.let { code ->
-                nl.baskt.ui.shop.LoyaltyCardEditor(code, stores, settings?.loyaltyCards?.get(code), onDismiss = { editingCard = null }) { number -> viewModel.saveLoyaltyCard(code, number); editingCard = null }
-            }
-            Spacer(Modifier.height(4.dp))
-            Text("Learned preferences", style = MaterialTheme.typography.titleMedium)
-            Text("Every pick, thumbs up and thumbs down the matching learns from. Remove anything set by mistake.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(onClick = onMemory) { Text("View and manage") }
-            HorizontalDivider()
-            SettingsSection("Albert Heijn")
-            AhAccountSettings(viewModel, onAhLogin)
-            HorizontalDivider()
-            SettingsSection("Recipes")
-            SwitchRow("Skip ingredients I have in stock", "Recipe folders leave out what is in your stock list; you can add them back per folder.", checked = serverSettings.recipeSkipInStock ?: true) { viewModel.setSkipInStock(it) }
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Default servings")
-                    Text("Recipe folders are scaled to this many people. Change it per folder any time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                val servings = serverSettings.defaultServings
-                IconButton(onClick = { viewModel.setDefaultServings(if (servings == null) null else if (servings <= 1) null else servings - 1) }) { Icon(Icons.Default.Remove, contentDescription = "Fewer") }
-                Text(servings?.toString() ?: "as written", style = MaterialTheme.typography.titleMedium)
-                IconButton(onClick = { viewModel.setDefaultServings((servings ?: 1) + 1) }) { Icon(Icons.Default.Add, contentDescription = "More") }
-            }
-            HorizontalDivider()
-            SettingsSection("Language & voice")
-            Text("Language", style = MaterialTheme.typography.titleMedium)
-            Text("Used for suggestions and for how the AI describes your ideas.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            var languageMenu by remember { mutableStateOf(false) }
-            val currentLanguage = settings?.language ?: "system"
-            val systemName = java.util.Locale.getDefault().getDisplayLanguage(java.util.Locale.getDefault())
-            // The menu must share a Box with its anchor; as a Column child it would reserve layout space and push content down.
-            Box {
-                OutlinedButton(onClick = { languageMenu = true }) {
-                    Text(LANGUAGE_OPTIONS.firstOrNull { it.first == currentLanguage }?.second?.let { if (currentLanguage == "system") "$it ($systemName)" else it } ?: currentLanguage)
-                }
-                DropdownMenu(expanded = languageMenu, onDismissRequest = { languageMenu = false }) {
-                    for ((code, label) in LANGUAGE_OPTIONS) {
-                        DropdownMenuItem(
-                            text = { Text(if (code == "system") "$label ($systemName)" else label) },
-                            onClick = { languageMenu = false; viewModel.setLanguage(code) },
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(4.dp))
-            SpeechSettings(viewModel)
-            HorizontalDivider()
-            SettingsSection("Server & sync")
-            Text("Server", style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(value = baseUrl, onValueChange = { baseUrl = it }, label = { Text("Base URL") }, placeholder = { Text("http://192.168.1.10:3000") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(
-                value = token,
-                onValueChange = { token = it },
-                label = { Text("API token (APP_API_TOKEN)") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    scope.launch {
-                        runCatching { viewModel.saveSettings(baseUrl, token) }
-                            .onSuccess { status = viewModel.testConnection().fold({ it }, { "Saved, but: ${it.message}" }); viewModel.reload() }
-                            .onFailure { status = it.message ?: "Could not save settings" }
-                    }
-                }) { Text("Save & test") }
-                OutlinedButton(onClick = { scope.launch { status = viewModel.testConnection().fold({ it }, { "Failed: ${it.message}" }) } }) { Text("Test") }
-            }
-            if (status != null) Text(status!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(4.dp))
-            Text("Offline changes", style = MaterialTheme.typography.titleMedium)
-            val pendingOps by viewModel.pending.collectAsState()
-            val isOnline by viewModel.online.collectAsState()
-            if (pendingOps.isEmpty()) Text(if (isOnline) "Everything is synced." else "Offline: saved data is shown; changes you make are queued here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            for (op in pendingOps) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(op.label + (op.failure?.let { "\n$it" } ?: ""), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                    androidx.compose.material3.TextButton(onClick = { viewModel.dropPending(op) }) { Text("Discard") }
-                }
-            }
-            if (pendingOps.isNotEmpty()) OutlinedButton(onClick = { viewModel.retryConnection() }) { Text(if (isOnline) "Send now" else "Retry connection") }
-            Spacer(Modifier.height(4.dp))
-            Text("WhatsApp bot", style = MaterialTheme.typography.titleMedium)
-            val whatsapp by viewModel.whatsapp.collectAsState()
-            val qr by viewModel.whatsappQr.collectAsState()
-            val chats by viewModel.whatsappChats.collectAsState()
-            LaunchedEffect(Unit) { viewModel.loadWhatsApp() }
-            when {
-                whatsapp == null || whatsapp?.enabled == false -> Text("Not set up. Run backend/whatsapp and set WHATSAPP_URL on the server; then the basket menu gets “Send items to WhatsApp bot”: one message per item, react ✅ to check it off.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                whatsapp?.status == "connected" -> {
-                    Text("Connected as ${whatsapp?.me ?: "?"} · sending to: ${whatsapp?.chatName ?: "no chat chosen"}", style = MaterialTheme.typography.bodySmall)
-                    var pick by remember { mutableStateOf(false) }
-                    Box {
-                        OutlinedButton(onClick = { pick = true; viewModel.loadWhatsApp() }) { Text("Choose chat") }
-                        DropdownMenu(expanded = pick, onDismissRequest = { pick = false }) {
-                            if (chats.isEmpty()) DropdownMenuItem(text = { Text("Loading chats…") }, onClick = {})
-                            for (chat in chats) DropdownMenuItem(text = { Text((chat.name ?: chat.id) + if (chat.isGroup) "  (group)" else "") }, onClick = { pick = false; viewModel.setWhatsAppChat(chat) })
-                        }
-                    }
-                }
-                qr != null -> {
-                    Text("Scan this code in WhatsApp → Linked devices to connect the bot.", style = MaterialTheme.typography.bodySmall)
-                    val bitmap = remember(qr) {
-                        runCatching {
-                            val bytes = android.util.Base64.decode(qr!!.substringAfter("base64,"), android.util.Base64.DEFAULT)
-                            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        }.getOrNull()
-                    }
-                    if (bitmap != null) androidx.compose.foundation.Image(bitmap = bitmap.asImageBitmap(), contentDescription = "WhatsApp QR", modifier = Modifier.size(240.dp))
-                    OutlinedButton(onClick = { viewModel.loadWhatsApp() }) { Text("Refresh") }
-                }
-                else -> {
-                    Text("Bridge status: ${whatsapp?.status}${whatsapp?.lastError?.let { " · $it" } ?: ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedButton(onClick = { viewModel.loadWhatsApp() }) { Text("Refresh") }
-                }
-            }
-            HorizontalDivider()
-            SettingsSection("Experimental")
-            SwitchRow("Scan with the phone, pay at the till", "In shop mode, every scan is kept as read. At the checkout, a till button shows your card and then each code in turn for the scanner, so the till rings up what you scanned. Weighed items need their label scanned. Tested for Albert Heijn; check the till's total before paying.", checked = settings?.tillRelay == true) { viewModel.setTillRelay(it) }
-            SwitchRow("AH Zelfscan in the store", "In Albert Heijn shop mode, a Start button opens a real self-scan trip on the store's server, like the Appie app: each scan goes into the AH basket with AH's own prices and Bonus, and at checkout baskt shows your Bonuskaart for the betaalpaal. You pay there with your own card. Works only on the store Wi-Fi, and needs your AH card above.", checked = settings?.selfScan == true) { viewModel.setSelfScan(it) }
-            if (settings?.selfScan == true) {
-                var wifiName by remember(settings?.selfScanWifi) { mutableStateOf(settings?.selfScanWifi.orEmpty()) }
-                OutlinedTextField(
-                    value = wifiName,
-                    onValueChange = { wifiName = it },
-                    label = { Text("Store Wi-Fi name (optional)") },
-                    supportingText = { Text("The network's name as Wi-Fi settings shows it. With it, Start joins the store Wi-Fi by itself for the trip; without it, Start opens the Wi-Fi panel when you are not on it yet.") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused && wifiName.trim() != settings?.selfScanWifi.orEmpty()) viewModel.setSelfScanWifi(wifiName) },
-                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { viewModel.setSelfScanWifi(wifiName) }),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+            if (serverFirst) ServerGroup(viewModel, settings, intro = true)
+            ShoppingGroup(viewModel, settings, stores, onMemory)
+            SettingsGroup("Albert Heijn") { AhAccountSettings(viewModel, onAhLogin) }
+            RecipesGroup(viewModel)
+            SettingsGroup("Language & voice") {
+                val currentLanguage = settings?.language ?: "system"
+                val systemName = java.util.Locale.getDefault().getDisplayLanguage(java.util.Locale.getDefault())
+                DropdownPicker(
+                    label = "Suggestion language",
+                    options = LANGUAGE_OPTIONS,
+                    selected = LANGUAGE_OPTIONS.firstOrNull { it.first == currentLanguage },
+                    optionLabel = { (code, label) -> if (code == "system") "$label ($systemName)" else label },
+                    onPick = { viewModel.setLanguage(it.first) },
+                    modifier = Modifier.padding(top = 4.dp),
                 )
+                Hint("For suggestions and descriptions. The app itself is in English.")
+                SpeechSettings(viewModel)
             }
-            HorizontalDivider()
-            Text(
-                "baskt keeps the products you pick and the ones you reject, and uses them to rank future suggestions. Matching runs on your own server; the app never talks to the supermarkets directly, except AH Zelfscan, which talks to the store's own server over its Wi-Fi.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (!serverFirst) ServerGroup(viewModel, settings, intro = false)
+            ExperimentalGroup(viewModel, settings)
+            AboutGroup()
         }
+    }
+}
+
+/** One group of settings: its header, then its rows. Spacing and the header separate groups, so no dividers. */
+@Composable
+private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        SectionHeader(title, modifier = Modifier.padding(bottom = 4.dp))
+        content()
+    }
+}
+
+/** The one short sentence a setting may carry when it has no row of its own to put it in. */
+@Composable
+private fun Hint(text: String, error: Boolean = false) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+/** The label of a control that is not a row by itself (a choice group, a list). */
+@Composable
+private fun Label(text: String) {
+    Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
+}
+
+/** Marks a row that opens another screen. */
+@Composable
+private fun Chevron() {
+    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun ShoppingGroup(viewModel: AppViewModel, settings: AppSettings?, stores: List<StoreInfo>, onMemory: () -> Unit) {
+    val serverSettings by viewModel.basket.serverSettings.collectAsState()
+    val online by viewModel.online.collectAsState()
+    SettingsGroup("Shopping") {
+        when {
+            stores.isNotEmpty() -> {
+                val enabledCount = stores.count { it.enabled }
+                for (store in stores) {
+                    // The last store cannot be turned off; the row says so instead of ignoring the tap.
+                    val last = store.enabled && enabledCount == 1
+                    SwitchRow(
+                        title = store.name,
+                        body = when { last -> "At least one store"; store.coverage != "full" -> "Deals only"; else -> null },
+                        checked = store.enabled,
+                        modifier = RowHeight,
+                        enabled = !last,
+                        leading = { StoreLogo(store.code, stores) },
+                    ) { enabled -> viewModel.setEnabledStores(stores.filter { if (it.code == store.code) enabled else it.enabled }.map { it.code }) }
+                }
+            }
+            online -> LoadingRow("Loading stores…", modifier = RowHeight)
+            else -> Hint("The stores show up once you’re connected")
+        }
+        Label("Compare by")
+        ChoiceGroup(listOf("Pack price", "Unit price"), selected = if (serverSettings.rankBy == "unitPrice") 1 else 0, onSelect = { viewModel.setRankBy(if (it == 1) "unitPrice" else "price") })
+        var editingCard by rememberSaveable { mutableStateOf<String?>(null) }
+        for (store in stores.filter { it.enabled }) {
+            val number = settings?.loyaltyCards?.get(store.code)
+            NavRow(
+                title = "${store.name} card",
+                body = number?.chunked(4)?.joinToString(" ") ?: "No card yet",
+                modifier = RowHeight,
+                leading = { StoreLogo(store.code, stores) },
+            ) { editingCard = store.code }
+        }
+        editingCard?.let { code ->
+            nl.baskt.ui.shop.LoyaltyCardEditor(code, stores, settings?.loyaltyCards?.get(code), onDismiss = { editingCard = null }) { number -> viewModel.saveLoyaltyCard(code, number); editingCard = null }
+        }
+        NavRow("Learned preferences", "What you picked and rejected", modifier = RowHeight, trailing = { Chevron() }, onClick = onMemory)
     }
 }
 
@@ -284,25 +211,33 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit, onMemory: () -> 
 @Composable
 private fun AhAccountSettings(viewModel: AppViewModel, onLogin: () -> Unit) {
     val account by viewModel.ahAccount.collectAsState()
+    val failed by viewModel.ahAccountError.collectAsState()
     LaunchedEffect(Unit) { viewModel.loadAhAccount() }
-    var confirmLogout by remember { mutableStateOf(false) }
+    var confirmLogout by rememberSaveable { mutableStateOf(false) }
     val current = account
     when {
-        current == null -> Text("Connect to the server to see the account.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        current == null && failed != null -> {
+            Hint("Couldn’t load your AH account: $failed", error = true)
+            TextButton(onClick = { viewModel.loadAhAccount() }) { Text("Try again") }
+        }
+        current == null -> LoadingRow("Loading your AH account…", modifier = RowHeight)
         current.connected -> {
-            Text("Logged in" + (current.memberName?.let { " as $it" } ?: "") + ". Your personal Bonus and Bonus Box offers show under Deals → My Bonus, and activated ones count in prices.", style = MaterialTheme.typography.bodySmall)
-            SwitchRow("Auto-activate matching offers", "Bonus Box offers for something on a basket are activated for you, best saving first, until the weekly limit. AH does not let you undo an activation.", checked = current.autoActivate) { viewModel.setAhAutoActivate(it) }
-            OutlinedButton(onClick = { confirmLogout = true }) { Text("Log out") }
+            Row(modifier = RowHeight.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Logged in" + (current.memberName?.let { " as $it" } ?: ""), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                TextButton(onClick = { confirmLogout = true }) { Text("Log out") }
+            }
+            SwitchRow("Activate matching Bonus Box offers", "AH doesn’t let you undo an activation", checked = current.autoActivate, modifier = RowHeight) { viewModel.setAhAutoActivate(it) }
         }
         else -> {
-            Text(current.error ?: "Log in with your AH account to see and activate your personal Bonus offers. The server keeps the session; your password is only typed into AH's own page.", style = MaterialTheme.typography.bodySmall, color = if (current.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-            Button(onClick = onLogin) { Text(if (current.error != null) "Log in again" else "Log in to Albert Heijn") }
+            if (current.error != null) Hint("Your Albert Heijn login stopped working", error = true)
+            else Hint("Log in to see your personal Bonus and Bonus Box offers")
+            FilledTonalButton(onClick = onLogin) { Text(if (current.error != null) "Log in again" else "Log in to Albert Heijn") }
         }
     }
     if (confirmLogout) {
-        nl.baskt.ui.common.ConfirmDialog(
+        ConfirmDialog(
             title = "Log out of Albert Heijn?",
-            body = "Personal offers stop showing and prices go back to the regular Bonus.",
+            body = "Your personal Bonus and Bonus Box offers stop showing.",
             confirmLabel = "Log out",
             onDismiss = { confirmLogout = false },
             onConfirm = { viewModel.disconnectAh() },
@@ -310,24 +245,228 @@ private fun AhAccountSettings(viewModel: AppViewModel, onLogin: () -> Unit) {
     }
 }
 
-/** A setting that is on or off: the whole row toggles, so the target is the full width rather than the switch alone. */
 @Composable
-internal fun SwitchRow(title: String, body: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().toggleable(value = checked, role = Role.Switch, onValueChange = onChange).padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            if (body != null) Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun RecipesGroup(viewModel: AppViewModel) {
+    val serverSettings by viewModel.basket.serverSettings.collectAsState()
+    SettingsGroup("Recipes") {
+        SwitchRow("Skip ingredients in stock", "Recipe folders leave out what you already have", checked = serverSettings.recipeSkipInStock ?: true, modifier = RowHeight) { viewModel.setSkipInStock(it) }
+        val servings = serverSettings.defaultServings
+        Row(modifier = RowHeight.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Default servings", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            // The value has a fixed width, so the buttons stay put when it changes between a word and a number.
+            Stepper(
+                value = servings?.toString() ?: "As written",
+                onMinus = { viewModel.setDefaultServings(servings?.takeIf { it > 1 }?.minus(1)) },
+                onPlus = { viewModel.setDefaultServings((servings ?: 0) + 1) },
+                noun = "servings",
+                minusEnabled = servings != null,
+                valueWidth = 96.dp,
+            )
         }
-        Switch(checked = checked, onCheckedChange = null)
     }
 }
 
-/** Groups related settings under one coloured label, like the system Settings app. */
+/** Where the baskt server is, whether it answers, what is still waiting to be sent to it, and the WhatsApp link. */
 @Composable
-private fun SettingsSection(title: String) {
-    Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
+private fun ServerGroup(viewModel: AppViewModel, settings: AppSettings?, intro: Boolean) {
+    val scope = rememberCoroutineScope()
+    var baseUrl by rememberSaveable { mutableStateOf("") }
+    var token by rememberSaveable { mutableStateOf("") }
+    var loaded by rememberSaveable { mutableStateOf(false) }
+    var showToken by rememberSaveable { mutableStateOf(false) }
+    var testing by remember { mutableStateOf(false) }
+    // The outcome of the last "Save and test": whether it worked, the line that says so, and an optional note.
+    var connected by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    var status by rememberSaveable { mutableStateOf<String?>(null) }
+    var note by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(settings) {
+        val current = settings ?: return@LaunchedEffect
+        if (!loaded) { baseUrl = current.baseUrl; token = current.token; loaded = true }
+    }
+    fun saveAndTest() {
+        if (testing) return
+        testing = true
+        scope.launch {
+            try {
+                viewModel.saveSettings(baseUrl, token)
+                val check = viewModel.testConnection()
+                connected = check.connected; status = check.message; note = check.note
+                viewModel.reload()
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { connected = false; status = e.message ?: "Couldn’t save the server"; note = null }
+            finally { testing = false }
+        }
+    }
+    SettingsGroup("Server & sync") {
+        if (intro) Text("Connect to your baskt server to start", style = MaterialTheme.typography.bodyMedium)
+        OutlinedTextField(
+            value = baseUrl,
+            onValueChange = { baseUrl = it },
+            label = { Text("Server address") },
+            placeholder = { Text("http://192.168.1.10:3000") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false, imeAction = ImeAction.Next),
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        )
+        OutlinedTextField(
+            value = token,
+            onValueChange = { token = it },
+            label = { Text("Access token") },
+            singleLine = true,
+            visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { saveAndTest() }),
+            trailingIcon = { IconButton(onClick = { showToken = !showToken }) { Icon(if (showToken) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = if (showToken) "Hide token" else "Show token") } },
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        )
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = { saveAndTest() }, enabled = !testing) {
+                if (testing) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = LocalContentColor.current)
+                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                    Text("Testing…")
+                } else Text("Save and test")
+            }
+            if (!testing) status?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = if (connected == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f)) }
+        }
+        if (!testing) note?.let { Hint(it) }
+        PendingChanges(viewModel)
+        WhatsAppSettings(viewModel)
+    }
+}
+
+/** What was changed on this phone and has not reached the server yet; a change that failed says why. */
+@Composable
+private fun PendingChanges(viewModel: AppViewModel) {
+    val pendingOps by viewModel.pending.collectAsState()
+    val isOnline by viewModel.online.collectAsState()
+    var discarding by rememberSaveable { mutableStateOf<String?>(null) }
+    Label("Changes waiting to sync")
+    if (pendingOps.isEmpty()) Hint(if (isOnline) "Everything is synced" else "You’re offline, so new changes wait here")
+    for (op in pendingOps) {
+        Row(modifier = RowHeight.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(op.label, style = MaterialTheme.typography.bodyMedium)
+                op.failure?.let { Text("Didn’t sync: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+            }
+            TextButton(onClick = { discarding = op.id }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Discard") }
+        }
+    }
+    if (pendingOps.isNotEmpty()) TextButton(onClick = { viewModel.retryConnection() }) { Text("Try again") }
+    // The server never saw a discarded change, so there is nothing to bring it back from: ask first.
+    pendingOps.firstOrNull { it.id == discarding }?.let { op ->
+        ConfirmDialog(
+            title = "Discard this change?",
+            body = "“${op.label}” won’t reach the server, and anything that depends on it goes too. This can’t be undone.",
+            confirmLabel = "Discard",
+            onDismiss = { discarding = null },
+            onConfirm = { viewModel.dropPending(op) },
+        )
+    }
+}
+
+/**
+ * Linking the WhatsApp account that receives the basket. Shown only when the server has the WhatsApp link set
+ * up; a phone user can do nothing about a server that has not.
+ */
+@Composable
+private fun WhatsAppSettings(viewModel: AppViewModel) {
+    val whatsapp by viewModel.whatsapp.collectAsState()
+    val qr by viewModel.whatsappQr.collectAsState()
+    val chats by viewModel.whatsappChats.collectAsState()
+    val chatsLoading by viewModel.whatsappChatsLoading.collectAsState()
+    val chatsFailed by viewModel.whatsappChatsFailed.collectAsState()
+    LaunchedEffect(Unit) { viewModel.loadWhatsApp() }
+    val current = whatsapp?.takeIf { it.enabled } ?: return
+    val linked = current.status == "connected"
+    // While the code is waiting to be scanned, keep asking, so the screen moves on by itself once it has been.
+    LaunchedEffect(linked) { while (!linked) { delay(5_000); viewModel.loadWhatsApp() } }
+    Label("WhatsApp")
+    when {
+        linked -> {
+            Hint("Linked" + (current.me?.let { " as $it" } ?: ""))
+            DropdownPicker(
+                label = "Send items to",
+                options = chats,
+                selected = chats.firstOrNull { it.id == current.chatId },
+                optionLabel = { (it.name ?: it.id) + if (it.isGroup) " (group)" else "" },
+                onPick = { viewModel.setWhatsAppChat(it) },
+                enabled = chats.isNotEmpty(),
+                placeholder = current.chatName ?: when { chatsLoading -> "Loading chats…"; chatsFailed -> "Couldn’t load your chats"; chats.isEmpty() -> "No chats found"; else -> "Choose a chat" },
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            if (chatsFailed) TextButton(onClick = { viewModel.loadWhatsApp() }) { Text("Try again") }
+        }
+        qr != null -> {
+            Hint("In WhatsApp, open Linked devices and scan this code")
+            val bitmap = remember(qr) {
+                runCatching {
+                    val bytes = android.util.Base64.decode(qr!!.substringAfter("base64,"), android.util.Base64.DEFAULT)
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                }.getOrNull()
+            }
+            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                // A code to be scanned stays black on white in either theme.
+                if (bitmap != null) Image(bitmap = bitmap.asImageBitmap(), contentDescription = "WhatsApp linking code", modifier = Modifier.size(240.dp).clip(MaterialTheme.shapes.medium).background(Color.White).padding(8.dp))
+                else Hint("Couldn’t show the code", error = true)
+            }
+            TextButton(onClick = { viewModel.loadWhatsApp() }) { Text(if (bitmap != null) "Show a new code" else "Try again") }
+        }
+        else -> {
+            Hint("WhatsApp isn’t linked yet")
+            TextButton(onClick = { viewModel.loadWhatsApp() }) { Text("Try again") }
+        }
+    }
+}
+
+@Composable
+private fun ExperimentalGroup(viewModel: AppViewModel, settings: AppSettings?) {
+    var explain by rememberSaveable { mutableStateOf(false) }
+    SettingsGroup("Experimental") {
+        SwitchRow("Scan with the phone, pay at the till", "Shows your scans as barcodes at the checkout so the till rings them up", checked = settings?.tillRelay == true, modifier = RowHeight) { viewModel.setTillRelay(it) }
+        SwitchRow("AH self-scan", "Scan into AH’s own self-scan basket and pay at a betaalpaal, using the store Wi-Fi and your AH card", checked = settings?.selfScan == true, modifier = RowHeight) { viewModel.setSelfScan(it) }
+        if (settings?.selfScan == true) {
+            var wifiName by rememberSaveable(settings.selfScanWifi) { mutableStateOf(settings.selfScanWifi) }
+            OutlinedTextField(
+                value = wifiName,
+                onValueChange = { wifiName = it },
+                label = { Text("Store Wi-Fi name (optional)") },
+                supportingText = { Text("Joined automatically when a trip starts") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp).onFocusChanged { if (!it.isFocused && wifiName.trim() != settings.selfScanWifi) viewModel.setSelfScanWifi(wifiName) },
+                keyboardActions = KeyboardActions(onDone = { viewModel.setSelfScanWifi(wifiName) }),
+                keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Done),
+            )
+        }
+        TextButton(onClick = { explain = true }) { Text("How this works") }
+    }
+    if (explain) {
+        ModalBottomSheet(onDismissRequest = { explain = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            SheetBody(title = "Experimental features", actions = { TextButton(onClick = { explain = false }) { Text("Close") } }) {
+                Text("Scan with the phone, pay at the till", style = MaterialTheme.typography.titleSmall)
+                Text("In shop mode every scan is kept as it was read. At the checkout, baskt shows your card and then each code in turn for the till’s scanner. Weighed items need their label scanned. Tested at Albert Heijn: check the till’s total before you pay.", style = MaterialTheme.typography.bodyMedium)
+                Text("AH self-scan", style = MaterialTheme.typography.titleSmall)
+                Text("In Albert Heijn shop mode, Start opens a real self-scan trip in the store. Each scan goes into AH’s basket with AH’s own prices and Bonus, and at the checkout baskt shows your AH card for the betaalpaal, where you pay with your own card. It only works on the store Wi-Fi and needs your AH card under Shopping.", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+/** What used to be a paragraph at the bottom of the screen: where things run and which version this is. */
+@Composable
+private fun AboutGroup() {
+    var open by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() }
+    SettingsGroup("About") {
+        NavRow("About baskt", version?.let { "Version $it" }, modifier = RowHeight) { open = true }
+    }
+    if (open) {
+        ModalBottomSheet(onDismissRequest = { open = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            SheetBody(title = "About baskt", actions = { TextButton(onClick = { open = false }) { Text("Close") } }) {
+                Text("baskt remembers the products you pick and the ones you reject, and uses them to rank what it suggests next. Matching runs on your own server, and your loyalty cards stay on this phone.", style = MaterialTheme.typography.bodyMedium)
+                if (version != null) Text("Version $version", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
 }
