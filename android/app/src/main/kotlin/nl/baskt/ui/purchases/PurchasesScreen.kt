@@ -4,70 +4,87 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DocumentScanner
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.UploadFile
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.foundation.layout.Box
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.serialization.builtins.nullable
 import nl.baskt.data.PurchaseDetail
 import nl.baskt.data.ReceiptLine
 import nl.baskt.data.ReceiptScan
 import nl.baskt.data.ReceiptUpload
+import nl.baskt.data.SpendMonth
+import nl.baskt.data.StoreInfo
 import nl.baskt.data.euros
 import nl.baskt.ui.AppViewModel
+import nl.baskt.ui.common.ConfirmDialog
+import nl.baskt.ui.common.EmptyState
+import nl.baskt.ui.common.LoadingRow
+import nl.baskt.ui.common.SectionHeader
+import nl.baskt.ui.common.SheetBody
+import nl.baskt.ui.common.Spacing
 import nl.baskt.ui.common.StoreBadge
+import nl.baskt.ui.common.counted
+import nl.baskt.ui.common.storeName
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Receipts and spending: scan receipt photos, review the lines, keep a purchase history and monthly totals. */
+/** "2026-08" as "Aug 2026"; anything else is shown as it came. */
+private fun monthLabel(month: String): String = runCatching {
+    java.time.YearMonth.parse(month.take(7)).format(java.time.format.DateTimeFormatter.ofPattern("MMM yyyy", Locale.getDefault()))
+}.getOrDefault(month)
+
+/** Receipts: scan or import a receipt, check its lines, and see what was spent per month and on what. */
 @Composable
 fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val purchases by viewModel.purchases.collectAsState()
@@ -80,6 +97,8 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val context = LocalContext.current
     val dateFormat = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
     LaunchedEffect(Unit) { viewModel.loadPurchases() }
+    // A failed scan is reported like every other failure, in the app's one snackbar.
+    LaunchedEffect(scanError) { scanError?.let { viewModel.notify("Couldn’t read the receipt: $it"); viewModel.clearScan() } }
 
     fun upload(uris: List<Uri>) = viewModel.scanReceipt(readReceiptUris(context, uris), null)
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(5)) { uris: List<Uri> -> upload(uris) }
@@ -100,16 +119,17 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             .build()
         com.google.mlkit.vision.documentscanner.GmsDocumentScanning.getClient(options).getStartScanIntent(activity)
             .addOnSuccessListener { intent -> documentScanner.launch(androidx.activity.result.IntentSenderRequest.Builder(intent).build()) }
-            .addOnFailureListener { error -> android.widget.Toast.makeText(context, error.message ?: "Scanner unavailable", android.widget.Toast.LENGTH_SHORT).show() }
+            .addOnFailureListener { error -> viewModel.notify("Couldn’t open the scanner" + (error.message?.let { ": $it" } ?: "")) }
     }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             MediumFlexibleTopAppBar(
                 scrollBehavior = scrollBehavior,
-                title = { Text("Receipts & spending") },
+                title = { Text("Receipts") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
                 actions = {
                     // Importing is the secondary way in; the camera keeps the one FAB.
@@ -140,51 +160,20 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             )
         },
     ) { padding ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (scanning) item("scanning") { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(8.dp)) { LoadingIndicator(); Text("Reading the receipt…") } }
-            if (scanError != null) item("error") { Text(scanError!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(Spacing.Screen, 12.dp, Spacing.Screen, Spacing.FabClearance), verticalArrangement = Arrangement.spacedBy(Spacing.ListGap)) {
+            if (scanning) item("scanning") { LoadingRow("Reading the receipt…", Modifier.padding(vertical = 8.dp)) }
             val summary = spend
-            if (summary != null && summary.purchases > 0) {
-                item("summary") {
-                    Card {
-                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Last ${summary.months.size} months", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(summary.totalCents.euros(), style = MaterialTheme.typography.headlineMediumEmphasized)
-                            Text("${summary.purchases} receipts", style = MaterialTheme.typography.bodySmall)
-                            val max = summary.months.maxOfOrNull { it.totalCents }?.coerceAtLeast(1) ?: 1
-                            for (month in summary.months) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(month.month, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(end = 4.dp))
-                                    androidx.compose.material3.LinearProgressIndicator(progress = { month.totalCents.toFloat() / max }, modifier = Modifier.weight(1f))
-                                    Text(month.totalCents.euros(), style = MaterialTheme.typography.labelMedium)
-                                }
-                                Text(month.perStore.entries.joinToString("  ") { "${it.key} ${it.value.euros()}" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            if (summary.topProducts.isNotEmpty()) {
-                                Spacer(Modifier.height(4.dp))
-                                Text("Most spent on", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                for (top in summary.topProducts.take(5)) Text("${top.name} · ${top.times}× · ${top.totalCents.euros()}", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                }
-            }
-            if (purchases.isEmpty() && !scanning) {
-                item("empty") {
-                    nl.baskt.ui.common.EmptyState(
-                        "No receipts yet",
-                        "Scan a receipt photo, pick a PDF, or share one from another app: baskt reads the lines, matches them to products and keeps your spending per store.",
-                        icon = Icons.AutoMirrored.Filled.ReceiptLong,
-                    )
-                }
+            if (summary != null && summary.purchases > 0) item("summary") { SpendCard(summary, stores) }
+            if (purchases.isEmpty() && !scanning) item("empty") {
+                EmptyState("No receipts yet", "Scan one to see what you spend per store", icon = Icons.AutoMirrored.Filled.ReceiptLong, modifier = Modifier.fillParentMaxHeight(0.8f))
             }
             items(purchases, key = { it.id }) { purchase ->
                 Card(onClick = { viewModel.openPurchase(purchase.id) }) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(modifier = Modifier.padding(Spacing.Card), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         StoreBadge(purchase.store, stores)
                         Column(modifier = Modifier.weight(1f)) {
                             Text(dateFormat.format(Date(purchase.purchasedAt)), style = MaterialTheme.typography.titleSmall)
-                            Text("${purchase.lineCount} items", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(counted(purchase.lineCount, "line"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Text(purchase.totalCents.euros(), style = MaterialTheme.typography.titleMediumEmphasized)
                     }
@@ -195,50 +184,98 @@ fun PurchasesScreen(viewModel: AppViewModel, onBack: () -> Unit) {
 
     val current = scan
     if (current != null) {
-        ReceiptEditor(viewModel, current, stores.map { it.code }, title = "Check the receipt", saveLabel = "Save purchase", onChange = { viewModel.updateScan(it) }, onDismiss = { viewModel.clearScan() }, onSave = { store -> viewModel.savePurchase(current, store) })
+        ReceiptEditor(viewModel, current, stores, original = null, onChange = { viewModel.updateScan(it) }, onDismiss = { viewModel.clearScan() }, onSave = { store -> viewModel.savePurchase(current, store) })
     }
-    // Correcting a purchase that was already saved: same editor, the saved lines as the starting point.
-    var correcting by remember { mutableStateOf<ReceiptScan?>(null) }
-    val correctingId = detail?.purchase?.id
+    // Correcting a receipt that was already saved: same editor, the saved lines as the starting point. The detail
+    // sheet closes first, so the editor never sits on top of it.
+    var correcting by rememberSaveable(stateSaver = jsonSaver(ReceiptScan.serializer().nullable)) { mutableStateOf<ReceiptScan?>(null) }
+    var correctingFrom by rememberSaveable(stateSaver = jsonSaver(ReceiptScan.serializer().nullable)) { mutableStateOf<ReceiptScan?>(null) }
+    var correctingId by rememberSaveable { mutableStateOf<String?>(null) }
     val draft = correcting
-    if (draft != null && correctingId != null) {
-        ReceiptEditor(viewModel, draft, stores.map { it.code }, title = "Correct the receipt", saveLabel = "Save changes", onChange = { correcting = it }, onDismiss = { correcting = null }, onSave = { store ->
-            viewModel.updatePurchase(correctingId, draft, store)
-            correcting = null
+    val draftId = correctingId
+    if (draft != null && draftId != null) {
+        ReceiptEditor(viewModel, draft, stores, original = correctingFrom, onChange = { correcting = it }, onDismiss = { correcting = null; correctingId = null }, onSave = { store ->
+            viewModel.updatePurchase(draftId, draft, store)
+            correcting = null; correctingId = null
         })
     }
+    // Deleting asks once (it cannot be undone), also after the detail sheet has closed.
+    var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
+    deletingId?.let { id ->
+        ConfirmDialog(
+            title = "Delete this receipt?",
+            body = "Its lines disappear from your spending and from Orders.",
+            confirmLabel = "Delete",
+            onDismiss = { deletingId = null },
+            onConfirm = { viewModel.deletePurchase(id) },
+        )
+    }
     val open = detail
-    var confirmDelete by remember { mutableStateOf(false) }
-    if (confirmDelete && open != null) nl.baskt.ui.common.ConfirmDialog(
-        title = "Delete this receipt?",
-        body = "Its lines disappear from your spending and from previous orders.",
-        confirmLabel = "Delete",
-        onDismiss = { confirmDelete = false },
-        onConfirm = { viewModel.deletePurchase(open.purchase.id) },
-    )
-    if (open != null) {
+    if (open != null && draft == null) {
         ModalBottomSheet(onDismissRequest = { viewModel.closePurchase() }) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StoreBadge(open.purchase.store, stores)
-                    Text(dateFormat.format(Date(open.purchase.purchasedAt)), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    Text(open.purchase.totalCents.euros(), style = MaterialTheme.typography.titleMediumEmphasized)
-                    IconButton(onClick = { correcting = open.asScan() }) { Icon(Icons.Default.Edit, contentDescription = "Correct this receipt") }
-                    IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.Delete, contentDescription = "Delete") }
+            SheetBody(
+                title = "${storeName(open.purchase.store, stores)} · ${dateFormat.format(Date(open.purchase.purchasedAt))}",
+                actions = {
+                    TextButton(onClick = { deletingId = open.purchase.id; viewModel.closePurchase() }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") }
+                    Button(onClick = { val start = open.asScan(); correcting = start; correctingFrom = start; correctingId = open.purchase.id; viewModel.closePurchase() }) { Text("Edit") }
+                },
+            ) {
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(open.purchase.totalCents.euros(), style = MaterialTheme.typography.headlineSmallEmphasized)
+                    Text(counted(open.lines.size, "line"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 2.dp))
                 }
                 for (line in open.lines) {
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        LineThumb(open.products[line.productId], size = 40)
+                    Row(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        LineThumb(open.products[line.productId], size = 48)
                         Column(modifier = Modifier.weight(1f)) {
-                            Text((if (line.quantity != 1.0) "${line.quantity.toString().removeSuffix(".0")}× " else "") + line.name)
-                            open.products[line.productId]?.let { Text(it.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            Text((if (line.quantity != 1.0) "${line.quantity.qty()}× " else "") + line.name, style = MaterialTheme.typography.bodyMedium)
+                            open.products[line.productId]?.let { Text(it.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                             line.dealText?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary) }
                         }
-                        Text(line.totalPriceCents.euros())
+                        Text(line.totalPriceCents.euros(), style = MaterialTheme.typography.labelLargeEmphasized)
                     }
                 }
             }
         }
+    }
+}
+
+/** What was spent lately: the total, one plain bar per month, and the products most money went to. */
+@Composable
+private fun SpendCard(summary: nl.baskt.data.SpendSummary, stores: List<StoreInfo>) {
+    Card {
+        Column(modifier = Modifier.fillMaxWidth().padding(Spacing.Card), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionHeader(if (summary.months.size == 1) "Last month" else "Last ${counted(summary.months.size, "month")}")
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(summary.totalCents.euros(), style = MaterialTheme.typography.headlineMediumEmphasized)
+                Text(counted(summary.purchases, "receipt"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
+            }
+            val max = summary.months.maxOfOrNull { it.totalCents }?.coerceAtLeast(1) ?: 1
+            for (month in summary.months) MonthBar(month, max, stores)
+            if (summary.topProducts.isNotEmpty()) {
+                SectionHeader("Most spent on", Modifier.padding(top = 4.dp))
+                for (top in summary.topProducts.take(5)) Text("${top.name} · ${top.times}× · ${top.totalCents.euros()}", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+/** One month as a plain bar (it is an amount, not progress), with the stores apart when there was more than one. */
+@Composable
+private fun MonthBar(month: SpendMonth, max: Int, stores: List<StoreInfo>) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(monthLabel(month.month), style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(72.dp))
+            Box(modifier = Modifier.weight(1f).height(8.dp).background(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.shapes.extraSmall)) {
+                Box(modifier = Modifier.fillMaxHeight().fillMaxWidth((month.totalCents.toFloat() / max).coerceIn(0f, 1f)).background(MaterialTheme.colorScheme.primary, MaterialTheme.shapes.extraSmall))
+            }
+            Text(month.totalCents.euros(), style = MaterialTheme.typography.labelMedium)
+        }
+        if (month.perStore.size > 1) Text(
+            month.perStore.entries.joinToString(" · ") { "${storeName(it.key, stores)} ${it.value.euros()}" },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

@@ -1,40 +1,44 @@
 package nl.baskt.ui.recipes
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import nl.baskt.data.RecipeDetail
+import nl.baskt.ui.common.ChoiceGroup
+import nl.baskt.ui.common.LoadingRow
+import nl.baskt.ui.common.SheetBody
+import nl.baskt.ui.common.Tag
+import nl.baskt.ui.common.counted
 
-/** Recipe viewer: photo, ingredients and numbered steps (with step images when the site has them), translated by the server. */
+/** "4" as "4 servings"; a value that already carries its own word ("4 personen", "1 loaf") is shown as written. */
+internal fun servingsLabel(servings: String): String = servings.trim().toIntOrNull()?.let { counted(it, "serving") } ?: servings.trim()
+
+/**
+ * Recipe viewer: photo, ingredients and numbered steps (with step images when the site has them), translated by
+ * the server. The sheet's title is the recipe's name. [actions] are pinned under the scrolling content, so the
+ * main one is always in reach; [extra] is drawn at the end of the scrolling content (the "ask or change" field).
+ */
 @Composable
-fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, expanded: Boolean = false, actions: @Composable () -> Unit) {
+fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, expanded: Boolean = false, extra: (@Composable () -> Unit)? = null, actions: @Composable RowScope.() -> Unit) {
     val container = (androidx.compose.ui.platform.LocalContext.current.applicationContext as nl.baskt.BasktApp).container
     val stock by container.basket.stock.collectAsState()
     val basketItems by container.basket.items.collectAsState()
@@ -77,19 +81,19 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, exp
             }
         }
     }
-    var tab by remember { mutableIntStateOf(0) }
-    // Fixed sheet height: it opens half-way and can be dragged up (or straight to full height when [expanded]);
-    // content changes animate instead of jumping.
+    var tab by rememberSaveable { mutableIntStateOf(0) }
+    // Fixed sheet height: it opens half-way and can be dragged up (or straight to full height when [expanded]),
+    // so the content arriving does not make it jump.
     val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = expanded)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(modifier = Modifier.fillMaxHeight(0.92f).padding(horizontal = 20.dp).padding(bottom = 32.dp).verticalScroll(rememberScrollState()).animateContentSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text("Recipe", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                nl.baskt.ui.common.OriginalToggle(original) { original = !original }
-            }
-            if (!original && source != null && translation?.translated != true) Text(if (translation == null) "Translating…" else "Translation unavailable · showing original", style = MaterialTheme.typography.labelSmall)
+        SheetBody(
+            title = displayed?.title ?: title,
+            modifier = Modifier.fillMaxHeight(0.92f),
+            titleTrailing = { nl.baskt.ui.common.OriginalToggle(original) { original = !original } },
+            actions = actions,
+        ) {
+            if (!original && source != null && translation?.translated != true) Text(if (translation == null) "Translating…" else "Couldn’t translate, showing the original", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (original && originalMissing) {
-                Text("The original was not saved with this older download.", style = MaterialTheme.typography.bodySmall)
                 detail.sourceUrl?.takeIf { it.startsWith("https://") }?.let { url ->
                     androidx.compose.material3.TextButton(onClick = { uri.openUri(url) }) { Text("View original recipe page") }
                 }
@@ -98,32 +102,29 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, exp
             if (image != null) {
                 nl.baskt.ui.common.ZoomableImage(image, displayed.title, modifier = Modifier.fillMaxWidth().height(180.dp).clip(MaterialTheme.shapes.large))
             }
-            Text(displayed?.title ?: title, style = MaterialTheme.typography.titleLarge)
             displayed?.description?.takeIf { it.isNotBlank() }?.let { nl.baskt.ui.common.DescriptionText(it) }
-            val meta = listOfNotNull(displayed?.servings?.let { "$it servings" }, displayed?.totalTime)
+            val meta = listOfNotNull(displayed?.servings?.takeIf { it.isNotBlank() }?.let { servingsLabel(it) }, displayed?.totalTime)
             if (meta.isNotEmpty()) Text(meta.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (displayed == null) {
-                LoadingIndicator()
+                Box(modifier = Modifier.fillMaxWidth().height(240.dp), contentAlignment = Alignment.Center) { LoadingRow("Loading the recipe…") }
             } else {
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Ingredients (${displayed.ingredientLines.size})") }
-                    SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 2), enabled = displayed.steps.isNotEmpty()) { Text("Steps (${displayed.steps.size})") }
-                }
-                if (tab == 0) {
+                val showSteps = tab == 1 && displayed.steps.isNotEmpty()
+                if (displayed.steps.isNotEmpty()) ChoiceGroup(listOf("Ingredients · ${displayed.ingredientLines.size}", "Steps · ${displayed.steps.size}"), if (showSteps) 1 else 0, onSelect = { tab = it })
+                if (!showSteps) {
                     for ((index, line) in displayed.ingredientLines.withIndex()) {
                         val (inStock, inBasket) = availability.getOrElse(index) { false to false }
-                        Column {
-                            Text("• $line", style = MaterialTheme.typography.bodyMedium)
-                            val labels = listOfNotNull(if (inStock) "In stock" else null, if (inBasket) "In basket" else null)
-                            if (labels.isNotEmpty()) Text(labels.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(line, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                            if (inStock) Tag("In stock")
+                            if (inBasket) Tag("In basket")
                         }
                     }
                 } else {
-                    if (stepsPending) Text(if (stepsTranslation == null) "Translating steps…" else "Step translation unavailable · showing original", style = MaterialTheme.typography.labelSmall)
+                    if (stepsPending) Text(if (stepsTranslation == null) "Translating the steps…" else "Couldn’t translate the steps, showing the original", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     for ((index, step) in displayed.steps.withIndex()) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text("${index + 1}", style = MaterialTheme.typography.titleMediumEmphasized, color = MaterialTheme.colorScheme.primary)
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(step.text, style = MaterialTheme.typography.bodyMedium)
                                 if (step.imageUrl != null) {
                                     nl.baskt.ui.common.ZoomableImage(step.imageUrl, displayed.title, modifier = Modifier.fillMaxWidth().height(160.dp).clip(MaterialTheme.shapes.medium))
@@ -133,8 +134,7 @@ fun RecipeSheet(title: String, detail: RecipeDetail?, onDismiss: () -> Unit, exp
                     }
                 }
             }
-            Spacer(Modifier.height(4.dp))
-            actions()
+            extra?.invoke()
         }
     }
 }

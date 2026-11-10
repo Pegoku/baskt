@@ -11,12 +11,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -27,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,11 +39,11 @@ import nl.baskt.data.RecipeDraft
 import nl.baskt.data.RecipeTurn
 import nl.baskt.ui.AppViewModel
 
-/** A change the AI proposed for the open recipe, waiting for Apply or Discard. */
+/** A change proposed for the open recipe, waiting for Apply or Discard. */
 data class RecipeChangePreview(val request: String, val draft: RecipeDraft, val summary: String)
 
 /**
- * Inline AI for the open recipe: a compact field at the bottom of the sheet. Questions ("how long do I boil the
+ * The "ask or change" field of the open recipe, at the end of the sheet's content. Questions ("how long do I boil the
  * egg?") are answered right above it; a change ("without olives", "for 6") is shown as a preview of what would
  * change and only saved after Apply. [onApply] saves the draft and returns whether it worked.
  */
@@ -58,7 +58,7 @@ fun RecipeAiPanel(
     savesCopy: Boolean,
     onApply: suspend (RecipeDraft) -> Boolean,
 ) {
-    var message by remember { mutableStateOf("") }
+    var message by rememberSaveable { mutableStateOf("") }
     var working by remember { mutableStateOf(false) }
     val online by viewModel.online.collectAsState()
     val scope = rememberCoroutineScope()
@@ -93,10 +93,10 @@ fun RecipeAiPanel(
         OutlinedTextField(
             value = message, onValueChange = { message = it }, enabled = !working && detail != null && online,
             modifier = Modifier.fillMaxWidth(), singleLine = true,
-            placeholder = { Text(if (online) "Ask or change: \"without olives\"" else "Recipe AI needs a connection") },
+            placeholder = { Text(if (online) "Ask or change, e.g. “without olives”" else "Needs a connection", maxLines = 1) },
             leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
             trailingIcon = {
-                if (working) LoadingIndicator(modifier = Modifier.size(32.dp))
+                if (working) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 else IconButton(onClick = { send() }, enabled = message.isNotBlank()) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send") }
             },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send), keyboardActions = KeyboardActions(onSend = { send() }),
@@ -114,18 +114,21 @@ private fun ChangePreviewCard(change: RecipeChangePreview, detail: RecipeDetail?
     val newSteps = change.draft.steps.map { it.text }
     // Rewritten steps show up on both sides, added or dropped ones on one: the larger side is the number that changed.
     val stepsChanged = maxOf(newSteps.count { it !in oldSteps }, oldSteps.count { it !in newSteps })
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Card {
+        Column(modifier = Modifier.padding(nl.baskt.ui.common.Spacing.Card), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("“${change.request}”", style = MaterialTheme.typography.labelLarge)
             if (change.summary.isNotBlank()) Text(change.summary, style = MaterialTheme.typography.bodyMedium)
             for (line in removed) Text("− $line", style = MaterialTheme.typography.bodySmall, textDecoration = TextDecoration.LineThrough, color = MaterialTheme.colorScheme.error)
             for (line in added) Text("+ $line", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-            if (change.draft.servings != detail?.servings && change.draft.servings != null) Text("Servings: ${detail?.servings ?: "?"} → ${change.draft.servings}", style = MaterialTheme.typography.bodySmall)
+            val servingsChanged = change.draft.servings != detail?.servings && change.draft.servings != null
+            if (servingsChanged) Text("Servings: " + (detail?.servings?.let { "$it → " } ?: "") + change.draft.servings, style = MaterialTheme.typography.bodySmall)
             if (stepsChanged > 0) Text(if (stepsChanged == 1) "1 step changes" else "$stepsChanged steps change", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (removed.isEmpty() && added.isEmpty() && stepsChanged == 0) Text("Nothing would change.", style = MaterialTheme.typography.bodySmall)
+            // With nothing to change there is nothing to save, so only Discard is left.
+            val nothing = removed.isEmpty() && added.isEmpty() && stepsChanged == 0 && !servingsChanged && change.draft.title == (detail?.title ?: change.draft.title)
+            if (nothing) Text("Nothing would change", style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), modifier = Modifier.fillMaxWidth()) {
                 TextButton(onClick = onDiscard, enabled = !working) { Text("Discard") }
-                Button(onClick = onApply, enabled = !working) { Text(if (savesCopy) "Save as my recipe" else "Apply") }
+                FilledTonalButton(onClick = onApply, enabled = !working && !nothing) { Text(if (savesCopy) "Save to my recipes" else "Apply") }
             }
         }
     }

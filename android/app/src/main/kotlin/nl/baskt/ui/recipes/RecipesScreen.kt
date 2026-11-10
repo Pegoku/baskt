@@ -1,8 +1,8 @@
 package nl.baskt.ui.recipes
 
-import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,78 +13,104 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Kitchen
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.CreateNewFolder
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.MediumFlexibleTopAppBar
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Slider
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.MediumFlexibleTopAppBar
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.launch
+import nl.baskt.data.DiscoverDish
+import nl.baskt.data.DiscoverParams
 import nl.baskt.data.RecipeSummary
 import nl.baskt.data.UserRecipe
-import kotlinx.coroutines.launch
 import nl.baskt.ui.AppViewModel
+import nl.baskt.ui.common.ChoiceGroup
+import nl.baskt.ui.common.ConfirmDialog
+import nl.baskt.ui.common.DropdownPicker
+import nl.baskt.ui.common.EmptyState
+import nl.baskt.ui.common.IconLabel
+import nl.baskt.ui.common.ItemThumb
+import nl.baskt.ui.common.LoadingRow
+import nl.baskt.ui.common.OfflineBanner
+import nl.baskt.ui.common.SearchField
+import nl.baskt.ui.common.SectionHeader
+import nl.baskt.ui.common.Spacing
+import nl.baskt.ui.common.Tag
+import nl.baskt.ui.common.TranslatedLabel
+import nl.baskt.ui.common.counted
+
+/** Keeps the open recipe across a rotation: its title, address, picture and where it came from. */
+private val RecipeSummarySaver = listSaver<RecipeSummary?, String>(
+    save = { recipe -> if (recipe == null) emptyList() else listOf(recipe.title, recipe.url, recipe.imageUrl.orEmpty(), recipe.titleLocalized.orEmpty(), recipe.source.orEmpty()) },
+    restore = { saved -> if (saved.size < 5) null else RecipeSummary(saved[0], saved[1], saved[2].ifEmpty { null }, titleLocalized = saved[3].ifEmpty { null }, source = saved[4].ifEmpty { null }) },
+)
+
+private fun RecipeSummary.isOwn() = url.startsWith("baskt://")
 
 /**
- * Meal browser: search several recipe sites at once (the dish is understood and translated first),
- * your library (own recipes, favourites and recently viewed), and Discover: ideas from your stock, something new, or a country's cuisine.
+ * Meal browser in three views. Find searches several recipe sites at once (the dish is understood and
+ * translated first); Library holds your own recipes, favourites and recently viewed ones; Discover suggests
+ * dishes from your stock, something new, or a country's cuisine. [onViewBasket] leaves for the basket; it is
+ * only called from the "View" button of the notice that follows adding a recipe.
  */
 @Composable
 fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: () -> Unit, onCreate: (String?) -> Unit) {
+    val onViewBasket = onFolderAdded
     val results by viewModel.recipeResults.collectAsState()
     val favourites by viewModel.recipeFavourites.collectAsState()
     val mine by viewModel.myRecipes.collectAsState()
@@ -97,30 +123,51 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
     val busy by viewModel.recipesBusy.collectAsState()
     val online by viewModel.online.collectAsState()
     val searchMessage by viewModel.recipeMessage.collectAsState()
-    var query by remember { mutableStateOf("") }
-    var tab by remember { mutableIntStateOf(0) }
-    var selected by remember { mutableStateOf<RecipeSummary?>(null) }
-    var openExpanded by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    var query by rememberSaveable { mutableStateOf("") }
+    // What the Find view was last searched with, for its "Try again".
+    var searched by rememberSaveable { mutableStateOf("") }
+    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var selected by rememberSaveable(stateSaver = RecipeSummarySaver) { mutableStateOf<RecipeSummary?>(null) }
+    var openExpanded by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) { viewModel.loadRecipeFavourites(); viewModel.loadMyRecipes() }
     // Library recipes are downloaded and translated in the background, so tapping one opens it ready.
     LaunchedEffect(mine, favourites, recent) {
         viewModel.warmRecipes(mine.map { RecipeSummary(it.title, it.url, it.imageUrl) } + recent + favourites.map { RecipeSummary(it.title, it.url, it.imageUrl) })
     }
-    // Recipe AI field: questions asked and a proposed change, kept while the same recipe stays open.
+    // The open recipe is loaded here, so it also comes back when the app was closed with the sheet open.
+    LaunchedEffect(selected?.url) { selected?.let { if (viewModel.recipeDetail.value == null) viewModel.openRecipe(it) } }
+    // The "ask or change" field: questions asked and a proposed change, kept while the same recipe stays open.
     var recipeChat by remember(selected?.url) { mutableStateOf(emptyList<nl.baskt.data.RecipeTurn>()) }
     var recipeChange by remember(selected?.url) { mutableStateOf<RecipeChangePreview?>(null) }
     LaunchedEffect(tab, discoverParams) { if (tab == 2) viewModel.loadDiscover() }
 
+    val link = query.trim().takeIf { it.startsWith("http://") || it.startsWith("https://") }
     fun isFavourite(recipe: RecipeSummary) = favourites.any { it.url == recipe.url }
+    fun open(recipe: RecipeSummary, expanded: Boolean = false) { selected = recipe; openExpanded = expanded }
+    fun close() { selected = null; viewModel.closeRecipe() }
+    fun search(value: String) {
+        if (!online) { viewModel.notify("Recipe search needs a connection"); return }
+        searched = value; tab = 0; viewModel.searchRecipes(value)
+    }
     fun submit() {
-        if (!online) { viewModel.notify("Recipe discovery needs a connection"); return }
         val value = query.trim()
-        if (value.isEmpty()) return
-        if (value.startsWith("http://") || value.startsWith("https://")) {
-            viewModel.addRecipeFolder(value); onFolderAdded()
-        } else {
-            tab = 0; viewModel.searchRecipes(value)
+        // A pasted link is not a search: the row under the field adds it.
+        if (value.isNotEmpty() && link == null) search(value)
+    }
+    /** Adds the recipe's ingredients as a folder and stays here; the notice offers the way to the basket. */
+    fun addToBasket(url: String, title: String?) {
+        scope.launch {
+            val folders = viewModel.basket.items.value.count { it.isGroup }
+            viewModel.addRecipeFolder(url).join()
+            // A failed add reports itself, so only a new folder is announced.
+            if (viewModel.basket.items.value.count { it.isGroup } > folders) viewModel.notify(if (title != null) "Added “$title” to your basket" else "Added the recipe to your basket", "View") { onViewBasket() }
         }
+    }
+    fun toggleFavourite(recipe: RecipeSummary) {
+        val wasFavourite = isFavourite(recipe)
+        viewModel.toggleRecipeFavourite(recipe)
+        if (wasFavourite) viewModel.notifyUndo("Removed “${recipe.displayTitle}” from favourites") { viewModel.toggleRecipeFavourite(recipe) }
     }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -135,48 +182,54 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
             )
         },
         floatingActionButton = {
-            // While something is typed, the button becomes the search (or link import) action.
-            val typing = query.isNotBlank()
-            val isLink = query.trim().startsWith("http://") || query.trim().startsWith("https://")
-            ExtendedFloatingActionButton(
-                onClick = { if (typing) submit() else onCreate(null) },
-                icon = { Icon(if (!typing) Icons.Default.Add else if (isLink) Icons.Default.Link else Icons.Default.Search, contentDescription = null) },
-                text = { Text(if (!typing) "New recipe" else if (isLink) "Add as folder" else "Search") },
-            )
+            ExtendedFloatingActionButton(onClick = { onCreate(null) }, icon = { Icon(Icons.Default.Add, contentDescription = null) }, text = { Text("New recipe") })
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            nl.baskt.ui.common.OfflineBanner(viewModel)
-            OutlinedTextField(
+            OfflineBanner(viewModel)
+            SearchField(
                 value = query,
                 onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("A dish in any language, or a recipe link") },
-                singleLine = true,
-                leadingIcon = { Icon(if (query.startsWith("http")) Icons.Default.Link else Icons.Default.Search, contentDescription = null) },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { submit() }),
+                placeholder = "A dish, or a recipe link",
+                onSearch = { submit() },
+                modifier = Modifier.padding(horizontal = Spacing.Screen, vertical = 8.dp),
+                leadingIcon = if (link != null) Icons.Default.Link else Icons.Default.Search,
             )
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                SegmentedButton(selected = tab == 0, onClick = { tab = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 3)) { Text("Search") }
-                SegmentedButton(selected = tab == 1, onClick = { tab = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 3)) { Text("Library (${mine.size + favourites.size})") }
-                SegmentedButton(selected = tab == 2, onClick = { tab = 2 }, shape = SegmentedButtonDefaults.itemShape(2, 3)) { Text("Discover") }
+            if (link != null) Row(modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.Screen).padding(bottom = 8.dp), horizontalArrangement = Arrangement.End) {
+                FilledTonalButton(onClick = { addToBasket(link, null); query = "" }) { IconLabel(Icons.Default.AddShoppingCart, "Add this recipe to the basket") }
             }
-            if (busy) Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { LoadingIndicator(); Text("Searching recipe sites…") }
+            val libraryCount = (mine.map { it.url } + favourites.map { it.url } + recent.map { it.url }).distinct().size
+            PrimaryTabRow(selectedTabIndex = tab) {
+                listOf("Find", if (libraryCount > 0) "Library · $libraryCount" else "Library", "Discover").forEachIndexed { index, label ->
+                    Tab(selected = tab == index, onClick = { tab = index }, text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) })
+                }
+            }
             when (tab) {
-                0 -> RecipeList(
+                0 -> FindList(
                     list = results,
+                    busy = busy,
+                    message = searchMessage,
+                    canRetry = searched.isNotBlank(),
                     loadingMore = viewModel.recipesLoadingMore.collectAsState().value,
                     hasMore = viewModel.recipesHasMore.collectAsState().value,
                     onLoadMore = { viewModel.loadMoreRecipes() },
-                    empty = searchMessage ?: "Type a dish, e.g. \"arroz cubano\" or \"iets met kip\". baskt understands it, searches Allerhande, Leuke Recepten, BBC Good Food, RecetasGratis, Cookpad and TheMealDB, and shows results in your language.",
-                    busy = busy,
+                    onRetry = { search(searched) },
                     isFavourite = ::isFavourite,
-                    onOpen = { selected = it; openExpanded = false; viewModel.openRecipe(it) },
-                    onFavourite = { viewModel.toggleRecipeFavourite(it) },
-                    onFolder = { viewModel.addRecipeFolder(it.url); onFolderAdded() },
+                    onOpen = { open(it) },
+                    onFavourite = ::toggleFavourite,
+                    onAdd = { addToBasket(it.url, it.displayTitle) },
                 )
-                1 -> MineList(mine, favourites.map { RecipeSummary(it.title, it.url, it.imageUrl, source = "Favourite") }, recent, viewModel, isFavourite = ::isFavourite, onEdit = { onCreate(it.id) }, onOpen = { selected = it; openExpanded = false; viewModel.openRecipe(it) }, onFolder = { viewModel.addRecipeFolder(it); onFolderAdded() })
+                1 -> LibraryList(
+                    mine = mine,
+                    favourites = favourites.map { RecipeSummary(it.title, it.url, it.imageUrl, source = "Favourite") },
+                    recent = recent,
+                    viewModel = viewModel,
+                    isFavourite = ::isFavourite,
+                    onEdit = { onCreate(it.id) },
+                    onOpen = { open(it) },
+                    onFavourite = ::toggleFavourite,
+                    onAdd = { addToBasket(it.url, it.displayTitle) },
+                )
                 else -> DiscoverPane(
                     params = discoverParams,
                     dishes = discoverDishes,
@@ -184,12 +237,12 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
                     busy = discoverBusy,
                     onParams = { viewModel.setDiscoverParams(it) },
                     onByTime = { viewModel.setDiscoverByTime(it) },
-                    onSearch = { query = it; tab = 0; viewModel.searchRecipes(it) },
+                    onSearch = { query = it; search(it) },
                     onOpenDish = { dish ->
                         // The photo's recipe opens right away, full height; the other sites load behind it with this one on top.
                         val recipe = RecipeSummary(dish.title, dish.recipeUrl!!, dish.imageUrl, source = dish.source)
-                        selected = recipe; openExpanded = true; viewModel.openRecipe(recipe)
-                        query = dish.searchQuery; tab = 0; viewModel.searchRecipes(dish.searchQuery, pinned = recipe)
+                        open(recipe, expanded = true)
+                        query = dish.searchQuery; searched = dish.searchQuery; tab = 0; viewModel.searchRecipes(dish.searchQuery, pinned = recipe)
                     },
                     onRefresh = { viewModel.loadDiscover(force = true) },
                 )
@@ -199,34 +252,84 @@ fun RecipesScreen(viewModel: AppViewModel, onBack: () -> Unit, onFolderAdded: ()
 
     val current = selected
     if (current != null) {
-        RecipeSheet(title = current.displayTitle, detail = detail, expanded = openExpanded, onDismiss = { selected = null; viewModel.closeRecipe() }) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { viewModel.addRecipeFolder(current.url); selected = null; viewModel.closeRecipe(); onFolderAdded() }) {
-                    nl.baskt.ui.common.IconLabel(Icons.Default.CreateNewFolder, "Add as folder")
-                }
-                if (!current.url.startsWith("baskt://")) {
-                    IconButton(onClick = { viewModel.toggleRecipeFavourite(current) }) { Icon(if (isFavourite(current)) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = if (isFavourite(current)) "Remove from favourites" else "Add to favourites") }
-                    TextButton(onClick = { viewModel.saveSiteRecipeAsMine(current); selected = null; viewModel.closeRecipe() }) { Text("Copy to mine") }
+        RecipeSheet(
+            title = current.displayTitle, detail = detail, expanded = openExpanded, onDismiss = { close() },
+            extra = {
+                RecipeAiPanel(
+                    detail = detail, viewModel = viewModel,
+                    chat = recipeChat, onChat = { recipeChat = it },
+                    preview = recipeChange, onPreview = { recipeChange = it },
+                    savesCopy = !current.isOwn(),
+                    onApply = { draft ->
+                        // A site recipe's changed copy opens in its place.
+                        viewModel.applyRecipeChange(current, draft)?.also { selected = it } != null
+                    },
+                )
+            },
+        ) {
+            if (!current.isOwn()) {
+                FavouriteToggle(isFavourite(current)) { toggleFavourite(current) }
+                // The copy shrinks first on a narrow screen, so the main button always shows its whole label.
+                TextButton(enabled = detail != null, onClick = { viewModel.saveSiteRecipeAsMine(current); viewModel.notify("Copied “${current.displayTitle}” to My recipes"); close() }, modifier = Modifier.weight(1f, fill = false)) {
+                    Text("Copy to my recipes", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            RecipeAiPanel(
-                detail = detail, viewModel = viewModel,
-                chat = recipeChat, onChat = { recipeChat = it },
-                preview = recipeChange, onPreview = { recipeChange = it },
-                savesCopy = !current.url.startsWith("baskt://"),
-                onApply = { draft ->
-                    // A site recipe's changed copy opens in its place.
-                    viewModel.applyRecipeChange(current, draft)?.also { selected = it } != null
-                },
-            )
+            Button(onClick = { addToBasket(current.url, current.displayTitle); close() }) { IconLabel(Icons.Default.AddShoppingCart, "Add to basket") }
+        }
+    }
+}
+
+/** The heart of a recipe: filled when it is a favourite, in the toggle's own colours everywhere. */
+@Composable
+private fun FavouriteToggle(favourite: Boolean, onToggle: () -> Unit) {
+    IconToggleButton(checked = favourite, onCheckedChange = { onToggle() }) {
+        Icon(if (favourite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = if (favourite) "Remove from favourites" else "Add to favourites")
+    }
+}
+
+/** The one "add this recipe's ingredients" button of a card; the sheet has the same action with its label. */
+@Composable
+private fun AddToBasketButton(onClick: () -> Unit) {
+    TooltipBox(positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above), tooltip = { PlainTooltip { Text("Add ingredients to basket") } }, state = rememberTooltipState()) {
+        IconButton(onClick = onClick) { Icon(Icons.Default.AddShoppingCart, contentDescription = "Add ingredients to basket") }
+    }
+}
+
+/** A recipe's photo at card size; without one, the shared placeholder tile so every title starts at the same place. */
+@Composable
+private fun RecipeThumb(imageUrl: String?) {
+    if (imageUrl != null) AsyncImage(model = imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(MaterialTheme.shapes.medium))
+    else nl.baskt.ui.common.PhotoPlaceholder(64)
+}
+
+/** A recipe in a list: photo, title, one line of facts, and whatever the list puts at the end. */
+@Composable
+private fun RecipeCard(title: String, subtitle: String?, imageUrl: String?, onOpen: () -> Unit, trailing: @Composable () -> Unit) {
+    Card(onClick = onOpen) {
+        Row(modifier = Modifier.padding(start = Spacing.Card, top = Spacing.Card, bottom = Spacing.Card, end = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            RecipeThumb(imageUrl)
+            Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                TranslatedLabel(title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (!subtitle.isNullOrBlank()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            trailing()
         }
     }
 }
 
 @Composable
-private fun RecipeList(list: List<RecipeSummary>, loadingMore: Boolean, hasMore: Boolean, onLoadMore: () -> Unit, empty: String, busy: Boolean, isFavourite: (RecipeSummary) -> Boolean, onOpen: (RecipeSummary) -> Unit, onFavourite: (RecipeSummary) -> Unit, onFolder: (RecipeSummary) -> Unit) {
-    if (list.isEmpty() && !busy) {
-        nl.baskt.ui.common.EmptyState(empty, icon = Icons.AutoMirrored.Filled.MenuBook)
+private fun FindList(
+    list: List<RecipeSummary>, busy: Boolean, message: String?, canRetry: Boolean, loadingMore: Boolean, hasMore: Boolean,
+    onLoadMore: () -> Unit, onRetry: () -> Unit, isFavourite: (RecipeSummary) -> Boolean, onOpen: (RecipeSummary) -> Unit, onFavourite: (RecipeSummary) -> Unit, onAdd: (RecipeSummary) -> Unit,
+) {
+    if (list.isEmpty()) {
+        when {
+            busy -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingRow("Searching recipe sites…") }
+            message != null -> EmptyState("No recipes found", message, icon = Icons.AutoMirrored.Filled.MenuBook, modifier = Modifier.fillMaxSize()) {
+                if (canRetry) FilledTonalButton(onClick = onRetry) { Text("Try again") }
+            }
+            else -> EmptyState("Find a recipe", "Type a dish in any language, or paste a recipe link", icon = Icons.Default.Search, modifier = Modifier.fillMaxSize())
+        }
         return
     }
     val state = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -235,138 +338,125 @@ private fun RecipeList(list: List<RecipeSummary>, loadingMore: Boolean, hasMore:
         androidx.compose.runtime.derivedStateOf { (state.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= list.size - 8 }
     }
     LaunchedEffect(nearEnd, hasMore, list.size) { if (nearEnd && hasMore && list.isNotEmpty()) onLoadMore() }
-    LazyColumn(state = state, contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 128.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(state = state, contentPadding = PaddingValues(Spacing.Screen, 12.dp, Spacing.Screen, Spacing.FabClearance), verticalArrangement = Arrangement.spacedBy(Spacing.ListGap)) {
+        // A Discover photo is shown at once; the other sites are still being searched behind it.
+        if (busy) item("searching") { LoadingRow("Searching recipe sites…") }
         items(list, key = { it.url }) { recipe ->
-            Card(onClick = { onOpen(recipe) }) {
-                Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(MaterialTheme.shapes.medium))
-                    Column(modifier = Modifier.weight(1f)) {
-                        nl.baskt.ui.common.TranslatedLabel(recipe.displayTitle, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(listOfNotNull(recipe.source, recipe.title.takeIf { it != recipe.displayTitle }).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    IconButton(onClick = { onFavourite(recipe) }) { Icon(if (isFavourite(recipe)) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = if (isFavourite(recipe)) "Remove from favourites" else "Add to favourites", tint = MaterialTheme.colorScheme.primary) }
-                    IconButton(onClick = { onFolder(recipe) }) { Icon(Icons.Default.CreateNewFolder, contentDescription = "Add as folder") }
-                }
+            RecipeCard(recipe.displayTitle, listOfNotNull(recipe.source, recipe.title.takeIf { it != recipe.displayTitle }).joinToString(" · "), recipe.imageUrl, onOpen = { onOpen(recipe) }) {
+                FavouriteToggle(isFavourite(recipe)) { onFavourite(recipe) }
+                AddToBasketButton { onAdd(recipe) }
             }
         }
         if (loadingMore || (hasMore && list.isNotEmpty())) item("more") {
             // Shown when the scroll outruns the next page.
-            androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { LoadingIndicator() }
+            Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { LoadingIndicator() }
         }
     }
 }
 
 @Composable
-private fun MineList(mine: List<UserRecipe>, favourites: List<RecipeSummary>, recent: List<RecipeSummary>, viewModel: AppViewModel, isFavourite: (RecipeSummary) -> Boolean, onEdit: (UserRecipe) -> Unit, onOpen: (RecipeSummary) -> Unit, onFolder: (String) -> Unit) {
-    var deleting by remember { mutableStateOf<UserRecipe?>(null) }
-    deleting?.let { recipe ->
-        nl.baskt.ui.common.ConfirmDialog(
+private fun LibraryList(
+    mine: List<UserRecipe>, favourites: List<RecipeSummary>, recent: List<RecipeSummary>, viewModel: AppViewModel,
+    isFavourite: (RecipeSummary) -> Boolean, onEdit: (UserRecipe) -> Unit, onOpen: (RecipeSummary) -> Unit, onFavourite: (RecipeSummary) -> Unit, onAdd: (RecipeSummary) -> Unit,
+) {
+    var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
+    mine.firstOrNull { it.id == deletingId }?.let { recipe ->
+        ConfirmDialog(
             title = "Delete this recipe?",
-            body = "“${recipe.title}” is removed from your library.",
+            body = "“${recipe.title}” is deleted from My recipes.",
             confirmLabel = "Delete",
-            onDismiss = { deleting = null },
+            onDismiss = { deletingId = null },
             onConfirm = { viewModel.deleteMyRecipe(recipe.id) },
         )
     }
     if (mine.isEmpty() && favourites.isEmpty() && recent.isEmpty()) {
-        nl.baskt.ui.common.EmptyState(
-            title = "No recipes yet",
-            body = "Your own recipes, favourites and recently viewed recipes appear here. Tap \"New recipe\" to write one or let the AI draft it from a description.",
-            icon = Icons.AutoMirrored.Filled.MenuBook,
-        )
+        EmptyState("No recipes yet", "Your own recipes, favourites and recently viewed ones show up here", icon = Icons.AutoMirrored.Filled.MenuBook, modifier = Modifier.fillMaxSize())
         return
     }
-    LazyColumn(contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (mine.isNotEmpty()) item("h1") { Text("My recipes", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
+    LazyColumn(contentPadding = PaddingValues(Spacing.Screen, 12.dp, Spacing.Screen, Spacing.FabClearance), verticalArrangement = Arrangement.spacedBy(Spacing.ListGap)) {
+        if (mine.isNotEmpty()) item("h1") { SectionHeader("My recipes") }
         items(mine, key = { it.id }) { recipe ->
-            Card(onClick = { onOpen(RecipeSummary(recipe.title, recipe.url, recipe.imageUrl, source = "Mine")) }) {
-                Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(MaterialTheme.shapes.medium))
-                    Column(modifier = Modifier.weight(1f)) {
-                        nl.baskt.ui.common.TranslatedLabel(recipe.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(listOfNotNull("${recipe.ingredientLines.size} ingredients", recipe.servings?.let { "$it servings" }, when (recipe.origin) { "ai" -> "written by AI"; "site" -> "copied from a site"; else -> null }).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val summary = RecipeSummary(recipe.title, recipe.url, recipe.imageUrl, source = "My recipes")
+            val facts = listOfNotNull(
+                counted(recipe.ingredientLines.size, "ingredient"),
+                recipe.servings?.takeIf { it.isNotBlank() }?.let { servingsLabel(it) },
+                when (recipe.origin) { "ai" -> "Written by baskt"; "site" -> "Copied from a site"; else -> null },
+            ).joinToString(" · ")
+            RecipeCard(recipe.title, facts, recipe.imageUrl, onOpen = { onOpen(summary) }) {
+                var menu by remember { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More for ${recipe.title}") }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(text = { Text("Edit") }, onClick = { menu = false; onEdit(recipe) })
+                        DropdownMenuItem(text = { Text("Add to basket") }, onClick = { menu = false; onAdd(summary) })
+                        DropdownMenuItem(text = { Text("Delete…") }, onClick = { menu = false; deletingId = recipe.id })
                     }
-                    IconButton(onClick = { onEdit(recipe) }) { Icon(Icons.Default.Edit, contentDescription = "Edit") }
-                    IconButton(onClick = { onFolder(recipe.url) }) { Icon(Icons.Default.CreateNewFolder, contentDescription = "Add as folder") }
-                    IconButton(onClick = { deleting = recipe }) { Icon(Icons.Default.Delete, contentDescription = "Delete") }
                 }
             }
         }
-        if (favourites.isNotEmpty()) item("h2") { Text("Favourites from sites", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp)) }
+        if (favourites.isNotEmpty()) item("h2") { SectionHeader("Favourites", Modifier.padding(top = 8.dp)) }
         items(favourites, key = { "fav-" + it.url }) { recipe ->
-            Card(onClick = { onOpen(recipe) }) {
-                Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(MaterialTheme.shapes.medium))
-                    nl.baskt.ui.common.TranslatedLabel(recipe.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    IconButton(onClick = { viewModel.toggleRecipeFavourite(recipe) }) { Icon(Icons.Default.Favorite, contentDescription = "Remove favourite", tint = MaterialTheme.colorScheme.primary) }
-                    IconButton(onClick = { onFolder(recipe.url) }) { Icon(Icons.Default.CreateNewFolder, contentDescription = "Add as folder") }
-                }
+            RecipeCard(recipe.title, null, recipe.imageUrl, onOpen = { onOpen(recipe) }) {
+                FavouriteToggle(true) { onFavourite(recipe) }
+                AddToBasketButton { onAdd(recipe) }
             }
         }
         if (recent.isNotEmpty()) item("h3") {
-            Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Recently viewed", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
-                TextButton(onClick = { viewModel.clearRecentRecipes() }) { Text("Clear") }
+            SectionHeader("Recently viewed", Modifier.padding(top = 8.dp)) {
+                TextButton(onClick = {
+                    val removed = recent
+                    viewModel.clearRecentRecipes()
+                    viewModel.notifyUndo("Removed ${counted(removed.size, "recently viewed recipe")}") { viewModel.restoreRecentRecipes(removed) }
+                }) { Text("Remove all") }
             }
         }
         items(recent, key = { "recent-" + it.url }) { recipe ->
-            val own = recipe.url.startsWith("baskt://recipe/")
-            Card(onClick = { onOpen(recipe) }) {
-                Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (recipe.imageUrl != null) AsyncImage(model = recipe.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(64.dp).clip(MaterialTheme.shapes.medium))
-                    Column(modifier = Modifier.weight(1f)) {
-                        nl.baskt.ui.common.TranslatedLabel(recipe.displayTitle, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        if (recipe.source != null) Text(recipe.source, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    if (!own) IconButton(onClick = { viewModel.toggleRecipeFavourite(recipe) }) { Icon(if (isFavourite(recipe)) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = if (isFavourite(recipe)) "Remove from favourites" else "Add to favourites", tint = MaterialTheme.colorScheme.primary) }
-                    IconButton(onClick = { onFolder(recipe.url) }) { Icon(Icons.Default.CreateNewFolder, contentDescription = "Add as folder") }
-                }
+            RecipeCard(recipe.displayTitle, if (recipe.source == "Mine") "My recipes" else recipe.source, recipe.imageUrl, onOpen = { onOpen(recipe) }) {
+                if (!recipe.url.startsWith("baskt://recipe/")) FavouriteToggle(isFavourite(recipe)) { onFavourite(recipe) }
+                AddToBasketButton { onAdd(recipe) }
             }
         }
     }
 }
 
-/** The three coverage levels of the "from stock" slider, from strictest to loosest. */
+/** How much of a dish must be at home, strictest first: the server's key, the option's label, and what it means. */
 private val COVERAGE_LEVELS = listOf(
-    Triple("all", "Everything at home", "Only dishes that need nothing extra."),
-    Triple("most", "Most at home", "One or two small things may be missing."),
-    Triple("half", "At least half at home", "Buy the rest on the way."),
+    Triple("all", "All at home", "Only dishes that need nothing extra"),
+    Triple("most", "Most", "One or two small things may be missing"),
+    Triple("half", "Half", "You buy the rest"),
 )
+private val DISCOVER_MODES = listOf("stock" to "From stock", "new" to "New ideas", "cuisine" to "By country")
 private val NEW_STYLES = listOf("Vegetarian", "Vegan", "Healthy", "Comfort food", "Fish", "Spicy", "One pot")
 private val CUISINES = listOf("Italy", "Spain", "Mexico", "Japan", "India", "Thailand", "Greece", "Morocco", "France", "Netherlands", "Turkey", "Peru")
-private val TIME_LIMITS = listOf(15, 30, 45, 60)
+private val TIME_LIMITS = listOf<Int?>(null, 15, 30, 45, 60)
 
 /**
- * Discover: pick a mode (cook from stock, something new, a country's cuisine), tune its own parameters,
+ * Discover: pick a mode (cook from stock, something new, a country's cuisine), tune its own parameter,
  * cap the total time and order by best match or by speed.
  */
 @Composable
 private fun DiscoverPane(
-    params: nl.baskt.data.DiscoverParams,
-    dishes: List<nl.baskt.data.DiscoverDish>?,
+    params: DiscoverParams,
+    dishes: List<DiscoverDish>?,
     byTime: Boolean,
     busy: Boolean,
-    onParams: (nl.baskt.data.DiscoverParams) -> Unit,
+    onParams: (DiscoverParams) -> Unit,
     onByTime: (Boolean) -> Unit,
     onSearch: (String) -> Unit,
-    onOpenDish: (nl.baskt.data.DiscoverDish) -> Unit,
+    onOpenDish: (DiscoverDish) -> Unit,
     onRefresh: () -> Unit,
 ) {
     val shown = remember(dishes, byTime) {
         val list = (dishes ?: emptyList()).distinctBy { it.title }
         if (byTime) list.sortedWith(compareBy(nullsLast()) { it.minutes }) else list
     }
-    LazyColumn(contentPadding = PaddingValues(16.dp, 4.dp, 16.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(contentPadding = PaddingValues(Spacing.Screen, 12.dp, Spacing.Screen, Spacing.FabClearance), verticalArrangement = Arrangement.spacedBy(Spacing.ListGap)) {
         item("mode") {
-            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = params.mode == "stock", onClick = { onParams(params.copy(mode = "stock")) }, label = { Text("From stock") }, leadingIcon = { Icon(Icons.Default.Kitchen, contentDescription = null, modifier = Modifier.size(18.dp)) })
-                FilterChip(selected = params.mode == "new", onClick = { onParams(params.copy(mode = "new")) }, label = { Text("Something new") }, leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp)) })
-                FilterChip(selected = params.mode == "cuisine", onClick = { onParams(params.copy(mode = "cuisine")) }, label = { Text("By country") }, leadingIcon = { Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(18.dp)) })
-            }
+            ChoiceGroup(DISCOVER_MODES.map { it.second }, DISCOVER_MODES.indexOfFirst { it.first == params.mode }.coerceAtLeast(0), onSelect = { onParams(params.copy(mode = DISCOVER_MODES[it].first)) })
         }
         item("params") {
             when (params.mode) {
-                "stock" -> CoverageSlider(params.coverage) { onParams(params.copy(coverage = it)) }
+                "stock" -> CoverageChoice(params.coverage) { onParams(params.copy(coverage = it)) }
                 "new" -> Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = params.style == null, onClick = { onParams(params.copy(style = null)) }, label = { Text("Surprise me") })
                     for (style in NEW_STYLES) FilterChip(selected = params.style == style, onClick = { onParams(params.copy(style = if (params.style == style) null else style)) }, label = { Text(style) })
@@ -375,106 +465,85 @@ private fun DiscoverPane(
             }
         }
         item("time") {
-            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.Schedule, contentDescription = "Time", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                FilterChip(selected = params.maxMinutes == null, onClick = { onParams(params.copy(maxMinutes = null)) }, label = { Text("Any time") })
-                for (limit in TIME_LIMITS) FilterChip(selected = params.maxMinutes == limit, onClick = { onParams(params.copy(maxMinutes = if (params.maxMinutes == limit) null else limit)) }, label = { Text("≤ $limit min") })
-                FilterChip(selected = byTime, onClick = { onByTime(!byTime) }, label = { Text("Quickest first") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = null, modifier = Modifier.size(18.dp)) })
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DropdownPicker("Time", TIME_LIMITS, params.maxMinutes, optionLabel = { if (it == null) "Any time" else "Up to $it min" }, onPick = { onParams(params.copy(maxMinutes = it)) }, modifier = Modifier.weight(1f), placeholder = "Any time")
+                DropdownPicker("Sort by", listOf(false, true), byTime, optionLabel = { if (it) "Quickest first" else "Best match" }, onPick = onByTime, modifier = Modifier.weight(1f))
             }
         }
         if (busy) item("busy") {
-            Row(modifier = Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LoadingIndicator()
-                Text(when (params.mode) { "stock" -> "Thinking about what you can cook…"; "new" -> "Looking for something you have not tried…"; else -> "Picking classics from ${params.cuisine}…" })
-            }
-        } else if (!params.complete) item("hint") {
-            Text("Pick or type a country to see its classics.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))
-        } else if (dishes != null && dishes.isEmpty()) item("empty") {
-            nl.baskt.ui.common.EmptyState(
+            LoadingRow(
+                when (params.mode) { "stock" -> "Thinking about what you can cook…"; "new" -> "Looking for something new…"; else -> "Picking classics from ${params.cuisine}…" },
+                Modifier.padding(vertical = 24.dp),
+            )
+        } else if (params.complete && dishes != null && dishes.isEmpty()) item("empty") {
+            EmptyState(
                 title = "No ideas yet",
                 body = when {
-                    params.mode == "stock" -> "Add what you have at home under Stock, loosen the slider, or allow more time."
-                    params.maxMinutes != null -> "Nothing fits in ${params.maxMinutes} minutes. Allow more time or try another mode."
-                    else -> "Nothing came back. Try again in a moment."
+                    params.mode == "stock" -> "Add more to your stock, or ask for less of it to be at home"
+                    params.maxMinutes != null -> "Nothing fits in ${params.maxMinutes} minutes"
+                    else -> "Nothing came back this time"
                 },
                 icon = Icons.Default.Restaurant,
-            ) { TextButton(onClick = onRefresh) { Text("Try again") } }
+            ) { FilledTonalButton(onClick = onRefresh) { Text("Try again") } }
         }
         items(shown, key = { it.title }) { dish -> DishCard(dish, onSearch, onOpenDish) }
         if (!busy && shown.isNotEmpty()) item("refresh") {
-            TextButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) { nl.baskt.ui.common.IconLabel(Icons.Default.Refresh, "Other ideas") }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(onClick = onRefresh) { IconLabel(Icons.Default.Refresh, "Other ideas") } }
         }
     }
 }
 
-/** Three-step slider: everything at home, most at home, or at least half at home. */
+/** How much of a dish has to be at home already: three options, with one line saying what the chosen one means. */
 @Composable
-private fun CoverageSlider(coverage: String, onCoverage: (String) -> Unit) {
+private fun CoverageChoice(coverage: String, onCoverage: (String) -> Unit) {
     val index = COVERAGE_LEVELS.indexOfFirst { it.first == coverage }.coerceAtLeast(0)
-    var position by remember(index) { mutableFloatStateOf(index.toFloat()) }
-    val level = COVERAGE_LEVELS[position.toInt().coerceIn(0, COVERAGE_LEVELS.lastIndex)]
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-            Text("How much must be in stock?", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            Text(level.second, style = MaterialTheme.typography.titleMedium)
-            Text(level.third, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Slider(
-                value = position,
-                onValueChange = { position = it },
-                onValueChangeFinished = { onCoverage(COVERAGE_LEVELS[position.toInt().coerceIn(0, COVERAGE_LEVELS.lastIndex)].first) },
-                valueRange = 0f..COVERAGE_LEVELS.lastIndex.toFloat(),
-                steps = COVERAGE_LEVELS.size - 2,
-            )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("All", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("Most", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("Half", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("In stock", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ChoiceGroup(COVERAGE_LEVELS.map { it.second }, index, onSelect = { onCoverage(COVERAGE_LEVELS[it].first) })
+        Text(COVERAGE_LEVELS[index].third, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 /** A country or cuisine: common ones as chips, anything else typed in. */
 @Composable
 private fun CuisinePicker(cuisine: String?, onCuisine: (String?) -> Unit) {
-    var draft by remember(cuisine) { mutableStateOf(cuisine.orEmpty()) }
+    var draft by rememberSaveable(cuisine) { mutableStateOf(cuisine.orEmpty()) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-            value = draft,
-            onValueChange = { draft = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("A country or cuisine, e.g. Mexico or Sichuan") },
-            singleLine = true,
-            leadingIcon = { Icon(Icons.Default.Public, contentDescription = null) },
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { onCuisine(draft.trim().ifEmpty { null }) }),
-            trailingIcon = { if (draft.isNotBlank()) IconButton(onClick = { onCuisine(draft.trim().ifEmpty { null }) }) { Icon(Icons.Default.Check, contentDescription = "Use this country") } },
-        )
+        SearchField(value = draft, onValueChange = { draft = it }, placeholder = "Country or cuisine, e.g. Mexico", onSearch = { onCuisine(draft.trim().ifEmpty { null }) }, leadingIcon = Icons.Default.Public)
         Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (name in CUISINES) FilterChip(selected = cuisine.equals(name, ignoreCase = true), onClick = { onCuisine(name) }, label = { Text(name) })
         }
     }
 }
 
+/**
+ * A dish idea. One with a pictured recipe is a card you tap to open that recipe; one without is not tappable
+ * and carries a "Find recipes" button instead, so what a card does always shows.
+ */
 @Composable
-private fun DishCard(dish: nl.baskt.data.DiscoverDish, onSearch: (String) -> Unit, onOpen: (nl.baskt.data.DiscoverDish) -> Unit) {
-    // Tapping the card opens the pictured recipe itself when there is one; otherwise it just searches the dish.
-    Card(onClick = { if (dish.recipeUrl != null) onOpen(dish) else onSearch(dish.searchQuery) }) {
+private fun DishCard(dish: DiscoverDish, onSearch: (String) -> Unit, onOpen: (DiscoverDish) -> Unit) {
+    val content: @Composable () -> Unit = {
         if (dish.imageUrl != null) {
             AsyncImage(model = dish.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(140.dp))
         }
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                nl.baskt.ui.common.TranslatedLabel(dish.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Column(modifier = Modifier.padding(Spacing.Card), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TranslatedLabel(dish.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 dish.minutes?.let { Text("$it min", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
-            if (dish.source != null) Text("Photo: ${dish.source}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (dish.uses.isNotEmpty()) Text("Uses: ${dish.uses.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (dish.missing.isEmpty()) nl.baskt.ui.common.Tag("Everything in stock")
-                else for (item in dish.missing.take(4)) nl.baskt.ui.common.Tag("Need $item", color = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (dish.source != null && dish.imageUrl != null) Text("Photo from ${dish.source}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (dish.uses.isNotEmpty()) Text("From your stock: ${dish.uses.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (dish.missing.isEmpty()) Tag("Everything in stock")
+                else {
+                    for (item in dish.missing.take(3)) Tag("Need $item", color = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (dish.missing.size > 3) Tag("+${dish.missing.size - 3} more", color = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
-            TextButton(onClick = { onSearch(dish.searchQuery) }) { Text("Find recipes") }
+            if (dish.recipeUrl == null) Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                FilledTonalButton(onClick = { onSearch(dish.searchQuery) }) { Text("Find recipes") }
+            }
         }
     }
+    if (dish.recipeUrl != null) Card(onClick = { onOpen(dish) }) { content() } else Card { content() }
 }
