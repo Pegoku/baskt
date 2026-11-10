@@ -1,0 +1,5 @@
+<!-- Background of the static widget previews shown in the widget picker. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="?android:attr/colorBackground" />
+    <corners android:radius="16dp" />
+</shape>

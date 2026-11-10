@@ -7,4 +7,5 @@
     android:targetCellHeight="2"
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="1800000"
+    android:previewLayout="@layout/widget_basket_preview"
     android:widgetCategory="home_screen" />

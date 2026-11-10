@@ -46,6 +46,8 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Long-press shortcuts on the launcher icon: "Add an item" and "Dictate". -->
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
             <!-- Receipts shared from other apps (a PDF from the store app, a photo, a screenshot). -->
             <intent-filter android:label="@string/share_receipt_label">
                 <action android:name="android.intent.action.SEND" />

@@ -7,7 +7,10 @@ import androidx.activity.compose.ReportDrawnWhen
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import nl.baskt.data.SettingsStore
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.BasktNavigation
@@ -36,6 +39,9 @@ class MainActivity : ComponentActivity() {
             if (files.isNotEmpty()) {
                 viewModel.scanReceipt(files, null)
                 viewModel.openReceiptsRequest.value = true
+            } else {
+                // Say so instead of opening as if nothing was shared. The notice waits for the screen that shows it.
+                lifecycleScope.launch { viewModel.notices.subscriptionCount.first { it > 0 }; viewModel.notify("Couldn’t read the shared receipt") }
             }
             // A rotation recreates the activity with the same intent; make sure the receipt is not read twice.
             intent.action = null

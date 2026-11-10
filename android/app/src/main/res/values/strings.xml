@@ -3,6 +3,18 @@
     <string name="widget_basket_label">Basket</string>
     <string name="widget_quick_label">Quick add</string>
     <string name="share_receipt_label">Add receipt to baskt</string>
-    <string name="widget_basket_description">Your current basket: tap a line to check it off</string>
-    <string name="widget_quick_description">Add an idea or dictate your list</string>
+    <string name="widget_basket_description">Your basket: tap an item to check it off</string>
+    <string name="widget_quick_description">Add an item or dictate</string>
+    <string name="shortcut_add_short">Add an item</string>
+    <string name="shortcut_add_long">Add an item to your basket</string>
+    <string name="shortcut_dictate_short">Dictate</string>
+    <string name="shortcut_dictate_long">Dictate items</string>
+    <!-- Sample content of the widget previews in the widget picker. -->
+    <string name="widget_preview_title">Basket</string>
+    <string name="widget_preview_count">3 items</string>
+    <string name="widget_preview_item_1">Milk</string>
+    <string name="widget_preview_item_2">Bread</string>
+    <string name="widget_preview_item_3">Apples</string>
+    <string name="widget_add">Add</string>
+    <string name="widget_dictate">Dictate</string>
 </resources>

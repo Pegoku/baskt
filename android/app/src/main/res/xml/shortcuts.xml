@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press shortcuts on the launcher icon. They reuse the extras the widgets send. The debug build has its own copy (src/debug) because its package name differs. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="add_item"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_add"
+        android:shortcutShortLabel="@string/shortcut_add_short"
+        android:shortcutLongLabel="@string/shortcut_add_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="nl.baskt"
+            android:targetClass="nl.baskt.MainActivity">
+            <extra android:name="nl.baskt.FOCUS_INPUT" android:value="true" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="dictate"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_mic"
+        android:shortcutShortLabel="@string/shortcut_dictate_short"
+        android:shortcutLongLabel="@string/shortcut_dictate_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="nl.baskt"
+            android:targetClass="nl.baskt.MainActivity">
+            <extra android:name="nl.baskt.DICTATE" android:value="true" />
+        </intent>
+    </shortcut>
+</shortcuts>
