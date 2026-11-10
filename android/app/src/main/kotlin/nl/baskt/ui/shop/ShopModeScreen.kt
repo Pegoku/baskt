@@ -3,6 +3,7 @@ package nl.baskt.ui.shop
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,6 +83,7 @@ import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.ConfirmDialog
 import nl.baskt.ui.common.EmptyState
 import nl.baskt.ui.common.ItemThumb
+import nl.baskt.ui.common.ProductSheet
 import nl.baskt.ui.common.SectionHeader
 import nl.baskt.ui.common.SheetBody
 import nl.baskt.ui.common.Spacing
@@ -164,6 +166,10 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
     if (editCard) LoyaltyCardEditor(store, stores, card, onDismiss = { editCard = false }) { number -> viewModel.saveLoyaltyCard(store, number); editCard = false; if (number != null) showCard = true }
 
     /** Skipping and unchecking are both one tap or swipe away, so both act at once and offer an undo. */
+    // The product whose full sheet (large picture, price history, details) is open, from a row's picture or menu.
+    var viewing by remember { mutableStateOf<Product?>(null) }
+    viewing?.let { ProductSheet(it) { viewing = null } }
+
     fun skip(item: BasketItem) {
         viewModel.skip(item, true)
         viewModel.notifyUndo("Skipped “${item.text}”") { viewModel.restore(item, store) }
@@ -326,7 +332,10 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                 backgroundContent = { SwipeBackground(dismiss.dismissDirection, "Skip", Icons.Default.RemoveShoppingCart, destructive = false) },
                             ) {
                                 Surface {
-                                    val actions = if (item.isBought) emptyList() else listOf("Skip" to { skip(item) })
+                                    val actions = listOfNotNull(
+                                        product?.let { "View product" to { viewing = it } },
+                                        if (item.isBought) null else "Skip" to { skip(item) },
+                                    )
                                     TripRow(
                                         imageUrl = product?.imageUrl,
                                         title = (if (item.quantity > 1) "${item.quantity}× " else "") + (product?.title ?: item.text),
@@ -338,6 +347,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                         },
                                         checked = item.isBought,
                                         struck = item.isBought,
+                                        onOpen = product?.let { { viewing = it } },
                                         price = product?.let { (it.priceCents * item.quantity).euros() },
                                         // The whole row is the checkbox: one target, one action, so a tap can never toggle twice.
                                         modifier = Modifier
@@ -381,6 +391,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                 val label = scan.label
                                 val title = product?.title ?: label?.title ?: scan.barcode
                                 val actions = listOfNotNull(
+                                    product?.let { "View product" to { viewing = it } },
                                     // The relay needs every code on its item: a weighed label no store knows is linked by hand.
                                     if (relay && remaining.isNotEmpty()) "Link to item" to { linkingId = scan.id } else null,
                                     if (product == null && scan.synced) "Scan again" to { removeScan(scan); openScanner() } else null,
@@ -397,6 +408,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                         else -> "Waiting for connection"
                                     },
                                     price = product?.priceCents?.euros(),
+                                    onOpen = product?.let { { viewing = it } },
                                     modifier = Modifier.semantics { customActions = actions.map { (label, action) -> CustomAccessibilityAction(label) { action(); true } } },
                                     trailing = { RowMenu("More for $title", actions) },
                                 )
@@ -432,6 +444,7 @@ private fun TripRow(
     checked: Boolean? = null,
     struck: Boolean = false,
     price: String? = null,
+    onOpen: (() -> Unit)? = null,
     tags: (@Composable () -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
@@ -442,11 +455,15 @@ private fun TripRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (checked != null) Checkbox(checked = checked, onCheckedChange = null)
-        ItemThumb(imageUrl, contentDescription = null)
+        // The picture is its own button: it opens the product, while the rest of the row stays the checkbox.
+        ItemThumb(
+            imageUrl, contentDescription = if (onOpen != null) "View $title" else null, size = 48,
+            modifier = if (onOpen != null) Modifier.clip(MaterialTheme.shapes.medium).clickable(role = Role.Button, onClickLabel = "View product", onClick = onOpen) else Modifier,
+        )
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Column {
-                Text(title, style = MaterialTheme.typography.titleMedium, textDecoration = if (struck) TextDecoration.LineThrough else null, color = if (struck) quiet else MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (!subtitle.isNullOrBlank()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = quiet, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(title, style = MaterialTheme.typography.titleMedium, textDecoration = if (struck) TextDecoration.LineThrough else null, color = if (struck) quiet else MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (!subtitle.isNullOrBlank()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = quiet, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             tags?.invoke()
         }
