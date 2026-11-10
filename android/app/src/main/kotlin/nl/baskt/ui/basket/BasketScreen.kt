@@ -233,23 +233,6 @@ fun BasketScreen(viewModel: AppViewModel, onOpenItem: (String) -> Unit, onOpenGr
         viewModel.consumeLastAdded()
         if (added.inStock) viewModel.notify("“${added.text}” is in stock, so it’s skipped", "Unskip") { viewModel.skip(added, false) }
     }
-    val scanResult by viewModel.scanResult.collectAsState()
-    val searching by viewModel.searching.collectAsState()
-    val stock by viewModel.basket.stock.collectAsState()
-    if (scanResult != null || searching) {
-        val gtin = scanResult?.gtin
-        ScanResultSheet(
-            result = scanResult,
-            searching = searching,
-            stores = enabledStores,
-            stockEntryFor = { product -> stock.firstOrNull { it.productId == product.id || (gtin != null && it.barcode == gtin) } },
-            onDismiss = { viewModel.clearSearch() },
-            onAddToBasket = { product -> viewModel.addFromProduct(product); viewModel.clearSearch(); viewModel.notify("Added “${product.title}” to basket") },
-            onAddToStock = { product -> viewModel.addProductToStock(product, gtin); viewModel.clearSearch(); viewModel.notify("Added “${product.title}” to stock") },
-            onRemoveFromStock = { entry, product -> viewModel.removeStock(entry); viewModel.clearSearch(); viewModel.notifyUndo("Removed “${entry.text}” from stock") { viewModel.addProductToStock(product, gtin) } },
-            onSearchInstead = { viewModel.clearSearch(); onSearch() },
-        )
-    }
     val proposal by viewModel.voiceProposal.collectAsState()
     val interpreting by viewModel.interpreting.collectAsState()
     val transcript by viewModel.transcript.collectAsState()
@@ -811,56 +794,3 @@ internal fun NameDialog(title: String, initial: String, onDismiss: () -> Unit, o
     )
 }
 
-/**
- * After a barcode scan: the product at each store that knows the code, whether it is in stock, and the one
- * main action, adding it to the basket. The products are plain rows here, so no second sheet opens on top.
- */
-@Composable
-private fun ScanResultSheet(
-    result: nl.baskt.data.BarcodeResponse?,
-    searching: Boolean,
-    stores: List<StoreInfo>,
-    stockEntryFor: (nl.baskt.data.Product) -> nl.baskt.data.StockItem?,
-    onDismiss: () -> Unit,
-    onAddToBasket: (nl.baskt.data.Product) -> Unit,
-    onAddToStock: (nl.baskt.data.Product) -> Unit,
-    onRemoveFromStock: (nl.baskt.data.StockItem, nl.baskt.data.Product) -> Unit,
-    onSearchInstead: () -> Unit,
-) {
-    val found = result?.results?.mapNotNull { it.product } ?: emptyList()
-    val looking = searching || result == null
-    val primary = found.firstOrNull()
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        SheetBody(
-            title = when {
-                looking -> "Scanned product"
-                primary == null -> "Barcode not found"
-                else -> "Scanned product"
-            },
-            actions = {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-                if (!looking && primary == null) Button(onClick = onSearchInstead) { Text("Search by name") }
-                if (!looking && primary != null) Button(onClick = { onAddToBasket(primary) }) { Text("Add to basket") }
-            },
-        ) {
-            when {
-                looking -> LoadingRow("Looking up the barcode…")
-                primary == null -> Text("No store knows ${result?.gtin.orEmpty()}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                else -> {
-                    for (product in found) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            StoreBadge(product.store, stores)
-                            ProductLine(product)
-                        }
-                    }
-                    val inStock = stockEntryFor(primary)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(if (inStock != null) "In stock" else "Not in stock", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                        if (inStock != null) OutlinedButton(onClick = { onRemoveFromStock(inStock, primary) }) { Text("Remove from stock") }
-                        else OutlinedButton(onClick = { onAddToStock(primary) }) { Text("Add to stock") }
-                    }
-                }
-            }
-        }
-    }
-}

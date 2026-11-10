@@ -74,6 +74,8 @@ fun SearchScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (Strin
     var shownPerStore by remember(results?.query) { mutableStateOf(mapOf<String, Int>()) }
 
     LaunchedEffect(Unit) { viewModel.clearSearch() }
+    // Results belong to this visit: nothing lingers for the screen underneath or the next time search opens.
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { viewModel.clearSearch() } }
 
     // A product is "added" while an open item in the basket has it as its pick.
     val inBasket = items.filter { !it.isBought }.flatMap { item -> item.matches.mapNotNull { it.chosen?.id } }.toSet() + justAdded
