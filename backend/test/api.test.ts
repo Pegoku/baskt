@@ -418,6 +418,19 @@ describe("api", () => {
       body: JSON.stringify({ store: "AH", lines: [{ name: "AH CHOCOLADEMELK 1L", quantity: 1, totalPriceCents: 199, productId: match!.product!.id, itemId: id }] }),
     })).json()) as any;
     expect(saved.lines[0].itemId).toBe(id);
+    const stock = (await (await api("/stock")).json()) as any;
+    const purchased = stock.items.find((entry: any) => entry.productId === match!.product!.id);
+    expect(purchased.text).toBe(match!.product!.title);
+    expect(purchased.product.id).toBe(match!.product!.id);
+    const reordered = (await (await api("/basket/items/from-product", {
+      method: "POST", body: JSON.stringify({ productId: purchased.product.id }),
+    })).json()) as any;
+    await waitForMatched(reordered.id);
+    const reorderedBasket = (await (await api("/basket")).json()) as any;
+    const choice = reorderedBasket.items.find((entry: any) => entry.id === reordered.id).matches.find((entry: any) => entry.store === "AH");
+    expect(choice.chosen.id).toBe(purchased.product.id);
+    expect(choice.chosenBy).toBe("USER");
+    await api(`/basket/items/${reordered.id}`, { method: "DELETE" });
     let basket = (await (await api("/basket")).json()) as any;
     let item = basket.items.find((entry: any) => entry.id === id);
     expect(item.boughtAt).toBeGreaterThan(0);

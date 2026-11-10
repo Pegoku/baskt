@@ -228,7 +228,7 @@ fun StockScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                     viewModel.setRunningLow(live, low)
                     viewModel.notify(if (low) "“${live.title()}” is running low and in your basket" else "“${live.title()}” is no longer running low")
                 },
-                onAddToBasket = { viewModel.add(live.text, 1); viewModel.notify("Added “${live.title()}” to your basket"); openId = null },
+                onAddToBasket = { viewModel.addFromStock(live); viewModel.notify("Added “${live.title()}” to your basket"); openId = null },
                 onMove = { group -> viewModel.moveStock(live, group.key); viewModel.notify("Moved “${live.title()}” to ${group.label}") },
                 onRemove = {
                     viewModel.removeStock(live)

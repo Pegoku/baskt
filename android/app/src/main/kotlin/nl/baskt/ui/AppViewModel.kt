@@ -1081,7 +1081,16 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun switchBasket(id: String) = viewModelScope.launch { basket.switchBasket(id) }
-    fun refreshStock() = viewModelScope.launch { basket.refreshStock(); basket.refreshServerSettings() }
+    fun refreshStock() = viewModelScope.launch {
+        basket.refreshStock()
+        basket.refreshServerSettings()
+        repeat(10) {
+            if (basket.stock.value.none { it.searchPending }) return@launch
+            kotlinx.coroutines.delay(2_000)
+            basket.refreshStock()
+        }
+    }
+    fun addFromStock(item: StockItem) = viewModelScope.launch { basket.addFromStock(item) }
     fun addStock(text: String) = viewModelScope.launch {
         basket.addStock(text)
         // The server sorts free text into a category in the background; pick that up once it has had a moment.
@@ -1215,7 +1224,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     /** Running low puts it on the basket and keeps it in stock until it is bought again. */
     fun setRunningLow(item: StockItem, low: Boolean) = viewModelScope.launch {
         basket.updateStock(item, runningLow = low)
-        if (low && basket.items.value.none { !it.checked && it.text.equals(item.text, ignoreCase = true) }) basket.add(item.text, 1)
+        if (low && basket.items.value.none { !it.checked && it.text.equals(item.text, ignoreCase = true) }) basket.addFromStock(item)
     }
     fun setSkipInStock(enabled: Boolean) = viewModelScope.launch { basket.setSkipInStock(enabled) }
     fun addSkipped(group: BasketItem) = viewModelScope.launch { basket.addSkipped(group) }

@@ -632,7 +632,7 @@ export function markItemBought(itemId: string, store: string, productId: string 
     dealText: product?.dealText ?? null,
     purchasedAt: at,
   });
-  addStock({ text: item.parsedJson?.canonicalName ?? item.text, quantityText: product?.quantityText ?? null, productId: product?.id ?? null, imageUrl: product?.imageUrl ?? null, barcode: scanned?.barcode ?? null });
+  addStock({ text: product?.title ?? item.parsedJson?.canonicalName ?? item.text, quantityText: product?.quantityText ?? null, productId: product?.id ?? null, imageUrl: product?.imageUrl ?? null, barcode: scanned?.barcode ?? null });
   db().update(basketItems).set({ checked: true, boughtAt: at, assignedStore: store, updatedAt: now() }).where(eq(basketItems.id, item.id)).run();
   return { item: viewOf(item.id), purchase, line };
 }

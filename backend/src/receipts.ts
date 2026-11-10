@@ -237,7 +237,7 @@ function settleItems(lines: Array<{ itemId?: string | null; productId: string | 
   const products = new Map(productsByIds([...wanted.values()].filter((id): id is string => Boolean(id))).map((product) => [product.id, product]));
   for (const item of items) {
     const product = wanted.get(item.id) ? products.get(wanted.get(item.id)!) ?? null : null;
-    addStock({ text: item.parsedJson?.canonicalName ?? item.text, quantityText: product?.quantityText ?? null, productId: product?.id ?? null, imageUrl: product?.imageUrl ?? null });
+    addStock({ text: product?.title ?? item.parsedJson?.canonicalName ?? item.text, quantityText: product?.quantityText ?? null, productId: product?.id ?? null, imageUrl: product?.imageUrl ?? null });
     database.update(basketItems).set({ checked: true, boughtAt: at, assignedStore: store, updatedAt: now() }).where(eq(basketItems.id, item.id)).run();
   }
 }

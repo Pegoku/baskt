@@ -1,7 +1,7 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { chatJson } from "@/ai/client";
 import { db, newId, now } from "@/db";
-import { products, stock, type StockRow } from "@/db/schema";
+import { products, stock, type StockRow, type ProductRow } from "@/db/schema";
 import { aiConfigured } from "@/env";
 import { appLanguageName } from "@/db/settings";
 import { STOCK_CATEGORIES, categoryFromStore, isStockCategory, type StockCategory } from "@/stock-categories";
@@ -25,7 +25,9 @@ export function addStock(
 ): StockRow {
   const data: StockInput =
     typeof input === "string" ? { text: input, quantityText } : input;
-  const canonical = normalizeText(data.text);
+  const product = data.productId ? db().select().from(products).where(eq(products.id, data.productId)).get() : null;
+  const text = product?.title ?? data.text.trim();
+  const canonical = normalizeText(text);
   const rows = listStock();
   const existing = rows.find(
     (row) =>
@@ -34,6 +36,8 @@ export function addStock(
       row.canonical === canonical,
   );
   const patch = {
+    text,
+    canonical,
     quantityText: data.quantityText ?? existing?.quantityText ?? null,
     productId: data.productId ?? existing?.productId ?? null,
     imageUrl: data.imageUrl ?? existing?.imageUrl ?? null,
@@ -51,8 +55,6 @@ export function addStock(
   }
   const row: StockRow = {
     id: newId(),
-    text: data.text.trim(),
-    canonical,
     ...patch,
     category: null,
     categorySource: null,
@@ -78,9 +80,9 @@ export function stockForProduct(
   );
 }
 
-export type StockView = StockRow & { category: StockCategory | null; runningLow: boolean; searchTerms: string };
+export type StockView = StockRow & { category: StockCategory | null; runningLow: boolean; searchTerms: string; product: ProductRow | null; searchPending: boolean };
 
-type LinkedProduct = { category: StockCategory | null; words: string };
+type LinkedProduct = { category: StockCategory | null; words: string; product: ProductRow };
 
 /** The store product behind each linked stock row: its aisle folded onto the stock groups, and its full title. */
 function linkedProducts(rows: StockRow[]) {
@@ -88,12 +90,12 @@ function linkedProducts(rows: StockRow[]) {
   const map = new Map<string, LinkedProduct>();
   if (!ids.length) return map;
   const found = db()
-    .select({ id: products.id, category: products.category, title: products.title, brand: products.brand })
+    .select()
     .from(products)
     .where(inArray(products.id, ids))
     .all();
   for (const product of found) {
-    map.set(product.id, { category: categoryFromStore(product.category), words: [product.brand, product.title].filter(Boolean).join(" ") });
+    map.set(product.id, { product, category: categoryFromStore(product.category), words: [product.brand, product.title].filter(Boolean).join(" ") });
   }
   return map;
 }
@@ -103,8 +105,8 @@ function linkedProducts(rows: StockRow[]) {
  * ("tuna atun tonijn fish canned") plus the linked product's own title ("Statesman Tonijnstukken in olijfolie").
  */
 function searchWords(row: StockRow, product: LinkedProduct | null) {
-  const words = new Set(tokenize(`${row.searchTerms ?? ""} ${product?.words ?? ""}`));
-  for (const token of tokenize(row.text)) words.delete(token);
+  const words = new Set(expandTokens(tokenize(`${row.text} ${row.searchTerms ?? ""} ${product?.words ?? ""}`)));
+  for (const token of tokenize(product?.product.title ?? row.text)) words.delete(token);
   return [...words].join(" ");
 }
 
@@ -115,7 +117,7 @@ export function stockView(rows: StockRow[] = listStock()): StockView[] {
     const product = row.productId ? linked.get(row.productId) ?? null : null;
     const stored = isStockCategory(row.category) ? row.category : null;
     const category = row.categorySource === "manual" ? stored : product?.category ?? stored;
-    return { ...row, category, runningLow: row.lowAt != null, searchTerms: searchWords(row, product) };
+    return { ...row, text: product?.product.title ?? row.text, quantityText: product?.product.quantityText ?? row.quantityText, imageUrl: product?.product.imageUrl ?? row.imageUrl, product: product?.product ?? null, category, runningLow: row.lowAt != null, searchTerms: searchWords(row, product), searchPending: !row.searchTerms && aiConfigured() };
   });
 }
 
@@ -174,7 +176,7 @@ export function tagStockForSearch(): Promise<void> {
   if (tagging) return tagging;
   tagging = (async () => {
     if (!aiConfigured()) return;
-    const untagged = listStock().filter((row) => row.searchTerms == null);
+    const untagged = listStock().filter((row) => !row.searchTerms);
     const languages = [...new Set(["English", "Spanish", "Dutch", appLanguageName()])].join(", ");
     for (let start = 0; start < untagged.length; start += TAG_BATCH) {
       const batch = untagged.slice(start, start + TAG_BATCH);
@@ -191,6 +193,7 @@ export function tagStockForSearch(): Promise<void> {
       for (const [index, row] of batch.entries()) {
         const words = answer[String(index + 1)];
         const terms = typeof words === "string" ? tokenize(words).slice(0, 40).join(" ") : "";
+        if (!terms) continue;
         db().update(stock).set({ searchTerms: terms }).where(eq(stock.id, row.id)).run();
       }
     }
