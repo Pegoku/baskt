@@ -1,47 +1,54 @@
 package nl.baskt.ui.orders
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.ShoppingBag
-import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -50,39 +57,51 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import nl.baskt.data.BasketItem
+import nl.baskt.data.Product
 import nl.baskt.data.PurchaseLine
 import nl.baskt.data.PurchaseWithLines
+import nl.baskt.data.StoreInfo
 import nl.baskt.data.euros
 import nl.baskt.ui.AppViewModel
+import nl.baskt.ui.common.EmptyState
+import nl.baskt.ui.common.IconLabel
+import nl.baskt.ui.common.OfflineBanner
+import nl.baskt.ui.common.PhotoPlaceholder
 import nl.baskt.ui.common.ProductThumb
+import nl.baskt.ui.common.SheetBody
+import nl.baskt.ui.common.Spacing
 import nl.baskt.ui.common.StoreLogo
+import nl.baskt.ui.common.counted
+import nl.baskt.ui.common.storeName
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
 
 private fun dayOf(at: Long): LocalDate = Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault()).toLocalDate()
 
 /**
- * Previous orders, one day at a time: what was ticked off or scanned in the store (and scanned receipts), grouped
+ * Orders, one day at a time: what was checked off or scanned in the store (and scanned receipts), grouped
  * by store. Swiping, the arrows and the calendar only land on days something was bought. Every line can go straight
- * back on the list, one at a time or a whole purchase at once.
+ * back in the basket, one at a time or a whole order at once.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,18 +115,20 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val products = history?.products ?: emptyMap()
     val pendingScans = tripScans.filter { !it.synced }
     val days = (purchases.map { dayOf(it.purchase.purchasedAt) } + pendingScans.map { dayOf(it.at) }).distinct().sorted()
-    var selected by remember { mutableStateOf<LocalDate?>(null) }
-    LaunchedEffect(days) { if (selected == null || selected !in days) selected = days.lastOrNull() }
-    val day = selected
+    // Saved as plain values (a day number, line ids) so the day on show and an open question survive rotation.
+    var selectedDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    val day = selectedDay?.let(LocalDate::ofEpochDay)
+    fun select(on: LocalDate?) { selectedDay = on?.toEpochDay() }
+    LaunchedEffect(days) { if (day == null || day !in days) select(days.lastOrNull()) }
     val index = days.indexOf(day)
     val previous = days.getOrNull(index - 1)
     val next = if (index >= 0) days.getOrNull(index + 1) else null
-    var picking by remember { mutableStateOf(false) }
-    // Lines waiting on the "already in the basket" question, with the items they would land on.
-    var duplicateAsk by remember { mutableStateOf<Pair<List<PurchaseLine>, List<Pair<PurchaseLine, BasketItem>>>?>(null) }
+    var picking by rememberSaveable { mutableStateOf(false) }
+    // Ids of the lines waiting on the "already in your basket" question.
+    var duplicateAsk by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
+    fun alreadyIn(lines: List<PurchaseLine>) = lines.mapNotNull { line -> viewModel.basketItemFor(line, products)?.let { line to it } }
     fun addLines(lines: List<PurchaseLine>) {
-        val already = lines.mapNotNull { line -> viewModel.basketItemFor(line, products)?.let { line to it } }
-        if (already.isEmpty()) viewModel.addPurchaseLines(lines, products) else duplicateAsk = lines to already
+        if (alreadyIn(lines).isEmpty()) viewModel.addPurchaseLines(lines, products) else duplicateAsk = lines.map { it.id }
     }
 
     // One page per order day. Past the newest day the swipe carries on to the basket, as before.
@@ -118,7 +139,7 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         if ((pager.currentPage - index).let { it * it } > 1) pager.scrollToPage(index) else pager.animateScrollToPage(index)
     }
     // currentPage flips halfway through a swipe, so the arrows and calendar follow the finger, not the settle.
-    LaunchedEffect(pager) { snapshotFlow { pager.currentPage }.collect { page -> currentDays.getOrNull(page)?.let { selected = it } } }
+    LaunchedEffect(pager) { snapshotFlow { pager.currentPage }.collect { page -> currentDays.getOrNull(page)?.let { select(it) } } }
 
     val today = LocalDate.now()
     fun titleOf(on: LocalDate) = when (on) {
@@ -132,7 +153,7 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         val on = days[page]
         val dayPurchases = purchasesOn(on)
         val total = dayPurchases.sumOf { it.purchase.totalCents }
-        return listOfNotNull(if (total > 0) total.euros() else null, "${dayPurchases.sumOf { it.lines.size } + scansOn(on).size} items", if (days.size > 1) "${page + 1} of ${days.size} days" else null).joinToString(" · ")
+        return listOfNotNull(if (total > 0) total.euros() else null, counted(dayPurchases.sumOf { it.lines.size } + scansOn(on).size, "item")).joinToString(" · ")
     }
 
     if (picking && day != null) {
@@ -146,65 +167,64 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         )
         DatePickerDialog(
             onDismissRequest = { picking = false },
-            confirmButton = { TextButton(onClick = { state.selectedDateMillis?.let { selected = LocalDate.ofEpochDay(it / 86_400_000L) }; picking = false }) { Text("Show") } },
+            confirmButton = { TextButton(onClick = { state.selectedDateMillis?.let { select(LocalDate.ofEpochDay(it / 86_400_000L)) }; picking = false }) { Text("Show") } },
             dismissButton = { TextButton(onClick = { picking = false }) { Text("Cancel") } },
         ) { DatePicker(state = state, title = { Text("Days with orders", modifier = Modifier.padding(start = 24.dp, top = 16.dp)) }) }
     }
 
-    duplicateAsk?.let { (lines, already) ->
-        val single = already.singleOrNull()?.takeIf { lines.size == 1 }
-        AlertDialog(
-            onDismissRequest = { duplicateAsk = null },
-            title = { Text(if (single != null) "Already in the basket" else "Some are already in the basket") },
-            text = {
-                Text(
-                    if (single != null) "${single.second.text} is already on the list (×${single.second.quantity}). Add ${viewModel.purchaseQuantity(lines.single()).let { if (it == 1) "one" else "$it" }} more to it, or put it on the list as a new item?"
-                    else "${already.size} of these ${lines.size} items are already on the list: ${already.joinToString { it.second.text }}. Raise their quantity, or add them as new items?",
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { duplicateAsk = null; viewModel.addPurchaseLines(lines, products, bumpExisting = true) }) { Text(if (single != null) "+${viewModel.purchaseQuantity(lines.single())}" else "Raise quantity") }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = { duplicateAsk = null }) { Text("Cancel") }
-                    TextButton(onClick = { duplicateAsk = null; viewModel.addPurchaseLines(lines, products) }) { Text(if (single != null) "New item" else "New items") }
-                }
-            },
+    if (duplicateAsk.isNotEmpty()) {
+        val lines = purchases.flatMap { it.lines }.filter { it.id in duplicateAsk }
+        val already = alreadyIn(lines)
+        // The basket changed under the question (or the lines are gone): nothing left to ask.
+        if (already.isEmpty()) LaunchedEffect(Unit) { duplicateAsk = emptyList() }
+        else DuplicateSheet(
+            lines = lines,
+            already = already,
+            more = lines.singleOrNull()?.let { viewModel.purchaseQuantity(it) },
+            onDismiss = { duplicateAsk = emptyList() },
+            onAddNew = { duplicateAsk = emptyList(); viewModel.addPurchaseLines(lines, products) },
+            onAddMore = { duplicateAsk = emptyList(); viewModel.addPurchaseLines(lines, products, bumpExisting = true) },
         )
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
-                title = { Text("Previous orders") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to the list") } },
+                title = { Text("Orders") },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
                 actions = {
                     val account by viewModel.ahAccount.collectAsState()
                     LaunchedEffect(Unit) { if (account == null) viewModel.loadAhAccount() }
                     val importing by viewModel.importingReceipts.collectAsState()
-                    if (account?.connected == true) IconButton(onClick = { viewModel.importAhReceipts() }, enabled = !importing) {
-                        Icon(Icons.Default.Sync, contentDescription = "Get receipts from your AH account")
+                    if (account?.connected == true) TooltipBox(
+                        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
+                        tooltip = { PlainTooltip { Text("Get AH receipts") } },
+                        state = rememberTooltipState(),
+                    ) {
+                        IconButton(onClick = { viewModel.importAhReceipts() }, enabled = !importing) {
+                            if (importing) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            else Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = "Get AH receipts")
+                        }
                     }
-                    IconButton(onClick = { picking = true }, enabled = day != null) { Icon(Icons.Default.CalendarMonth, contentDescription = "Pick a day") }
+                    if (day != null) IconButton(onClick = { picking = true }) { Icon(Icons.Default.CalendarMonth, contentDescription = "Pick a day") }
                 },
             )
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            nl.baskt.ui.common.OfflineBanner(viewModel)
+            OfflineBanner(viewModel)
+            if (day == null) {
+                EmptyState("No orders yet", "What you check off or scan in a store shows up here, by day.", icon = Icons.Default.ShoppingBag, modifier = Modifier.fillMaxSize())
+                return@Column
+            }
             // Day stepper: only days with an order are reachable, so the arrows never land on an empty day.
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { selected = previous }, enabled = previous != null) { Icon(Icons.Default.ChevronLeft, contentDescription = "Earlier order day") }
+                IconButton(onClick = { select(previous) }, enabled = previous != null) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Earlier day") }
                 // The day labels ride along with the pages: each slides and fades by its distance from the scroll position.
                 var labelWidth by remember { mutableIntStateOf(0) }
-                Box(
-                    modifier = Modifier.weight(1f).height(56.dp).clipToBounds().onSizeChanged { labelWidth = it.width }
-                        .clickable(enabled = day != null) { picking = true },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (day == null) Text("No orders yet", style = MaterialTheme.typography.titleMedium)
-                    else for (page in (pager.currentPage - 1)..(pager.currentPage + 1)) {
+                Box(modifier = Modifier.weight(1f).height(56.dp).clipToBounds().onSizeChanged { labelWidth = it.width }, contentAlignment = Alignment.Center) {
+                    for (page in (pager.currentPage - 1)..(pager.currentPage + 1)) {
                         if (page !in days.indices) continue
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -219,41 +239,31 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                         }
                     }
                 }
-                IconButton(onClick = { selected = next }, enabled = next != null) { Icon(Icons.Default.ChevronRight, contentDescription = "Later order day") }
+                IconButton(onClick = { select(next) }, enabled = next != null) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Later day") }
             }
             HorizontalDivider()
-            if (day == null) {
-                nl.baskt.ui.common.EmptyState(
-                    "Nothing bought yet",
-                    "Items you tick off or scan in the in-store checklist land here, grouped by day.",
-                    icon = Icons.Default.ShoppingBag,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), key = { days[it].toEpochDay() }, verticalAlignment = Alignment.Top) { page ->
-                    val pageDay = days[page]
-                    val pageScans = scansOn(pageDay)
-                    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        for (entry in purchasesOn(pageDay)) {
-                            item(entry.purchase.id) { PurchaseCard(entry, products, stores, onAdd = { lines -> addLines(lines) }) }
-                        }
-                        if (pageScans.isNotEmpty()) {
-                            item("pending") {
-                                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Icon(Icons.Default.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            Text("Scanned, waiting for connection", style = MaterialTheme.typography.titleSmall)
-                                        }
-                                        for (scan in pageScans) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            StoreLogo(scan.store, stores, size = 20)
-                                            Text(scan.barcode, style = MaterialTheme.typography.bodyMedium)
-                                        }
+            HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), key = { days[it].toEpochDay() }, verticalAlignment = Alignment.Top) { page ->
+                val pageDay = days[page]
+                val pageScans = scansOn(pageDay)
+                LazyColumn(contentPadding = PaddingValues(start = Spacing.Screen, end = Spacing.Screen, top = 12.dp, bottom = 36.dp), verticalArrangement = Arrangement.spacedBy(Spacing.ListGap)) {
+                    for (entry in purchasesOn(pageDay)) {
+                        item(entry.purchase.id) { PurchaseCard(entry, products, stores, onAdd = { lines -> addLines(lines) }) }
+                    }
+                    if (pageScans.isNotEmpty()) {
+                        item("pending") {
+                            Card {
+                                Column(modifier = Modifier.padding(Spacing.Card), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Icon(Icons.Default.CloudOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("Scanned, waiting to sync", style = MaterialTheme.typography.titleSmall)
+                                    }
+                                    for (scan in pageScans) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        StoreLogo(scan.store, stores, size = 20)
+                                        Text(scan.product?.title ?: scan.label?.title ?: "Barcode ${scan.barcode}", style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                 }
                             }
                         }
-                        item("footer") { Spacer(Modifier.height(24.dp)) }
                     }
                 }
             }
@@ -261,44 +271,70 @@ fun OrdersScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     }
 }
 
+/**
+ * Asked when lines going back in the basket are already there: two choices, each named for what it does.
+ * Swiping the sheet away is "neither".
+ */
 @Composable
-private fun PurchaseCard(entry: PurchaseWithLines, products: Map<String, nl.baskt.data.Product>, stores: List<nl.baskt.data.StoreInfo>, onAdd: (List<PurchaseLine>) -> Unit) {
+private fun DuplicateSheet(lines: List<PurchaseLine>, already: List<Pair<PurchaseLine, BasketItem>>, more: Int?, onDismiss: () -> Unit, onAddNew: () -> Unit, onAddMore: () -> Unit) {
+    val single = already.singleOrNull()?.takeIf { lines.size == 1 }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        SheetBody(
+            title = "Already in your basket",
+            actions = {
+                OutlinedButton(onClick = onAddNew) { Text(if (single != null) "Add as new item" else "Add as new items") }
+                Button(onClick = onAddMore) { Text(if (single != null && more != null) "Add $more more" else "Add to existing") }
+            },
+        ) {
+            Text(
+                if (single != null) "“${single.second.text}” is in your basket ${single.second.quantity} ${if (single.second.quantity == 1) "time" else "times"}."
+                else "${already.size} of these ${counted(lines.size, "item")} are in your basket: ${already.joinToString { it.second.text }}.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PurchaseCard(entry: PurchaseWithLines, products: Map<String, Product>, stores: List<StoreInfo>, onAdd: (List<PurchaseLine>) -> Unit) {
     val purchase = entry.purchase
-    val time = Instant.ofEpochMilli(purchase.purchasedAt).atZone(ZoneId.systemDefault()).toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))
+    // The device's own 12 or 24 hour setting.
+    val time = android.text.format.DateFormat.getTimeFormat(LocalContext.current).format(Date(purchase.purchasedAt))
     Card {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(modifier = Modifier.padding(Spacing.Card), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StoreLogo(purchase.store, stores, size = 36)
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(stores.firstOrNull { it.code == purchase.store }?.name ?: purchase.store, style = MaterialTheme.typography.titleMedium)
+                    Text(storeName(purchase.store, stores), style = MaterialTheme.typography.titleMedium)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(if (purchase.source == "shop") Icons.Default.ShoppingBag else Icons.Default.Receipt, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text((when (purchase.source) { "shop" -> "In store"; "ah" -> "AH receipt"; else -> "Receipt" }) + " · $time · ${entry.lines.size} items", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text((when (purchase.source) { "shop" -> "In store"; "ah" -> "AH receipt"; else -> "Receipt" }) + " · $time · ${counted(entry.lines.size, "item")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 Text(purchase.totalCents.euros(), style = MaterialTheme.typography.titleMediumEmphasized)
             }
             HorizontalDivider()
             for (line in entry.lines) LineRow(line, products[line.productId], onAdd = { onAdd(listOf(line)) })
-            if (entry.lines.size > 1) TextButton(onClick = { onAdd(entry.lines) }, modifier = Modifier.align(Alignment.End)) {
-                nl.baskt.ui.common.IconLabel(Icons.Default.AddShoppingCart, "Add all to basket")
+            if (entry.lines.size > 1) FilledTonalButton(onClick = { onAdd(entry.lines) }, modifier = Modifier.align(Alignment.End)) {
+                IconLabel(Icons.Default.AddShoppingCart, "Add all to basket")
             }
         }
     }
 }
 
 @Composable
-private fun LineRow(line: PurchaseLine, product: nl.baskt.data.Product?, onAdd: () -> Unit) {
+private fun LineRow(line: PurchaseLine, product: Product?, onAdd: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (product != null) ProductThumb(product, size = 40)
-        else Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (product != null) ProductThumb(product, size = 40) else PhotoPlaceholder(40)
         Column(modifier = Modifier.weight(1f)) {
+            // A line that only knows its barcode gets a name a person can read, with the code as the detail.
+            val unknown = line.barcode != null && line.name == line.barcode
             val qty = if (line.quantity > 1.0) "${line.quantity.let { if (it % 1.0 == 0.0) it.toInt().toString() else it.toString() }}× " else ""
-            Text(qty + line.name, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            val detail = listOfNotNull(product?.quantityText, line.dealText, if (line.barcode != null && line.name == line.barcode) "Unknown product · barcode only" else null).joinToString(" · ")
+            Text(qty + if (unknown) "Unknown product" else line.name, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            val detail = listOfNotNull(product?.quantityText, line.dealText, if (unknown) "Barcode ${line.barcode}" else null).joinToString(" · ")
             if (detail.isNotBlank()) Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(if (line.totalPriceCents > 0) line.totalPriceCents.euros() else "—", style = MaterialTheme.typography.bodyMediumEmphasized)
-        IconButton(onClick = onAdd) { Icon(Icons.Default.AddShoppingCart, contentDescription = "Add ${line.name} to the basket") }
+        if (line.totalPriceCents > 0) Text(line.totalPriceCents.euros(), style = MaterialTheme.typography.bodyMediumEmphasized)
+        FilledTonalButton(onClick = onAdd) { Text("Add") }
     }
 }

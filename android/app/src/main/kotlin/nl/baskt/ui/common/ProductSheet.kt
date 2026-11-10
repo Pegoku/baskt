@@ -5,10 +5,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import kotlinx.coroutines.launch
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -35,10 +44,11 @@ import nl.baskt.data.euros
 import nl.baskt.data.dealPricing
 import nl.baskt.data.unitPriceLabel
 
+/** A picture that opens full screen when tapped, where it can be zoomed. */
 @Composable
 fun ZoomableImage(url: String, title: String, modifier: Modifier = Modifier) {
-    var zoomed by remember { mutableStateOf(false) }
-    AsyncImage(url, contentDescription = "Enlarge $title", modifier = modifier.clickable { zoomed = true })
+    var zoomed by rememberSaveable(url) { mutableStateOf(false) }
+    AsyncImage(url, contentDescription = title, modifier = modifier.clickable(role = Role.Button, onClickLabel = "Enlarge the picture") { zoomed = true })
     if (zoomed) ImageViewer(url, title) { zoomed = false }
 }
 
@@ -91,64 +101,145 @@ private fun ImageViewer(url: String, title: String, onDismiss: () -> Unit) {
                 AsyncImage(url, title, modifier = Modifier.fillMaxWidth().aspectRatio(1f).zIndex(1f)
                     .onGloballyPositioned { frame = it.boundsInRoot() }
                     .graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y })
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Text("Pinch or double-tap to zoom", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(onClick = onDismiss) { Text("Close image") }
+                Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) { Text("Close") }
             }
         }
     }
 }
 
+/**
+ * Everything about one product in one sheet: pictures, price, facts, description, and the button that puts it
+ * in the basket. "Similar products" and the details of a similar product are shown inside this same sheet,
+ * with a back arrow, so nothing ever opens on top of it.
+ */
 @Composable
 fun ProductSheet(product: Product, onDismiss: () -> Unit) {
     val container = (LocalContext.current.applicationContext as BasktApp).container
     val uri = LocalUriHandler.current
-    var detail by remember(product.id) { mutableStateOf<ProductDetail?>(null) }
-    var loading by remember(product.id) { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+    val stores by container.basket.stores.collectAsState()
+    // The product on show. Opening a similar product puts the one it came from on [trail], for the way back.
+    var current by remember(product.id) { mutableStateOf(product) }
+    val trail = remember(product.id) { mutableStateListOf<Product>() }
+    var similar by rememberSaveable(product.id) { mutableStateOf(false) }
+    var detail by remember(current.id) { mutableStateOf<ProductDetail?>(null) }
+    var loading by remember(current.id) { mutableStateOf(true) }
+    var failed by remember(current.id) { mutableStateOf(false) }
     var original by rememberSaveable(product.id) { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
-    var similar by rememberSaveable(product.id) { mutableStateOf(false) }
-    LaunchedEffect(product.id, retry) {
+    var added by remember(product.id) { mutableStateOf(setOf<String>()) }
+    LaunchedEffect(current.id, retry) {
         loading = true
-        val key = "product-detail-${product.id}"
+        failed = false
+        val key = "product-detail-${current.id}"
         detail = container.offline.load(key)
-        try { detail = container.api.productDetail(product.id).also { container.offline.save(key, it) } }
+        try { detail = container.api.productDetail(current.id).also { container.offline.save(key, it) } }
         catch (e: CancellationException) { throw e }
-        catch (_: Exception) { /* Keep saved product facts when offline. */ }
+        catch (_: Exception) { failed = true /* Saved product facts stay on show when offline. */ }
         finally { loading = false }
     }
-    val source = detail?.product ?: product
+    val source = detail?.product ?: current
     val texts = listOf(source.title, detail?.description.orEmpty(), source.quantityText, source.category.orEmpty(), source.dealText.orEmpty())
     val translation = rememberTranslation(texts, !original, descriptionIndices = listOf(1))
     val shown = if (!original && translation?.translated == true) translation.texts else texts
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxHeight(.92f).verticalScroll(rememberScrollState()).padding(20.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Product details", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                OriginalToggle(original) { original = !original }
+
+    fun add() {
+        added = added + source.id
+        scope.launch {
+            try { container.basket.addFromProduct(source) }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) {
+                added = added - source.id
+                container.basket.notices.tryEmit("Couldn’t add “${source.title}”")
             }
-            if (!original && translation?.translated != true) Text(if (translation == null) "Translating…" else "Translation unavailable · showing original", style = MaterialTheme.typography.labelSmall)
+        }
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        if (similar) {
+            SheetPage(title = "Similar products", onBack = { similar = false }) {
+                SimilarContent(source, onOpen = { next -> trail.add(current); current = next; similar = false })
+            }
+            return@ModalBottomSheet
+        }
+        SheetPage(
+            title = shown[0],
+            onBack = if (trail.isEmpty()) null else ({ current = trail.removeAt(trail.lastIndex); similar = true }),
+            titleTrailing = { OriginalToggle(original) { original = !original } },
+            actions = {
+                source.sourceUrl?.let { url -> TextButton(onClick = { uri.openUri(url) }) { Text("View at ${storeName(source.store, stores)}", maxLines = 1, overflow = TextOverflow.Ellipsis) } }
+                Button(onClick = { add() }, enabled = source.id !in added) { Text(if (source.id in added) "Added" else "Add to basket") }
+            },
+        ) {
+            if (!original && translation?.translated != true) Text(if (translation == null) "Translating…" else "Translation unavailable, showing the original", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             val images = (detail?.imageUrls?.takeIf { it.isNotEmpty() } ?: listOfNotNull(source.imageUrl)).distinct()
-            for (image in images) ZoomableImage(image, shown[0], Modifier.fillMaxWidth().height(220.dp))
-            Text(shown[0], style = MaterialTheme.typography.headlineSmall)
-            Text(listOfNotNull(source.brand, shown[2], source.priceCents.euros(), source.unitPriceLabel()).joinToString(" · "))
-            if (shown[3].isNotBlank()) Text(shown[3], color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (images.isNotEmpty()) ImagePager(images, shown[0])
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(source.priceCents.euros(), style = MaterialTheme.typography.titleLargeEmphasized)
+                if (source.regularPriceCents != null && source.regularPriceCents > source.priceCents) {
+                    Text(source.regularPriceCents.euros(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textDecoration = TextDecoration.LineThrough)
+                }
+                Spacer(Modifier.weight(1f))
+                StoreBadge(source.store, stores)
+            }
+            val facts = listOfNotNull(source.brand, shown[2].takeIf { it.isNotBlank() }, source.unitPriceLabel()).joinToString(" · ")
+            if (facts.isNotBlank()) Text(facts, style = MaterialTheme.typography.bodyMedium)
+            if (shown[3].isNotBlank()) Text(shown[3], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (shown[4].isNotBlank()) {
                 val deal = source.dealPricing()
-                Text(listOfNotNull(shown[4], deal?.let { "${it.count} for ${it.bundleCents.euros()} · ${it.label()}" }).joinToString(" · "), color = MaterialTheme.colorScheme.tertiary)
+                Text(listOfNotNull(shown[4], deal?.let { "${it.count} for ${it.bundleCents.euros()}" }, deal?.label()).joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.tertiary)
             }
+            // A product without a description shows none; only a load that failed says so and offers another go.
             if (shown[1].isNotBlank()) DescriptionText(shown[1])
-            else if (loading) Row(verticalAlignment = Alignment.CenterVertically) { LoadingIndicator(Modifier.size(24.dp)); Text("Loading description…") }
-            else {
-                Text("No additional description is available.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(onClick = { retry++ }) { Text("Try again") }
+            else if (loading) LoadingRow("Loading description…")
+            else if (failed) EmptyState("Couldn’t load the description", action = { FilledTonalButton(onClick = { retry++ }) { Text("Try again") } })
+            OutlinedButton(onClick = { similar = true }, modifier = Modifier.fillMaxWidth()) { IconLabel(Icons.Default.Storefront, "Similar products") }
+        }
+    }
+}
+
+/** A [SheetBody] page, with a back arrow before the title when the page was reached from another one in the same sheet. */
+@Composable
+private fun SheetPage(
+    title: String,
+    onBack: (() -> Unit)?,
+    titleTrailing: (@Composable RowScope.() -> Unit)? = null,
+    actions: (@Composable RowScope.() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    if (onBack == null) {
+        SheetBody(title = title, titleTrailing = titleTrailing, actions = actions, content = content)
+        return
+    }
+    Column {
+        Row(modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = Spacing.SheetSide, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+            Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            titleTrailing?.invoke(this)
+        }
+        SheetBody(actions = actions, content = content)
+    }
+}
+
+/** The product's pictures side by side: swipe between them, tap one to enlarge it. Dots show which one is up. */
+@Composable
+private fun ImagePager(images: List<String>, title: String) {
+    val pager = rememberPagerState { images.size }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        HorizontalPager(state = pager, pageSpacing = 12.dp, modifier = Modifier.fillMaxWidth()) { page ->
+            // White behind the photo: the stores ship them cut out on white.
+            Surface(shape = MaterialTheme.shapes.large, color = Color.White, modifier = Modifier.fillMaxWidth().height(220.dp)) {
+                ZoomableImage(images[page], title, Modifier.fillMaxSize().padding(8.dp))
             }
-            FilledTonalButton(onClick = { similar = true }, modifier = Modifier.fillMaxWidth()) {
-                nl.baskt.ui.common.IconLabel(Icons.Default.Storefront, "Find similar at other stores")
+        }
+        if (images.size > 1) Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.clearAndSetSemantics { contentDescription = "Picture ${pager.currentPage + 1} of ${images.size}" },
+        ) {
+            for (index in images.indices) {
+                Box(Modifier.size(8.dp).background(if (index == pager.currentPage) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.extraSmall))
             }
-            if (similar) SimilarSheet(source) { similar = false }
-            source.sourceUrl?.let { url -> TextButton(onClick = { uri.openUri(url) }) { Text("View original store page") } }
-            TextButton(onClick = onDismiss) { Text("Close") }
         }
     }
 }

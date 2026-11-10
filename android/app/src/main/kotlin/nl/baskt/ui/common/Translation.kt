@@ -2,15 +2,11 @@ package nl.baskt.ui.common
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import nl.baskt.BasktApp
 import nl.baskt.data.TranslationResponse
@@ -33,27 +29,25 @@ fun rememberTranslation(texts: List<String>, enabled: Boolean = true, descriptio
     return result
 }
 
+/**
+ * The one translation switch of a screen or sheet: on while texts are shown translated, off for the original
+ * wording. Callers keep "show original" as their state, so [showOriginal] is the switch turned off.
+ */
 @Composable
 fun OriginalToggle(showOriginal: Boolean, onToggle: () -> Unit) {
     val label = if (showOriginal) "Show translation" else "Show original"
     TooltipBox(positionProvider = TooltipDefaults.rememberTooltipPositionProvider(androidx.compose.material3.TooltipAnchorPosition.Above), tooltip = { PlainTooltip { Text(label) } }, state = rememberTooltipState()) {
-        IconButton(onClick = onToggle) {
-            Icon(if (showOriginal) Icons.Default.Translate else Icons.Default.Description, contentDescription = label)
+        IconToggleButton(checked = !showOriginal, onCheckedChange = { onToggle() }) {
+            Icon(Icons.Default.Translate, contentDescription = "Translate")
         }
     }
 }
 
+/** A longer text in the app language, or as written when [showOriginal] is on. The screen's one toggle decides, so there is no switch here. */
 @Composable
-fun TranslatedText(text: String, modifier: Modifier = Modifier, style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium) {
-    var original by rememberSaveable(text) { mutableStateOf(false) }
-    val translation = rememberTranslation(listOf(text), !original)
-    Column(modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(if (original) "Original" else if (translation?.translated == true) "Translated" else if (translation == null) "Translating…" else "Translation unavailable · showing original", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-            OriginalToggle(original) { original = !original }
-        }
-        Text(if (!original && translation?.translated == true) translation.texts[0] else text, style = style)
-    }
+fun TranslatedText(text: String, modifier: Modifier = Modifier, style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium, showOriginal: Boolean = false, color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified) {
+    val translation = rememberTranslation(listOf(text), !showOriginal)
+    Text(if (!showOriginal && translation?.translated == true) translation.texts[0] else text, modifier = modifier, style = style, color = color)
 }
 
 /** Compact previews use the same language; the detail sheet exposes the complete original. */
