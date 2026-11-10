@@ -31,7 +31,7 @@ import nl.baskt.ui.AppViewModel
 private const val STALLED_AFTER_MS = 10_000L
 
 /**
- * A short inset card, shaped like the list rows below it, for the states the shopper must know about:
+ * A short inset card, shaped like the list rows below it and on the same 16dp margins, for the states the shopper must know about:
  * offline (saved data is shown, edits wait in a queue), a change that failed to sync, or a queue that has
  * been draining for too long. Ordinary edits pass through the queue in a blink and say nothing.
  */
@@ -48,18 +48,17 @@ fun OfflineBanner(viewModel: AppViewModel) {
     }
     if (online && pending.isEmpty()) return
     if (draining && !stalled) return
-    val changes = { count: Int -> if (count == 1) "1 change" else "$count changes" }
     val message = when {
-        failed > 0 -> "${changes(failed)} didn't sync"
-        !online && pending.isNotEmpty() -> "Offline · ${changes(pending.size)} waiting"
+        failed > 0 -> "${counted(failed, "change")} didn’t sync"
+        !online && pending.isNotEmpty() -> "Offline · ${counted(pending.size, "change")} waiting to sync"
         !online -> "Offline · showing saved data"
-        else -> "Still sending ${changes(pending.size)}…"
+        else -> "${counted(pending.size, "change")} waiting to sync…"
     }
     val retry = !online || failed > 0
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = if (failed > 0) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
-        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = Spacing.Screen, end = Spacing.Screen, top = Spacing.ListGap),
     ) {
         Row(
             modifier = Modifier.padding(start = 12.dp, end = if (retry) 4.dp else 12.dp).heightIn(min = 40.dp),
@@ -68,7 +67,7 @@ fun OfflineBanner(viewModel: AppViewModel) {
         ) {
             Icon(if (online) Icons.Default.Sync else Icons.Default.CloudOff, contentDescription = null, modifier = Modifier.size(18.dp))
             Text(message, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-            if (retry) TextButton(onClick = { viewModel.retryConnection() }) { Text("Retry") }
+            if (retry) TextButton(onClick = { viewModel.retryConnection() }) { Text("Try again") }
         }
     }
 }

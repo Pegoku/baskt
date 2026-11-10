@@ -2,8 +2,28 @@ package nl.baskt.ui.home
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
@@ -31,11 +51,11 @@ private const val CommitFraction = 0.5f
 /** Drag back this far below the commit point before the gesture counts as un-committed again. */
 private const val CommitHysteresis = 0.1f
 
-/** The basket sits at this index; previous orders are the page to its left. */
+/** The basket sits at this index; orders are the page to its left. */
 private const val BasketPage = 1
 
 /**
- * Orders ← Basket → Plan as three pages of one pager. The pages lie side by side and follow the finger
+ * Orders ← Basket → Plan as three pages of one pager, with three small dots on top that show which one is open. The pages lie side by side and follow the finger
  * 1:1 with the stock pager fling, like the order days inside Orders: per-frame scaling, clipping and shadows on
  * whole screens, and composing a neighbour mid-gesture, made this swipe drop most of its frames. A single light
  * tick marks the point where letting go would navigate.
@@ -99,9 +119,12 @@ fun HomePager(
         }
     }
 
+    Column(Modifier.fillMaxSize()) {
+    PageDots(current = pager.currentPage, modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
     HorizontalPager(
         state = pager,
-        modifier = Modifier.fillMaxSize(),
+        // The dots above already took the status bar; without this every page's top bar would add it again.
+        modifier = Modifier.fillMaxWidth().weight(1f).consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)),
         beyondViewportPageCount = if (warm) 1 else 0,
         key = { it },
     ) { page ->
@@ -127,6 +150,29 @@ fun HomePager(
                 )
                 else -> PlanScreen(viewModel, active = pager.currentPage == 2 || pager.targetPage == 2, onBack = { go(BasketPage) }, onOpenItem = onOpenItem, onShop = onShop)
             }
+        }
+    }
+    }
+}
+
+/** The names of the three pages, in pager order. */
+private val PageNames = listOf("Orders", "Basket", "Plan")
+
+/**
+ * Three dots under the status bar: the only hint that Orders and Plan lie to the left and right of the basket.
+ * The current page's dot is a wider pill. They only inform (swiping and the buttons on each page navigate),
+ * so they stay small and are read out as one "Page 2 of 3" label.
+ */
+@Composable
+private fun PageDots(current: Int, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.padding(top = 4.dp, bottom = 2.dp).semantics(mergeDescendants = true) { contentDescription = "${PageNames[current]}, page ${current + 1} of ${PageNames.size}" },
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (page in PageNames.indices) {
+            val width by animateDpAsState(if (page == current) 18.dp else 6.dp, animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(), label = "dot")
+            Box(Modifier.size(width = width, height = 6.dp).clip(MaterialTheme.shapes.extraSmall).background(if (page == current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant))
         }
     }
 }

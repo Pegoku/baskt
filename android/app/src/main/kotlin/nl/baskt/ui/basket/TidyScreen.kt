@@ -1,68 +1,75 @@
-@file:OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 
 package nl.baskt.ui.basket
 
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.automirrored.outlined.Comment
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Deselect
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.outlined.LocalOffer
-import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.LocalOffer
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Job
 import nl.baskt.data.Deal
 import nl.baskt.data.DealSaving
 import nl.baskt.data.MergeDecision
@@ -72,30 +79,40 @@ import nl.baskt.data.TidySelection
 import nl.baskt.data.euros
 import nl.baskt.data.saving
 import nl.baskt.ui.AppViewModel
+import nl.baskt.ui.common.ChoiceGroup
+import nl.baskt.ui.common.EmptyState
 import nl.baskt.ui.common.ItemThumb
-import nl.baskt.ui.common.ProductRow
+import nl.baskt.ui.common.LoadingRow
+import nl.baskt.ui.common.SectionHeader
+import nl.baskt.ui.common.Spacing
 import nl.baskt.ui.common.StoreBadge
+import nl.baskt.ui.common.counted
 
 /**
- * Full-screen review of what the wand proposes: renames into the app language, merges of duplicates
- * nobody decided about, promotions to take. Every proposal starts ticked; untick to keep things as they
+ * Full-screen review of what a tidy-up would change: renames into the app language, merges of duplicates
+ * nobody decided about, deals to take. Every change starts ticked; untick one to leave things as they
  * are. Nothing changes until Apply.
  *
- * Comment mode (toggle in the top bar, on by default): hold or tap proposals to select them, then write
- * what should change. The assistant revises only the selected proposals and remembers wording corrections.
+ * Each row has one selection, its checkbox, and tapping the row ticks it. Saying what is wrong with a change is
+ * a separate, explicit action: the Comment button on the row opens the comment field for it (several rows can
+ * be marked), and the marked changes are then revised.
  */
 @Composable
 fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val plan by viewModel.tidy.collectAsState()
     val loading by viewModel.tidying.collectAsState()
+    val failed by viewModel.tidyFailed.collectAsState()
     val revising by viewModel.revising.collectAsState()
-    val commentMode by viewModel.tidyCommentMode.collectAsState()
     val stores by viewModel.basket.stores.collectAsState()
-    // The plan only carries ids, so the pictures come from the entries the list already holds.
+    // The plan only carries ids, so the pictures come from the items the basket already holds.
     val listed by viewModel.basket.items.collectAsState()
     val pictures = listed.associate { it.id to (it.anyProduct?.imageUrl ?: it.recipe?.imageUrl) }
     // The plan and the review state live in the view model: a rotation must neither refetch nor forget ticks.
-    LaunchedEffect(Unit) { if (viewModel.tidy.value == null && !viewModel.tidying.value) viewModel.planTidy() }
+    // Applying empties the plan, so the screen must not ask for a new one while that runs.
+    var applying by remember { mutableStateOf<Job?>(null) }
+    LaunchedEffect(Unit) { if (viewModel.tidy.value == null && !viewModel.tidying.value && applying == null) viewModel.planTidy() }
+    // Leave only once the changes were really made; the outcome message is posted at the same moment.
+    LaunchedEffect(applying) { applying?.let { it.join(); onBack() } }
     val review by viewModel.tidyReview.collectAsState()
 
     val renames = plan?.renames ?: emptyList()
@@ -103,10 +120,10 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val deals = plan?.deals ?: emptyList()
     val distinct = plan?.distinct ?: emptyList()
     val skipped = review.skipped
-    // Adding the amounts up is the default only when an entry already asked for more than one pack.
+    // Adding the amounts up is the default only when an item already asked for more than one pack.
     val summed = review.summed ?: merges.filter { it.quantity > it.keepQuantity && it.items.any { item -> item.quantity > 1 } }.map { "merge-${it.keepId}" }.toSet()
     val allKeys = renames.map { "rename-${it.id}" } + merges.map { "merge-${it.keepId}" }
-    // Promotions hang off the entry they belong to, most relevant first; none is chosen until the user picks one.
+    // Deals hang off the item they belong to, most relevant first; none is chosen until the user picks one.
     val dealsByItem = deals.groupBy { it.itemId }
     val chosenRenames = renames.filter { "rename-${it.id}" !in skipped }
     val chosenMerges = merges.filter { "merge-${it.keepId}" !in skipped }.map { MergeDecision(it, sumQuantities = "merge-${it.keepId}" in summed) }
@@ -114,26 +131,22 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
     val changes = chosenRenames.size + chosenMerges.size + chosenDeals.size
     val dealOnlyItems = dealsByItem.keys.filter { id -> renames.none { it.id == id } && merges.none { it.keepId == id } }
 
-    // Comment mode selection by proposal key; keys are stable across revisions.
-    val selection = review.selected.intersect(allKeys.toSet())
-    val allSelected = allKeys.isNotEmpty() && selection.size == allKeys.size
-    val commenting = commentMode && !loading && allKeys.isNotEmpty()
+    // The changes marked for a comment, by key; keys are stable across revisions.
+    val commented = review.selected.intersect(allKeys.toSet())
     fun tick(key: String) = viewModel.updateTidyReview { it.copy(skipped = if (key in it.skipped) it.skipped - key else it.skipped + key) }
-    fun select(key: String) = viewModel.updateTidyReview { it.copy(selected = if (key in it.selected) it.selected - key else it.selected + key) }
-    fun press(key: String) { if (commenting) select(key) else tick(key) }
-    fun hold(key: String) { if (!commentMode) viewModel.toggleTidyCommentMode(); viewModel.updateTidyReview { it.copy(selected = it.selected + key) } }
+    fun markForComment(key: String) = viewModel.updateTidyReview { it.copy(selected = if (key in it.selected) it.selected - key else it.selected + key) }
     fun setSummed(key: String, add: Boolean) = viewModel.updateTidyReview { it.copy(summed = if (add) summed + key else summed - key) }
     fun chooseDeal(itemId: String, productId: String?) = viewModel.updateTidyReview { it.copy(dealChoice = if (productId == null) it.dealChoice - itemId else it.dealChoice + (itemId to productId)) }
     fun comment(text: String) {
         viewModel.reviseTidy(
             TidySelection(
-                renames = renames.map { it.id }.filter { "rename-$it" in selection },
-                merges = merges.map { it.keepId }.filter { "merge-$it" in selection },
+                renames = renames.map { it.id }.filter { "rename-$it" in commented },
+                merges = merges.map { it.keepId }.filter { "merge-$it" in commented },
             ),
             text,
         )
     }
-    // What each entry buys now at that store, so a promotion can be priced against it per kilo or litre.
+    // What each item buys now at that store, so a deal can be priced against it per kilo or litre.
     fun currentPick(deal: Deal): Product? = listed.firstOrNull { it.id == deal.itemId }?.match(deal.store)?.effective
     val dealPicker: @Composable (String) -> Unit = { itemId ->
         dealsByItem[itemId]?.let { list ->
@@ -148,43 +161,43 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         }
     }
     fun apply() {
-        viewModel.applyTidy(chosenRenames, chosenMerges, chosenDeals)
         val parts = buildList {
-            if (chosenRenames.isNotEmpty()) add(if (chosenRenames.size == 1) "renamed 1 item" else "renamed ${chosenRenames.size} items")
+            if (chosenRenames.isNotEmpty()) add("renamed ${counted(chosenRenames.size, "item")}")
             val removed = chosenMerges.sumOf { it.merge.items.size - 1 }
-            if (removed > 0) add(if (removed == 1) "merged 1 duplicate" else "merged $removed duplicates")
-            if (chosenDeals.isNotEmpty()) add(if (chosenDeals.size == 1) "took 1 deal" else "took ${chosenDeals.size} deals")
+            if (removed > 0) add("merged ${counted(removed, "duplicate")}")
+            if (chosenDeals.isNotEmpty()) add("took ${counted(chosenDeals.size, "deal")}")
         }
-        if (parts.isNotEmpty()) viewModel.notify("Tidied up: " + parts.joinToString(", "))
-        onBack()
+        val job = viewModel.applyTidy(chosenRenames, chosenMerges, chosenDeals)
+        // Report it when the work is done, not when the button was pressed (and not at all if it was cut short).
+        job.invokeOnCompletion { cause -> if (cause == null && parts.isNotEmpty()) viewModel.notify("Tidied up: " + parts.joinToString(", ")) }
+        applying = job
+    }
+    val commentLabel = when {
+        commented.size != 1 -> "Comment on ${counted(commented.size, "change")}"
+        else -> "Comment on “" + (merges.firstOrNull { "merge-${it.keepId}" in commented }?.text ?: renames.firstOrNull { "rename-${it.id}" in commented }?.to.orEmpty()) + "”"
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
                 title = { Text("Tidy up") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.Close, contentDescription = "Close") } },
-                actions = {
-                    if (commenting) {
-                        IconButton(onClick = { viewModel.updateTidyReview { it.copy(selected = if (allSelected) emptySet() else allKeys.toSet()) } }) {
-                            Icon(if (allSelected) Icons.Default.Deselect else Icons.Default.SelectAll, contentDescription = if (allSelected) "Unselect all" else "Select all")
-                        }
-                    }
-                    if (!loading && allKeys.isNotEmpty()) {
-                        IconToggleButton(checked = commentMode, onCheckedChange = { viewModel.toggleTidyCommentMode() }) {
-                            Icon(if (commentMode) Icons.AutoMirrored.Filled.Comment else Icons.AutoMirrored.Outlined.Comment, contentDescription = if (commentMode) "Turn comment mode off" else "Turn comment mode on")
-                        }
-                    }
-                },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
             )
         },
         bottomBar = {
-            if (!loading && (allKeys.isNotEmpty() || dealOnlyItems.isNotEmpty())) {
-                Surface(tonalElevation = 3.dp, modifier = Modifier.imePadding()) {
-                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        AnimatedVisibility(visible = commenting) { CommentBar(selectedCount = selection.size, busy = revising, onSend = { comment(it) }) }
+            if (!loading && applying == null && (allKeys.isNotEmpty() || dealOnlyItems.isNotEmpty())) {
+                Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+                    // safeDrawing covers both the gesture bar and the keyboard, so Apply clears whichever is up.
+                    Column(
+                        modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)).padding(horizontal = Spacing.Screen, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        AnimatedVisibility(visible = commented.isNotEmpty()) {
+                            CommentBar(label = commentLabel, busy = revising, onSend = { comment(it) }, onCancel = { viewModel.updateTidyReview { it.copy(selected = emptySet()) } })
+                        }
                         Button(onClick = { apply() }, enabled = changes > 0 && !revising, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (changes == 0) "Nothing ticked" else if (changes == 1) "Apply 1 change" else "Apply $changes changes")
+                            Text(if (changes == 0) "Apply" else "Apply ${counted(changes, "change")}")
                         }
                     }
                 }
@@ -192,36 +205,35 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         },
     ) { padding ->
         when {
-            loading -> Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    LoadingIndicator()
-                    Text("Waving the wand over your list…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+            loading || applying != null -> Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                LoadingRow(if (applying != null) "Applying…" else "Checking your basket…")
             }
-            allKeys.isEmpty() && dealOnlyItems.isEmpty() -> nl.baskt.ui.common.EmptyState(
+            failed -> EmptyState(
+                title = "Couldn’t check your basket",
+                body = "Tidying up needs a connection.",
+                icon = Icons.Outlined.CloudOff,
+                modifier = Modifier.fillMaxSize().padding(padding),
+                action = { FilledTonalButton(onClick = { viewModel.planTidy() }) { Text("Try again") } },
+            )
+            allKeys.isEmpty() && dealOnlyItems.isEmpty() -> EmptyState(
                 title = "Nothing to tidy",
-                body = if (distinct.isNotEmpty()) "The look-alikes each have their own product, so they stay."
-                else "Every entry reads well" + (plan?.language?.takeIf { it.isNotBlank() }?.let { " in $it" } ?: "") + ", nothing repeats and there are no new deals.",
+                body = if (distinct.isNotEmpty()) "Similar items each have their own product, so they stay separate." else "No renames, duplicates or new deals found.",
                 icon = Icons.Default.CheckCircle,
                 modifier = Modifier.fillMaxSize().padding(padding),
             )
             else -> LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 16.dp)) {
                 val reply = plan?.reply
-                if (!reply.isNullOrBlank()) item { Text(reply, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.tertiary) }
-                item {
-                    Text(
-                        if (commenting) "Tap proposals to select them, then say what should change below." else "Untick anything you want to keep as it is.",
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                if (!reply.isNullOrBlank()) item { Text(reply, modifier = Modifier.padding(horizontal = Spacing.Screen, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium) }
+                // The one hint on this screen; the Comment button on each row explains itself.
+                if (allKeys.isNotEmpty()) item {
+                    Text("Untick a change to leave it out", modifier = Modifier.padding(horizontal = Spacing.Screen, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (merges.isNotEmpty()) {
-                    item { Subheader(if (merges.size == 1) "Merge duplicates" else "Merge ${merges.size} sets of duplicates") }
+                    item { Subheader("Duplicates") }
                     items(merges, key = { "merge-${it.keepId}" }) { merge ->
                         val key = "merge-${merge.keepId}"
                         val active = key !in skipped
-                        Proposal(key, checked = active, selected = key in selection, onPress = { press(key) }, onHold = { hold(key) }, onTick = { tick(key) },
+                        Proposal(checked = active, commented = key in commented, enabled = !revising, onTick = { tick(key) }, onComment = { markForComment(key) },
                             headline = merge.text,
                             imageUrl = pictures[merge.keepId],
                             supporting = {
@@ -229,15 +241,14 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                                     // Seeing the pictures side by side is the quickest way to tell a real duplicate from two different things.
                                     val thumbs = merge.items.mapNotNull { item -> pictures[item.id]?.let { item.text to it } }
                                     if (thumbs.size > 1) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        for ((text, url) in thumbs) ItemThumb(url, text, size = 36)
+                                        for ((text, url) in thumbs) ItemThumb(url, text)
                                     }
                                     Text(merge.items.joinToString(" · ") { it.text + if (it.quantity > 1) " ×${it.quantity}" else "" } + if (merge.reason.isNotBlank()) "\n${merge.reason}" else "")
-                                    if (active && !commenting) {
-                                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                                            SegmentedButton(selected = key !in summed, onClick = { setSummed(key, false) }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Keep one ×${merge.keepQuantity}") }
-                                            SegmentedButton(selected = key in summed, onClick = { setSummed(key, true) }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Add up ×${merge.quantity}") }
-                                        }
-                                    }
+                                    if (active) ChoiceGroup(
+                                        options = listOf("Keep one ×${merge.keepQuantity}", "Add up ×${merge.quantity}"),
+                                        selected = if (key in summed) 1 else 0,
+                                        onSelect = { setSummed(key, it == 1) },
+                                    )
                                     dealPicker(merge.keepId)
                                 }
                             },
@@ -245,15 +256,15 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                     }
                 }
                 if (renames.isNotEmpty()) {
-                    item { Subheader(if (renames.size == 1) "Rename" else "Rename ${renames.size} entries") }
+                    item { Subheader("Renames") }
                     items(renames, key = { "rename-${it.id}" }) { change ->
                         val key = "rename-${change.id}"
-                        Proposal(key, checked = key !in skipped, selected = key in selection, onPress = { press(key) }, onHold = { hold(key) }, onTick = { tick(key) },
-                            headline = change.to + (change.quantity?.let { "  ×$it" } ?: ""),
+                        Proposal(checked = key !in skipped, commented = key in commented, enabled = !revising, onTick = { tick(key) }, onComment = { markForComment(key) },
+                            headline = change.to + (change.quantity?.let { " ×$it" } ?: ""),
                             imageUrl = pictures[change.id],
                             supporting = {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    val detail = listOfNotNull(if (change.from != change.to) "was “${change.from}”" else null, change.reason?.takeIf { it.isNotBlank() }).joinToString("\n")
+                                    val detail = listOfNotNull(if (change.from != change.to) "Was “${change.from}”" else null, change.reason?.takeIf { it.isNotBlank() }).joinToString("\n")
                                     if (detail.isNotBlank()) Text(detail)
                                     dealPicker(change.id)
                                 }
@@ -262,11 +273,11 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                     }
                 }
                 if (dealOnlyItems.isNotEmpty()) {
-                    item { Subheader("Deals available") }
+                    item { Subheader("Deals") }
                     items(dealOnlyItems, key = { "deals-$it" }) { itemId ->
                         val list = dealsByItem.getValue(itemId)
                         ListItem(
-                            leadingContent = { ItemThumb(pictures[itemId] ?: list.first().product.imageUrl, list.first().itemText, size = 40) },
+                            leadingContent = { ItemThumb(pictures[itemId] ?: list.first().product.imageUrl, list.first().itemText) },
                             headlineContent = { Text(list.first().itemText) },
                             supportingContent = { dealPicker(itemId) },
                         )
@@ -274,7 +285,9 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 }
                 if (distinct.isNotEmpty()) {
                     item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
-                    item { Subheader("Kept apart") }
+                    item { Subheader("Kept separate") }
+                    // Said once for the whole section instead of under every row.
+                    item { Text("These look alike, but each has its own product.", modifier = Modifier.padding(horizontal = Spacing.Screen), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     items(distinct, key = { "distinct-" + it.items.joinToString("+") { item -> item.id } }) { entry ->
                         ListItem(
                             leadingContent = { Icon(Icons.Outlined.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
@@ -283,9 +296,10 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     val thumbs = entry.items.mapNotNull { item -> pictures[item.id]?.let { item.text to it } }
                                     if (thumbs.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        for ((text, url) in thumbs) ItemThumb(url, text, size = 36)
+                                        for ((text, url) in thumbs) ItemThumb(url, text)
                                     }
-                                    Text(entry.items.mapNotNull { it.product }.joinToString("\n") + "\nLook alike, but each has its own chosen product.")
+                                    val products = entry.items.mapNotNull { it.product }
+                                    if (products.isNotEmpty()) Text(products.joinToString("\n"))
                                 }
                             },
                         )
@@ -297,8 +311,9 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
 }
 
 /**
- * "3 deals available" for one entry, most relevant first. Tapping expands the list; a deal is only taken
- * when its radio is chosen, and choosing it again clears the choice.
+ * "3 deals available" for one item, most relevant first. Tapping the line expands the options: "No deal"
+ * (the default) and one row per deal. They are radio buttons, so exactly one is always chosen and tapping
+ * anywhere on a row chooses it; nothing in a row opens another sheet.
  */
 @Composable
 private fun DealPicker(
@@ -311,14 +326,14 @@ private fun DealPicker(
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     val allSavings = deals.associate { it.product.id to it.saving(currentFor(it)) }
-    // A promotion that costs more than what the entry buys now is no deal for it, so it is not offered.
+    // A deal that costs more than what the item buys now is no deal for it, so it is not offered.
     val deals = deals.filter { !allSavings.getValue(it.product.id).worse }
     if (deals.isEmpty()) return
     val savings = allSavings.filterKeys { id -> deals.any { it.product.id == id } }
     val best = savings.values.mapNotNull { it.percentOff }.maxOrNull()
     Column {
         Row(
-            modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button, onClickLabel = if (expanded) "Hide deals" else "Show deals") { expanded = !expanded },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -326,28 +341,37 @@ private fun DealPicker(
             Text(
                 when {
                     chosen != null -> "Deal chosen: " + (deals.firstOrNull { it.product.id == chosen }?.product?.title ?: "")
-                    deals.size == 1 -> "1 deal available" + (best?.let { " · save $it%" } ?: "")
-                    else -> "${deals.size} deals available" + (best?.let { " · save up to $it%" } ?: "")
+                    else -> "${counted(deals.size, "deal")} available" + (best?.let { if (deals.size == 1) " · save $it%" else " · save up to $it%" } ?: "")
                 },
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = if (expanded) "Hide deals" else "Show deals", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         AnimatedVisibility(visible = expanded) {
-            Column {
+            Column(modifier = Modifier.selectableGroup()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(selected = chosen == null, role = Role.RadioButton, onClick = { onChoose(null) }),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    RadioButton(selected = chosen == null, onClick = null)
+                    Text("No deal", style = MaterialTheme.typography.bodyMedium)
+                }
                 for (deal in deals) {
                     val selected = deal.product.id == chosen
                     Row(
-                        modifier = Modifier.fillMaxWidth().clickable { onChoose(if (selected) null else deal.product.id) }.padding(vertical = 4.dp),
+                        modifier = Modifier.fillMaxWidth().selectable(selected = selected, role = Role.RadioButton, onClick = { onChoose(deal.product.id) }).padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        RadioButton(selected = selected, onClick = { onChoose(if (selected) null else deal.product.id) })
+                        RadioButton(selected = selected, onClick = null)
                         Column(modifier = Modifier.weight(1f)) {
                             StoreBadge(deal.store, stores)
-                            ProductRow(deal.product, modifier = Modifier.padding(top = 4.dp), dealMath = false)
+                            ProductLine(deal.product, modifier = Modifier.padding(top = 4.dp), dealMath = false)
                             val saving = savings.getValue(deal.product.id)
                             if (saving.worthShowing()) SavingStrip(saving, quantity)
                         }
@@ -369,10 +393,10 @@ private fun SavingStrip(saving: DealSaving, quantity: Int) {
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.primaryContainer,
-        modifier = Modifier.fillMaxWidth().padding(top = 6.dp, end = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = Spacing.Card, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -382,7 +406,7 @@ private fun SavingStrip(saving: DealSaving, quantity: Int) {
                         Text(
                             from.euros() + suffix,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
                             textDecoration = TextDecoration.LineThrough,
                         )
                         Icon(
@@ -419,34 +443,41 @@ private fun SavingStrip(saving: DealSaving, quantity: Int) {
 
 @Composable
 private fun Subheader(text: String) {
-    Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp))
+    SectionHeader(text, modifier = Modifier.padding(start = Spacing.Screen, end = Spacing.Screen, top = 16.dp, bottom = 4.dp))
 }
 
-/** One proposal as a Material list item: checkbox to keep or drop it, selected colours in comment mode. */
+/**
+ * One proposed change as a Material list item. The row and its checkbox are one control: tapping anywhere
+ * ticks or unticks the change. The Comment button at the end is the separate, explicit way to say what is
+ * wrong with it; it stays lit while the change is marked for the comment being written.
+ */
 @Composable
 private fun Proposal(
-    key: String,
     checked: Boolean,
-    selected: Boolean,
-    onPress: () -> Unit,
-    onHold: () -> Unit,
+    commented: Boolean,
+    enabled: Boolean,
     onTick: () -> Unit,
+    onComment: () -> Unit,
     headline: String,
     imageUrl: String? = null,
-    overline: (@Composable () -> Unit)? = null,
     supporting: (@Composable () -> Unit)? = null,
 ) {
     ListItem(
-        modifier = Modifier.combinedClickable(onClick = onPress, onLongClick = onHold),
-        colors = ListItemDefaults.colors(containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface),
+        modifier = Modifier.toggleable(value = checked, role = Role.Checkbox, onValueChange = { onTick() }),
         leadingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = checked, onCheckedChange = { onTick() })
-                ItemThumb(imageUrl, headline, size = 40, modifier = Modifier.padding(start = 4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Checkbox(checked = checked, onCheckedChange = null)
+                ItemThumb(imageUrl, null)
             }
         },
-        overlineContent = overline,
         headlineContent = { Text(headline) },
         supportingContent = supporting,
+        trailingContent = {
+            TooltipBox(positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above), tooltip = { PlainTooltip { Text("Comment") } }, state = rememberTooltipState()) {
+                IconToggleButton(checked = commented, onCheckedChange = { onComment() }, enabled = enabled) {
+                    Icon(Icons.AutoMirrored.Outlined.Comment, contentDescription = "Comment on $headline")
+                }
+            }
+        },
     )
 }

@@ -1,12 +1,8 @@
 package nl.baskt.ui.basket
 
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.height
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -14,25 +10,25 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,6 +39,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,13 +51,20 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import nl.baskt.data.RecipeSuggestion
+import nl.baskt.ui.common.Spacing
+import nl.baskt.ui.common.Stepper
+import nl.baskt.ui.common.counted
 
 /**
- * The idea input with its autocomplete row.
- * Chips: tap fills the field, long-press starts multi-select; a recipe suggestion lists every ingredient.
+ * The add field with its suggestions.
+ *
+ * A suggestion chip fills the field when tapped. "Select several" above the chips turns them into tick
+ * chips, so a few suggestions (or the ingredients of a recipe) can be added in one go; the buttons for that
+ * take the place of the header, so the chips never move under the finger. The quantity stepper only shows
+ * once something is typed, on its own row, so the field keeps the full width.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -70,24 +75,29 @@ fun AddIdeaBar(
     onAdd: (String, Int) -> Unit,
     onAddGroup: (String, List<String>?) -> Unit,
     onAddMany: (List<String>) -> Unit,
-    placeholder: String = "Add an idea… e.g. halfvolle milk",
+    placeholder: String = "Add an idea, e.g. halfvolle melk",
     allowFolders: Boolean = true,
     onVoice: (() -> Unit)? = null,
     focusRequest: kotlinx.coroutines.flow.MutableStateFlow<Boolean>? = null,
 ) {
-    var text by remember { mutableStateOf("") }
+    // Saved across rotation: a half-typed idea, its quantity and the ticked suggestions must not vanish.
+    var text by rememberSaveable { mutableStateOf("") }
+    var quantity by rememberSaveable { mutableIntStateOf(1) }
+    var selecting by rememberSaveable { mutableStateOf(false) }
+    var selected by rememberSaveable(stateSaver = listSaver<Set<String>, String>(save = { it.toList() }, restore = { it.toSet() })) { mutableStateOf(setOf()) }
     val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     val wantsFocus = focusRequest?.collectAsState()?.value ?: false
     LaunchedEffect(wantsFocus) { if (wantsFocus) { focusRequester.requestFocus(); focusRequest.value = false } }
-    var quantity by remember { mutableIntStateOf(1) }
-    var selected by remember { mutableStateOf(setOf<String>()) }
     val chips = if (recipe != null) recipe.ingredients else suggestions
     if (selected.isNotEmpty() && selected.any { it !in chips }) selected = selected.filter { it in chips }.toSet()
+    val showChips = chips.isNotEmpty() && text.isNotBlank()
+    if (!showChips && selecting) selecting = false
 
     fun reset() {
         text = ""
         quantity = 1
         selected = emptySet()
+        selecting = false
     }
     fun submit() {
         val value = text.trim()
@@ -96,88 +106,77 @@ fun AddIdeaBar(
         reset()
     }
 
-    Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))) {
-            if (chips.isNotEmpty() && text.isNotBlank()) {
-                if (recipe != null) {
-                    Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "${recipe.title} · ${recipe.ingredients.size} ingredients",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    maxLines = if (recipe != null) 5 else 2,
+            if (showChips) {
+                // One row of fixed height above the chips: a caption and "Select several", or the actions for the ticked chips.
+                Row(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = Spacing.Screen),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 ) {
-                    for (chip in chips) {
-                        SelectableChip(
-                            text = chip,
-                            selected = chip in selected,
-                            onClick = {
-                                if (selected.isNotEmpty()) selected = if (chip in selected) selected - chip else selected + chip
-                                else {
-                                    text = chip
-                                    onTextChanged(chip)
-                                }
-                            },
-                            onLongClick = { selected = if (chip in selected) selected - chip else selected + chip },
-                        )
-                    }
-                }
-                // One stable action slot: selection never changes the suggestion panel's height.
-                Box(Modifier.fillMaxWidth().height(56.dp), contentAlignment = Alignment.CenterStart) {
-                    if (selected.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            val picked = chips.filter { it in selected }
-                            if (allowFolders) {
-                                FilledTonalButton(onClick = { onAddGroup(recipe?.title ?: text.trim(), picked); reset() }) { Text("Folder (${picked.size})", maxLines = 1) }
-                            }
-                            Button(onClick = { onAddMany(picked); reset() }) { Text("Add ${picked.size} separately", maxLines = 1) }
-                            TextButton(onClick = { selected = emptySet() }) { Text("Cancel", maxLines = 1) }
+                    if (selecting) {
+                        val picked = chips.filter { it in selected }
+                        TextButton(onClick = { selecting = false; selected = emptySet() }) { Text("Cancel", maxLines = 1) }
+                        if (allowFolders) {
+                            FilledTonalButton(onClick = { onAddGroup(recipe?.title ?: text.trim(), picked); reset() }, enabled = picked.isNotEmpty()) { Text("Add as folder", maxLines = 1) }
+                        }
+                        Button(onClick = { onAddMany(picked); reset() }, enabled = picked.isNotEmpty()) {
+                            Text(if (picked.isEmpty()) "Add" else if (allowFolders) "Add ${picked.size}" else "Add ${counted(picked.size, "item")}", maxLines = 1)
                         }
                     } else {
                         Text(
-                            "Tap to use · hold to select several",
-                            style = MaterialTheme.typography.labelSmall,
+                            if (recipe != null) "${recipe.title} · ${counted(recipe.ingredients.size, "ingredient")}" else "Suggestions",
+                            style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
                         )
+                        if (chips.size > 1) TextButton(onClick = { selecting = true }) { Text("Select several", maxLines = 1) }
+                    }
+                }
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.Screen),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    maxLines = if (recipe != null) 4 else 2,
+                ) {
+                    for (chip in chips) {
+                        if (selecting) {
+                            FilterChip(
+                                selected = chip in selected,
+                                onClick = { selected = if (chip in selected) selected - chip else selected + chip },
+                                label = { Text(chip, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                // The check mark's place is always there, so ticking a chip cannot reflow the rows.
+                                leadingIcon = { Box(Modifier.size(FilterChipDefaults.IconSize)) { if (chip in selected) Icon(Icons.Default.Check, contentDescription = null) } },
+                            )
+                        } else {
+                            SuggestionChip(onClick = { text = chip; onTextChanged(chip) }, label = { Text(chip, maxLines = 1, overflow = TextOverflow.Ellipsis) })
+                        }
                     }
                 }
             }
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.Screen, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 OutlinedTextField(
                     value = text,
-                    onValueChange = { text = it; onTextChanged(it) },
-                    // Enter adds the idea (Shift+Enter or a pasted list still gives new lines).
+                    onValueChange = { changed ->
+                        // The field wraps long ideas, so soft keyboards show Enter instead of Done. A single typed
+                        // line break therefore adds the idea; a pasted list (several characters at once) keeps its lines.
+                        val typedEnter = changed.length == text.length + 1 && changed.count { it == '\n' } == text.count { it == '\n' } + 1
+                        if (typedEnter) submit() else { text = changed; onTextChanged(changed) }
+                    },
+                    // A hardware Enter adds the idea too (Shift+Enter still gives a new line).
                     modifier = Modifier.weight(1f).focusRequester(focusRequester).onPreviewKeyEvent { event ->
                         if (event.type == KeyEventType.KeyDown && event.key == Key.Enter && !event.isShiftPressed) { submit(); true } else false
                     },
-                    placeholder = { Text(placeholder) },
+                    placeholder = { Text(placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     singleLine = false,
                     maxLines = 3,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { submit() }),
                 )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IconButton(onClick = { quantity += 1 }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Add, contentDescription = "One more") }
-                    Text("$quantity", style = MaterialTheme.typography.labelLarge)
-                    IconButton(onClick = { if (quantity > 1) quantity -= 1 }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Remove, contentDescription = "One less") }
-                }
                 if (text.isBlank() && onVoice != null) {
                     FilledIconButton(onClick = onVoice) { Icon(Icons.Default.Mic, contentDescription = "Dictate") }
                 } else {
@@ -186,24 +185,13 @@ fun AddIdeaBar(
                     }
                 }
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun SelectableChip(text: String, selected: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
-    Surface(
-        shape = MaterialTheme.shapes.small,
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),
-    ) {
-        Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            // Reserve the checkmark width so selecting a chip cannot reflow the FlowRow.
-            Box(Modifier.size(14.dp)) {
-                if (selected) Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            // Only once there is something to count, so an empty bar is just the field.
+            AnimatedVisibility(visible = text.isNotBlank()) {
+                Row(modifier = Modifier.fillMaxWidth().padding(start = Spacing.Screen, end = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Quantity", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    Stepper(value = "$quantity", onMinus = { if (quantity > 1) quantity -= 1 }, onPlus = { quantity += 1 }, minusEnabled = quantity > 1)
+                }
             }
-            Text(text, style = MaterialTheme.typography.labelLarge, color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface)
         }
     }
 }

@@ -7,10 +7,6 @@ import android.content.pm.PackageManager
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
@@ -48,37 +44,37 @@ fun rememberVoiceInput(viewModel: AppViewModel, prompt: String, onTranscript: (S
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
         }
         runCatching { speech.launch(intent) }.onFailure {
-            viewModel.notify("Speech recognition is not available")
+            viewModel.notify("Dictation isn’t available on this phone")
         }
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) recording = true else local()
+        if (granted) recording = true
+        else {
+            // Say why the other recogniser shows up, instead of switching without a word.
+            viewModel.notify("No microphone access: using the phone’s own dictation")
+            local()
+        }
     }
-    if (recording) DictationSheet(
-        onCancel = { recording = false },
+    // One sheet for both phases: it records, then stays open with a progress line while the clip is transcribed.
+    if (recording || transcribing) DictationSheet(
+        transcribing = transcribing,
+        onCancel = { job?.cancel(); recording = false; transcribing = false },
         onUnavailable = { recording = false; local() },
         onRecorded = { audio ->
-            recording = false
             transcribing = true
+            recording = false
             job = scope.launch {
                 val text = try { viewModel.container.api.transcribe(audio, language) }
                 catch (e: CancellationException) { throw e }
                 catch (_: Exception) { null }
                 finally { transcribing = false }
                 if (text == null) {
-                    viewModel.notify("Server dictation unavailable, using this phone")
+                    viewModel.notify("Couldn’t transcribe: using the phone’s own dictation")
                     local()
                 } else if (text.isNotBlank()) deliver(text)
-                else viewModel.notify("No speech detected. Please try again.")
+                else viewModel.notify("No speech heard")
             }
         },
-    )
-    if (transcribing) AlertDialog(
-        onDismissRequest = { job?.cancel(); transcribing = false },
-        title = { Text("Transcribing…") },
-        text = { LoadingIndicator() },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = { job?.cancel(); transcribing = false }) { Text("Cancel") } },
     )
     return {
         if (!recording && !transcribing) {
