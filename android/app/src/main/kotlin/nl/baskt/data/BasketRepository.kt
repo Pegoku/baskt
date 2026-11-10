@@ -145,7 +145,7 @@ class BasketRepository(
                                 updateTillCodes { list -> list.map { if (it.scanId == op.itemId) it.copy(scanId = null, itemId = ticked.id, title = ticked.text) else it } }
                                 kindLearnt(op.store, ticked.match(op.store)?.effective?.id, ticked.text, op.text)
                                 patchLocal(ticked.id) { ticked }
-                                notices.tryEmit("Ticked off “${ticked.text}”")
+                                notices.tryEmit("Checked off “${ticked.text}”")
                                 tickedByBarcode.update { it + ((productGtin(op.text) ?: op.text) to ticked.id) }
                             } else {
                                 tripScans.update { list -> list.map { if (it.id == op.itemId) it.copy(product = result.product ?: it.product, synced = true) else it } }
@@ -234,9 +234,9 @@ class BasketRepository(
                     // Deleting an already absent object is successful, and so is a till-code note to a server that
                     // predates the map (it is a hint, not data); every other failure stays reviewable.
                     if (!(e is ApiException && e.status == 404 && op.type in setOf("delete", "unscan", "barcodeKind", "stockRemove", "stockUpdate", "basketDelete", "recipeDelete", "favouriteDelete", "purchaseDelete", "memoryDelete", "nameDelete"))) {
-                        pending.update { list -> list.map { if (it.id == op.id) it.copy(failure = e.message ?: "Sync failed") else it } }
+                        pending.update { list -> list.map { if (it.id == op.id) it.copy(failure = e.message ?: "Couldn’t sync") else it } }
                         offline?.saveOps(pending.value)
-                        _error.value = "Could not sync ${op.label}: ${e.message}"
+                        _error.value = "A change didn’t sync: ${op.label}"
                         return
                     }
                 }
@@ -271,7 +271,7 @@ class BasketRepository(
             recipeLibrary?.refresh()
             warmHistory()
         } catch (e: kotlinx.coroutines.CancellationException) { throw e }
-        catch (e: Exception) { if (isConnectivityError(e)) online.value = false else _error.value = e.message }
+        catch (e: Exception) { if (isConnectivityError(e)) online.value = false else _error.value = "Couldn’t sync" + (e.message?.let { ": $it" } ?: "") }
         finally { syncLock.unlock() }
     }
 
@@ -375,6 +375,12 @@ class BasketRepository(
     suspend fun removeStock(item: StockItem) {
         queued(PendingOp(type = "stockRemove", itemId = item.id), optimistic = { _stock.update { list -> list.filterNot { it.id == item.id } } })
     }
+    /** Puts back an entry that was just removed (undo), with its picture, category and running-low mark. */
+    suspend fun restoreStock(item: StockItem) {
+        val local = item.copy(id = localId())
+        stockAdd(local)
+        if (item.category != null || item.runningLow) updateStock(local, category = item.category, runningLow = item.runningLow.takeIf { it })
+    }
     suspend fun refreshServerSettings() = guard {
         if (pending.value.isNotEmpty()) return@guard
         val version = revision
@@ -420,7 +426,7 @@ class BasketRepository(
             online.value = true
             if (list.none { it.id == _currentBasketId.value } && list.isNotEmpty()) _currentBasketId.value = list.first().id
         } catch (e: Exception) {
-            if (isConnectivityError(e)) wentOffline() else _error.value = e.message ?: "Could not load baskets"
+            if (isConnectivityError(e)) wentOffline() else _error.value = "Couldn’t load your baskets" + (e.message?.let { ": $it" } ?: "")
         }
     }
 
@@ -449,7 +455,7 @@ class BasketRepository(
         _baskets.update { list -> list.map { if (it.id == id) it.copy(name = name, emoji = emoji) else it } }
     })
     suspend fun deleteBasket(id: String) {
-        if (_baskets.value.size <= 1) { _error.value = "Keep at least one basket"; return }
+        if (_baskets.value.size <= 1) { _error.value = "You need at least one basket"; return }
         queued(PendingOp(type = "basketDelete", itemId = id), { _baskets.update { list -> list.filterNot { it.id == id } } })
         if (_currentBasketId.value == id) switchBasket(_baskets.value.first().id)
     }
@@ -512,7 +518,7 @@ class BasketRepository(
             if (isConnectivityError(e)) {
                 wentOffline()
                 if (_items.value.isEmpty()) loadCachedItems()
-            } else _error.value = e.message ?: "Could not reach the server"
+            } else _error.value = "Couldn’t load the basket" + (e.message?.let { ": $it" } ?: "")
         } finally {
             _loading.value = false
         }
@@ -528,7 +534,7 @@ class BasketRepository(
             _stores.value = stores
             offline?.save("stores", _stores.value)
         } catch (e: Exception) {
-            if (isConnectivityError(e)) wentOffline() else _error.value = e.message ?: "Could not load stores"
+            if (isConnectivityError(e)) wentOffline() else _error.value = "Couldn’t load the stores" + (e.message?.let { ": $it" } ?: "")
         }
     }
 
@@ -575,8 +581,8 @@ class BasketRepository(
         if (e is kotlinx.coroutines.CancellationException) throw e
         if (isConnectivityError(e)) {
             wentOffline()
-            _error.value = "You're offline — this needs the server"
-        } else _error.value = e.message ?: "Request failed"
+            _error.value = "Couldn’t do that: no connection"
+        } else _error.value = "Couldn’t do that" + (e.message?.let { ": $it" } ?: "")
         null
     }
 
@@ -846,7 +852,7 @@ class BasketRepository(
         if (!online.value) return offline?.load<T>(key)
         return try { fetch().also { offline?.save(key, it) } }
         catch (e: kotlinx.coroutines.CancellationException) { throw e }
-        catch (e: Exception) { if (isConnectivityError(e)) wentOffline() else _error.value = e.message; offline?.load<T>(key) }
+        catch (e: Exception) { if (isConnectivityError(e)) wentOffline() else _error.value = "Couldn’t load that" + (e.message?.let { ": $it" } ?: ""); offline?.load<T>(key) }
     }
 
     suspend fun searchProducts(query: String, force: Boolean = false): ProductSearchResponse? = cachedRead("product-search-${query.trim().lowercase()}") { api.searchProducts(query, force = force) }
@@ -944,7 +950,7 @@ class BasketRepository(
 
     suspend fun addGroupFromUrl(recipeUrl: String, language: String) {
         val recipe = recipeLibrary?.detail(recipeUrl)
-        if (recipe == null) { _error.value = "Open this recipe online to download its ingredients first"; return }
+        if (recipe == null) { _error.value = "Couldn’t add this recipe: no connection"; return }
         val source = recipe.original ?: recipe
         val texts = listOf(source.title) + source.ingredientLines + source.steps.map { it.text } + listOf(source.servings.orEmpty(), source.totalTime.orEmpty(), source.description.orEmpty())
         val descriptionIndices = listOf(texts.lastIndex)
@@ -1009,7 +1015,7 @@ class BasketRepository(
     }
 
     fun discard(op: PendingOp) {
-        if (replaying) { _error.value = "Wait for syncing to finish before discarding a change"; return }
+        if (replaying) { _error.value = "Syncing right now. Try again in a moment."; return }
         val removedIds = mutableSetOf<String>()
         fun creations(change: PendingOp) {
             if (change.type in setOf("add", "addGroup", "groupItems", "productAdd", "barcodeAdd", "basketCreate", "stockAdd", "recipeSave", "favouriteAdd", "purchaseSave")) change.itemId?.let { removedIds.add(it) }
@@ -1042,7 +1048,7 @@ class BasketRepository(
         offline?.load<List<Purchase>>("purchases")?.let { purchases -> offline.save("purchases", purchases.filterNot { it.id in removedIds }) }
         recipeLibrary?.discardLocal(removedIds)
         persistLocal()
-        _error.value = "Discarded change and dependent creations. Server data will refresh when connected."
+        _error.value = "Discarded the change"
         scope.launch { if (online.value) tryReconnect() }
     }
 

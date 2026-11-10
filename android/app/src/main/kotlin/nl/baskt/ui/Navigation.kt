@@ -13,7 +13,9 @@ import androidx.compose.animation.togetherWith
 import kotlinx.serialization.Serializable
 import nl.baskt.ui.basket.BasketScreen
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
@@ -54,6 +56,7 @@ import nl.baskt.ui.ah.AhLoginScreen
 @Serializable data object TidyRoute : NavKey
 @Serializable data object AhLoginRoute : NavKey
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
     val backStack = rememberNavBackStack(BasketRoute)
@@ -114,7 +117,8 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
                     onTidy = { backStack.add(TidyRoute) },
                 )
             }
-            entry<ChatRoute> { ChatScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onFolderAdded = { backStack.removeLastOrNull() }) }
+            // Adding a recipe from the chat stays in the conversation; "View" on its notice goes back to the basket.
+            entry<ChatRoute> { ChatScreen(viewModel, onBack = { backStack.removeLastOrNull() }, onViewBasket = { while (backStack.size > 1) backStack.removeLastOrNull() }) }
             entry<GroupRoute> { route ->
                 GroupScreen(viewModel, route.groupId, onBack = { backStack.removeLastOrNull() }, onOpenItem = { backStack.add(ItemRoute(it)) })
             }
@@ -133,7 +137,14 @@ fun BasktNavigation(viewModel: AppViewModel, startAtSettings: Boolean) {
             entry<MemoryRoute> { MemoryScreen(viewModel, onBack = { backStack.removeLastOrNull() }) }
         },
     )
-    // imePadding keeps failure messages visible above the keyboard (e.g. while typing in the assistant).
-    androidx.compose.material3.SnackbarHost(snackbar, modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter).imePadding().padding(bottom = 96.dp).zIndex(2f))
+    // The safe-drawing insets lift the message above the navigation bar and the keyboard (e.g. while typing in the
+    // assistant); the extra offset clears a floating button or a bottom bar. The basket page has the tallest one:
+    // the add bar, and above it the trip strip, which hides while the keyboard is up.
+    val snackbarOffset = when {
+        top != BasketRoute -> 88.dp
+        androidx.compose.foundation.layout.WindowInsets.isImeVisible -> 96.dp
+        else -> 152.dp
+    }
+    androidx.compose.material3.SnackbarHost(snackbar, modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter).windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing).padding(bottom = snackbarOffset).zIndex(2f))
     }
 }

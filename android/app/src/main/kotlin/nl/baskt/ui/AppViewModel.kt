@@ -125,7 +125,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun lookupBarcode(code: String) = viewModelScope.launch {
-        val gtin = nl.baskt.data.productGtin(code) ?: return@launch notify("That is not a product barcode")
+        val gtin = nl.baskt.data.productGtin(code) ?: return@launch notify("That isn’t a product barcode")
         _searching.value = true
         _searchResults.value = null
         _scanResult.value = basket.barcode(gtin)
@@ -153,10 +153,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
             if (product != null) basket.addFromProduct(product, quantity = quantity) else basket.add(line.name, quantity)
         }
         notify(when {
-            lines.size == 1 && bumped == 1 -> "Added ${purchaseQuantity(lines.single())} more ${lines.single().name} to the basket"
-            lines.size == 1 -> "Added ${lines.single().name} to the basket"
-            bumped > 0 -> "Added ${lines.size} items to the basket ($bumped already there, quantity raised)"
-            else -> "Added ${lines.size} items to the basket"
+            lines.size == 1 && bumped == 1 -> "Added ${purchaseQuantity(lines.single())} more “${lines.single().name}” to your basket"
+            lines.size == 1 -> "Added “${lines.single().name}” to your basket"
+            bumped > 0 -> "Added ${lines.size} items to your basket ($bumped already in it)"
+            else -> "Added ${lines.size} items to your basket"
         })
     }
 
@@ -194,15 +194,30 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun notifyUndo(message: String, undo: () -> Unit) = notify(message, "Undo", undo)
     init { viewModelScope.launch { basket.notices.collect { notify(it) } } }
 
-    /** Runs a server call and turns any failure into a visible message instead of silence. */
+    /**
+     * Runs a server call and turns any failure into a visible message instead of silence. [what] is the whole
+     * failure phrase in user terms ("Couldn’t search recipes"); the reason is added after a colon.
+     */
     private suspend fun <T> attempt(what: String, block: suspend () -> T): T? = try {
         if (!online.value) throw java.io.IOException("Server unavailable")
         block()
     } catch (e: Exception) {
         if (e is kotlinx.coroutines.CancellationException) throw e
-        val offline = e is java.io.IOException || e is io.ktor.client.plugins.HttpRequestTimeoutException || e is io.ktor.client.network.sockets.ConnectTimeoutException
-        notify(if (offline) "You're offline. $what needs the server" else "$what failed: ${e.message ?: "unknown error"}")
+        notify(failure(what, e))
         null
+    }
+
+    /**
+     * One failure sentence for a notice: what failed, then why. "No connection" is only said when the phone really
+     * could not reach the server; a slow answer and a server error are named as such, and a missing reason adds nothing.
+     */
+    private fun failure(what: String, e: Throwable): String {
+        val reason = when {
+            !online.value || e is java.net.ConnectException || e is java.net.UnknownHostException || e is io.ktor.client.network.sockets.ConnectTimeoutException -> "no connection"
+            e is io.ktor.client.plugins.HttpRequestTimeoutException || e is java.net.SocketTimeoutException -> "it took too long"
+            else -> e.message?.takeIf { it.isNotBlank() }
+        }
+        return if (reason == null) what else "$what: $reason"
     }
 
     /** Why the last recipe search shows nothing (from the server, or a failure). */
@@ -252,12 +267,12 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         _recipesBusy.value = true
         _recipeMessage.value = null
         _recipeResults.value = listOfNotNull(pinned)
-        val response = attempt("Recipe search") { container.api.searchRecipes(query) }
+        val response = attempt("Couldn’t search recipes") { container.api.searchRecipes(query) }
         val found = response?.results ?: emptyList()
         _recipeResults.value = if (pinned == null) found else listOf(pinned) + found.filter { it.url != pinned.url }
-        _recipeMessage.value = response?.message ?: if (response == null) "The search could not be completed." else null
+        _recipeMessage.value = response?.message ?: if (response == null) "Couldn’t search recipes" else null
         _recipesHasMore.value = response?.hasMore == true
-        if (response != null && response.errors.isNotEmpty() && response.results.isNotEmpty()) notify("Some sites did not answer: ${response.errors.joinToString { it.source }}")
+        if (response != null && response.errors.isNotEmpty() && response.results.isNotEmpty()) notify("Some recipe sites didn’t answer: ${response.errors.joinToString { it.source }}")
         _recipesBusy.value = false
     }
 
@@ -285,7 +300,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun openRecipe(recipe: RecipeSummary) = viewModelScope.launch {
         container.recipes.recordViewed(recipe)
         _recipeDetail.value = container.recipes.detail(recipe.url)
-        if (_recipeDetail.value == null) notify("This recipe has not been downloaded. Connect to open it.")
+        if (_recipeDetail.value == null) notify("Couldn’t open this recipe: no connection")
     }
 
     fun closeRecipe() { _recipeDetail.value = null }
@@ -324,8 +339,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     /** Recipe AI field: answers a question or proposes a change. Nothing is saved here. Null when it failed (with a notice). */
     suspend fun askRecipe(detail: RecipeDetail, message: String, history: List<nl.baskt.data.RecipeTurn>): RecipeAiReply? {
         val current = RecipeDraft(detail.title, detail.description, detail.servings, detail.ingredientLines, detail.steps)
-        val reply = attempt("Recipe AI") { container.api.adaptRecipe(current, message, history) } ?: return null
-        if (reply.answer == null && reply.draft == null) { notify("Recipe AI gave no answer, try again"); return null }
+        val reply = attempt("Couldn’t get an answer") { container.api.adaptRecipe(current, message, history) } ?: return null
+        if (reply.answer == null && reply.draft == null) { notify("Couldn’t get an answer"); return null }
         return RecipeAiReply(reply.answer, reply.draft, reply.summary)
     }
 
@@ -338,8 +353,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         val saved = try {
             container.recipes.save(draft, "ai", existingId = ownId)
         } catch (e: kotlinx.coroutines.CancellationException) { throw e }
-        catch (e: Exception) { notify(e.message ?: "Could not save the recipe"); return null }
-        if (ownId == null) notify("Saved the changed recipe in My recipes")
+        catch (e: Exception) { notify(failure("Couldn’t save the recipe", e)); return null }
+        if (ownId == null) notify("Saved to my recipes")
         val summary = RecipeSummary(saved.title, saved.url, saved.imageUrl, source = "Mine")
         container.recipes.recordViewed(summary)
         _recipeDetail.value = container.recipes.detail(saved.url)
@@ -347,6 +362,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun clearRecentRecipes() = container.recipes.clearRecent()
+    /** Undo of [clearRecentRecipes]: the same recipes, in the same order. */
+    fun restoreRecentRecipes(recipes: List<RecipeSummary>) { recipes.asReversed().forEach { container.recipes.recordViewed(it) } }
 
     /** Discover tab: the current question, the ideas answering it (null until loaded), and how to order them. */
     private val _discoverParams = MutableStateFlow(DiscoverParams())
@@ -385,7 +402,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun deleteMyRecipe(id: String) = viewModelScope.launch { container.recipes.delete(id) }
     fun saveSiteRecipeAsMine(recipe: RecipeSummary) = viewModelScope.launch {
         val detail = container.recipes.detail(recipe.url)
-        if (detail == null) { notify("Download this recipe before saving a copy"); return@launch }
+        if (detail == null) { notify("Couldn’t copy this recipe: no connection"); return@launch }
         container.recipes.save(RecipeDraft(detail.title, servings = detail.servings, ingredientLines = detail.ingredientLines, steps = detail.steps), "site")
     }
 
@@ -396,17 +413,17 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     val generating: StateFlow<Boolean> = _generating
     fun findRecipeMatches(description: String) = viewModelScope.launch {
         _generating.value = true
-        _generate.value = attempt("Finding matching recipes") { container.api.generateRecipe(description, draft = false) }
+        _generate.value = attempt("Couldn’t find matching recipes") { container.api.generateRecipe(description, draft = false) }
         _generating.value = false
     }
     fun draftRecipe(description: String) = viewModelScope.launch {
         _generating.value = true
-        _generate.value = attempt("Writing the recipe") { container.api.generateRecipe(description, draft = true) }
+        _generate.value = attempt("Couldn’t write the recipe") { container.api.generateRecipe(description, draft = true) }
         _generating.value = false
     }
     fun clearGenerate() { _generate.value = null }
     suspend fun saveRecipe(draft: RecipeDraft, origin: String, existingId: String?): UserRecipe? =
-        attempt("Saving recipe") { container.recipes.save(draft, origin, existingId) }
+        attempt("Couldn’t save the recipe") { container.recipes.save(draft, origin, existingId) }
 
     /** Localized recipe (ingredients + steps) of a folder, for the folder screen. */
     fun openGroupRecipe(groupId: String) = viewModelScope.launch {
@@ -457,10 +474,15 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     private val _tidying = MutableStateFlow(false)
     val tidying: StateFlow<Boolean> = _tidying
 
+    /** True when the last tidy request failed, so the screen can say so and offer "Try again" instead of "Nothing to tidy". */
+    val tidyFailed = MutableStateFlow(false)
+
     fun planTidy() = viewModelScope.launch {
         _tidying.value = true
         tidyReview.value = TidyReview()
-        _tidy.value = basket.planTidy() ?: TidyPlan()
+        val plan = basket.planTidy()
+        tidyFailed.value = plan == null
+        _tidy.value = plan ?: TidyPlan()
         _tidying.value = false
     }
 
@@ -487,9 +509,6 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     fun dismissTidy() { _tidy.value = null }
 
-    /** Comment mode inside the wand: on by default; the toggle in the sheet's corner turns it off for the session. */
-    val tidyCommentMode = MutableStateFlow(true)
-    fun toggleTidyCommentMode() { tidyCommentMode.value = !tidyCommentMode.value }
     private val _revising = MutableStateFlow(false)
     val revising: StateFlow<Boolean> = _revising
 
@@ -519,12 +538,12 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     fun scanReceipt(files: List<ReceiptUpload>, store: String?) = viewModelScope.launch {
         if (files.isEmpty()) return@launch
-        if (!online.value) { _scanError.value = "Receipt recognition needs a connection"; return@launch }
+        if (!online.value) { _scanError.value = "Couldn’t read the receipt: no connection"; return@launch }
         _scanning.value = true
         _scanError.value = null
         runCatching { container.api.scanReceipt(files, store) }
             .onSuccess { _scan.value = it }
-            .onFailure { _scanError.value = it.message ?: "Scan failed" }
+            .onFailure { _scanError.value = failure("Couldn’t read the receipt", it) }
         _scanning.value = false
     }
 
@@ -620,18 +639,28 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     private val _activating = MutableStateFlow<Set<String>>(emptySet())
     val activating: StateFlow<Set<String>> = _activating
 
-    fun loadAhAccount() = viewModelScope.launch { runCatching { container.api.ahAccount() }.onSuccess { _ahAccount.value = it } }
+    /** Why the AH account could not be loaded, in a few words; null while loading or once it is there. */
+    private val _ahAccountError = MutableStateFlow<String?>(null)
+    val ahAccountError: StateFlow<String?> = _ahAccountError
+
+    fun loadAhAccount() = viewModelScope.launch {
+        _ahAccountError.value = null
+        // A server that never answers must not leave the screens waiting forever.
+        val result = kotlinx.coroutines.withTimeoutOrNull(20_000) { runCatching { container.api.ahAccount() } }
+        if (result == null) _ahAccountError.value = "it took too long"
+        else result.onSuccess { _ahAccount.value = it }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it; _ahAccountError.value = failure("", it).removePrefix(": ").ifBlank { "something went wrong" } }
+    }
 
     /** Called by the login WebView with the appie://login-exit URL it intercepted. */
     suspend fun connectAh(redirect: String): Result<nl.baskt.data.AhAccountStatus> =
         runCatching { container.api.ahConnect(redirect) }.onSuccess { _ahAccount.value = it; _ahOffers.value = null; loadAhOffers(force = true) }
 
     fun disconnectAh() = viewModelScope.launch {
-        runCatching { container.api.ahDisconnect() }.onSuccess { _ahAccount.value = it; _ahOffers.value = null }.onFailure { notify("Could not log out: ${it.message}") }
+        runCatching { container.api.ahDisconnect() }.onSuccess { _ahAccount.value = it; _ahOffers.value = null }.onFailure { notify(failure("Couldn’t log out", it)) }
     }
 
     fun setAhAutoActivate(enabled: Boolean) = viewModelScope.launch {
-        runCatching { container.api.ahSetAutoActivate(enabled) }.onSuccess { _ahAccount.value = it }.onFailure { notify("Could not save: ${it.message}") }
+        runCatching { container.api.ahSetAutoActivate(enabled) }.onSuccess { _ahAccount.value = it }.onFailure { notify(failure("Couldn’t change the Bonus Box setting", it)) }
     }
 
     fun loadAhOffers(force: Boolean = false) = viewModelScope.launch {
@@ -649,10 +678,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         _importingReceipts.value = true
         runCatching { container.api.ahImportReceipts() }
             .onSuccess { result ->
-                notify(if (result.imported == 0) "No new AH receipts" else "Added ${result.imported} AH receipt" + (if (result.imported == 1) "" else "s"))
+                notify(if (result.imported == 0) "No new AH receipts" else "Added ${nl.baskt.ui.common.counted(result.imported, "AH receipt")}")
                 if (result.imported > 0) { loadHistory(); basket.refresh() }
             }
-            .onFailure { notify("Could not get AH receipts: ${it.message}") }
+            .onFailure { notify(failure("Couldn’t get AH receipts", it)) }
         _importingReceipts.value = false
     }
 
@@ -666,7 +695,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
                 _deals.value = null
                 basket.refresh()
             }
-            .onFailure { notify("Could not activate “${offer.title}”: ${it.message}") }
+            .onFailure { notify(failure("Couldn’t activate “${offer.title}”", it)) }
         _activating.value = _activating.value - offer.id
     }
 
@@ -676,10 +705,20 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     val whatsappQr: StateFlow<String?> = _whatsappQr
     private val _whatsappChats = MutableStateFlow<List<WhatsAppChat>>(emptyList())
     val whatsappChats: StateFlow<List<WhatsAppChat>> = _whatsappChats
+    /** The chat list of the linked WhatsApp account: still loading, or failed to load. */
+    private val _whatsappChatsLoading = MutableStateFlow(false)
+    val whatsappChatsLoading: StateFlow<Boolean> = _whatsappChatsLoading
+    private val _whatsappChatsFailed = MutableStateFlow(false)
+    val whatsappChatsFailed: StateFlow<Boolean> = _whatsappChatsFailed
     fun loadWhatsApp() = viewModelScope.launch {
         _whatsapp.value = runCatching { container.api.whatsappStatus() }.getOrNull()
         _whatsappQr.value = if (_whatsapp.value?.hasQr == true) runCatching { container.api.whatsappQr().qr }.getOrNull() else null
-        _whatsappChats.value = if (_whatsapp.value?.status == "connected") runCatching { container.api.whatsappChats() }.getOrDefault(emptyList()) else emptyList()
+        if (_whatsapp.value?.status != "connected") { _whatsappChats.value = emptyList(); _whatsappChatsFailed.value = false; return@launch }
+        _whatsappChatsLoading.value = _whatsappChats.value.isEmpty()
+        val chats = runCatching { container.api.whatsappChats() }
+        _whatsappChatsFailed.value = chats.isFailure
+        chats.onSuccess { _whatsappChats.value = it }
+        _whatsappChatsLoading.value = false
     }
     fun setWhatsAppChat(chat: WhatsAppChat) = viewModelScope.launch { runCatching { container.api.whatsappSetChat(chat) }; loadWhatsApp() }
     suspend fun sendToWhatsApp(store: String? = null): Result<Int> = runCatching { container.api.whatsappSend(basket.currentBasketId.value, store) }
@@ -789,7 +828,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
                     }
                     if (session == scanSession) scans.update { list -> list.map { if (it.gtin == scan.gtin) it.copy(done = destination) else it } }
                 } catch (e: kotlinx.coroutines.CancellationException) { throw e }
-                catch (_: Exception) { notify("Couldn’t save ${scan.gtin}. Please try again.") }
+                catch (_: Exception) { notify("Couldn’t save “${scan.products.firstOrNull()?.title ?: scan.label?.title ?: "the scanned item"}”") }
                 finally { if (session == scanSession) scans.update { list -> list.map { if (it.gtin == scan.gtin) it.copy(saving = false) else it } } }
             }
         }
@@ -812,33 +851,50 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     val chatSteps: StateFlow<List<String>> = _chatSteps
     private var stepsJob: Job? = null
 
-    fun sendChat(text: String, voiceInput: Boolean = false) = viewModelScope.launch {
-        if (_chatBusy.value || text.isBlank()) return@launch
+    private var chatJob: Job? = null
+    /** A message that was not sent (it failed, or the user stopped it): the chat screen puts it back in the field. */
+    val chatUnsent = MutableStateFlow<String?>(null)
+
+    fun sendChat(text: String, voiceInput: Boolean = false) {
+        if (_chatBusy.value || text.isBlank()) return
         stopSpeaking()
-        if (!online.value) { notify("The assistant needs a connection"); return@launch }
+        if (!online.value) { notify("Couldn’t reach the assistant: no connection"); chatUnsent.value = text; return }
         _chatBusy.value = true
-        _chatSteps.value = listOf("Sending…")
-        stepsJob?.cancel()
-        stepsJob = viewModelScope.launch {
-            while (true) {
-                delay(700)
-                runCatching { container.api.chatProgress(basket.currentBasketId.value) }.getOrNull()?.let { if (it.steps.isNotEmpty()) _chatSteps.value = it.steps }
+        chatJob = viewModelScope.launch {
+            _chatSteps.value = listOf("Sending…")
+            stepsJob?.cancel()
+            stepsJob = viewModelScope.launch {
+                while (true) {
+                    delay(700)
+                    runCatching { container.api.chatProgress(basket.currentBasketId.value) }.getOrNull()?.let { if (it.steps.isNotEmpty()) _chatSteps.value = it.steps }
+                }
+            }
+            // Show the user's line immediately; the server returns both lines once the assistant is done.
+            val localId = "local-${System.currentTimeMillis()}"
+            _chat.update { it + ChatMessage(id = localId, role = "user", content = text) }
+            var sent = false
+            try {
+                val reply = attempt("Couldn’t reach the assistant") { container.api.chatSend(basket.currentBasketId.value, text) }
+                if (reply != null) {
+                    sent = true
+                    _chat.update { list -> list.filterNot { it.id.startsWith("local-") } + reply }
+                    container.offline.save("chat-${basket.currentBasketId.value}", _chat.value)
+                    if (voiceInput && settings.value?.speakReplies == true) {
+                        reply.lastOrNull { it.role == "assistant" }?.let { speakMessage(it) }
+                    }
+                }
+            } finally {
+                // Failed or stopped: the line leaves the conversation and goes back to the field, so nothing is retyped.
+                if (!sent) { _chat.update { list -> list.filterNot { it.id == localId } }; chatUnsent.value = text }
+                stepsJob?.cancel()
+                _chatSteps.value = emptyList()
+                _chatBusy.value = false
             }
         }
-        // Show the user's line immediately; the server returns both lines once the assistant is done.
-        _chat.update { it + ChatMessage(id = "local-${System.currentTimeMillis()}", role = "user", content = text) }
-        val reply = attempt("The assistant") { container.api.chatSend(basket.currentBasketId.value, text) }
-        if (reply != null) {
-            _chat.update { list -> list.filterNot { it.id.startsWith("local-") } + reply }
-            container.offline.save("chat-${basket.currentBasketId.value}", _chat.value)
-            if (voiceInput && settings.value?.speakReplies == true) {
-                reply.lastOrNull { it.role == "assistant" }?.let { speakMessage(it) }
-            }
-        }
-        stepsJob?.cancel()
-        _chatSteps.value = emptyList()
-        _chatBusy.value = false
     }
+
+    /** Stops waiting for the assistant's answer; the message goes back to the field. */
+    fun cancelChat() { chatJob?.cancel() }
     private var speechGeneration = 0
     private var speechJob: Job? = null
     private val _speaking = MutableStateFlow<String?>(null)
@@ -851,11 +907,6 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun setSpeechVoice(model: String, voice: String) = viewModelScope.launch {
         stopSpeaking()
         container.settingsStore.saveVoice(model, voice)
-    }
-    fun toggleMessageSpeech(message: ChatMessage) = viewModelScope.launch {
-        val enabled = !(settings.value?.speakReplies ?: false)
-        container.settingsStore.saveSpeakReplies(enabled)
-        if (enabled) speakMessage(message) else stopSpeaking()
     }
     fun speakMessage(message: ChatMessage) {
         val text = message.content.ifBlank { message.proposalJson?.summary.orEmpty() }
@@ -882,7 +933,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
                     container.speechPlayback.play(bytes)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) { throw e }
-            catch (_: Exception) { notify("Speech is unavailable. You can still read the reply.") }
+            catch (_: Exception) { notify(if (preview) "Couldn’t play the voice" else "Couldn’t read the reply aloud") }
             finally { if (speechGeneration == generation) _speaking.value = null }
         }
     }
@@ -891,10 +942,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         _chat.value = emptyList(); container.offline.save("chat-${basket.currentBasketId.value}", _chat.value)
     }) }
     fun applyProposal(message: ChatMessage, indices: List<Int>) = viewModelScope.launch {
-        val result = attempt("Applying changes") { container.api.applyProposal(message.id, indices) } ?: return@launch
+        val result = attempt("Couldn’t apply the changes") { container.api.applyProposal(message.id, indices) } ?: return@launch
         _chat.update { list -> list.map { if (it.id == message.id) result.message else it } }
         val failed = result.results.filter { !it.ok }
-        notify(if (failed.isEmpty()) "Applied ${result.results.size} change${if (result.results.size == 1) "" else "s"}" else "${result.results.size - failed.size} applied, ${failed.size} failed: ${failed.first().error}")
+        notify(if (failed.isEmpty()) "Applied ${nl.baskt.ui.common.counted(result.results.size, "change")}" else "Applied ${nl.baskt.ui.common.counted(result.results.size - failed.size, "change")}, ${failed.size} couldn’t be applied")
         basket.refresh(false)
         if (indices.any { message.proposalJson?.changes?.getOrNull(it)?.type?.startsWith("stock_") == true }) basket.refreshStock()
     }
@@ -903,19 +954,54 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     val memory: StateFlow<List<Choice>> = _memory
     private val _memoryNames = MutableStateFlow<List<NamePreference>>(emptyList())
     val memoryNames: StateFlow<List<NamePreference>> = _memoryNames
+    /** The learned preferences are being fetched, or could not be fetched and nothing is saved on the phone. */
+    private val _memoryLoading = MutableStateFlow(false)
+    val memoryLoading: StateFlow<Boolean> = _memoryLoading
+    private val _memoryFailed = MutableStateFlow(false)
+    val memoryFailed: StateFlow<Boolean> = _memoryFailed
     fun loadMemory() = viewModelScope.launch {
-        _memory.value = container.offline.load("memory") ?: emptyList()
-        _memoryNames.value = container.offline.load("memory-names") ?: emptyList()
-        val response = cachedLoad<nl.baskt.data.ChoicesResponse?>("memory-response", null) { container.api.memory() } ?: return@launch
-        _memory.value = response.choices; container.offline.save("memory", _memory.value)
-        _memoryNames.value = response.names; container.offline.save("memory-names", _memoryNames.value)
+        _memoryLoading.value = true
+        _memoryFailed.value = false
+        _memory.value = (container.offline.load<List<Choice>>("memory") ?: emptyList()).filterNot { "choice-${it.id}" in memoryRemovals }
+        _memoryNames.value = (container.offline.load<List<NamePreference>>("memory-names") ?: emptyList()).filterNot { "name-${it.id}" in memoryRemovals }
+        val response = cachedLoad<nl.baskt.data.ChoicesResponse?>("memory-response", null) { container.api.memory() }
+        _memoryLoading.value = false
+        if (response == null) { _memoryFailed.value = true; return@launch }
+        _memory.value = response.choices.filterNot { "choice-${it.id}" in memoryRemovals }; container.offline.save("memory", _memory.value)
+        _memoryNames.value = response.names.filterNot { "name-${it.id}" in memoryRemovals }; container.offline.save("memory-names", _memoryNames.value)
     }
-    fun deleteNameMemory(id: String) = viewModelScope.launch { basket.queued(nl.baskt.data.PendingOp(type = "nameDelete", itemId = id), {
-        _memoryNames.update { list -> list.filterNot { it.id == id } }; container.offline.save("memory-names", _memoryNames.value)
-    }) }
-    fun deleteMemory(id: String) = viewModelScope.launch { basket.queued(nl.baskt.data.PendingOp(type = "memoryDelete", itemId = id), {
-        _memory.update { list -> list.filterNot { it.id == id } }; container.offline.save("memory", _memory.value)
-    }) }
+
+    /**
+     * Learned preferences on their way out. The server cannot put one back, so removing hides the row at once and
+     * only deletes it for real once the Undo notice has had its time; Undo before that simply shows it again.
+     */
+    private val memoryRemovals = mutableMapOf<String, Job>()
+    private fun removeWithUndo(key: String, message: String, hide: () -> Unit, restore: () -> Unit, delete: suspend () -> Unit) {
+        hide()
+        // On the app's own scope: leaving the screen (or the app) must not cancel the delete that was asked for.
+        memoryRemovals[key] = container.scope.launch { delay(10_000); memoryRemovals.remove(key); delete() }
+        notifyUndo(message) { memoryRemovals.remove(key)?.let { it.cancel(); restore() } }
+    }
+    fun deleteNameMemory(id: String) {
+        val index = _memoryNames.value.indexOfFirst { it.id == id }
+        val name = _memoryNames.value.getOrNull(index) ?: return
+        removeWithUndo("name-$id", "Removed “${name.preferred}”",
+            hide = { _memoryNames.update { list -> list.filterNot { it.id == id } } },
+            restore = { _memoryNames.update { list -> list.toMutableList().apply { add(index.coerceAtMost(size), name) } } },
+        ) { basket.queued(nl.baskt.data.PendingOp(type = "nameDelete", itemId = id), {
+            _memoryNames.update { list -> list.filterNot { it.id == id } }; container.offline.save("memory-names", _memoryNames.value)
+        }) }
+    }
+    fun deleteMemory(id: String) {
+        val index = _memory.value.indexOfFirst { it.id == id }
+        val choice = _memory.value.getOrNull(index) ?: return
+        removeWithUndo("choice-$id", "Removed what was learned for “${choice.itemText}”",
+            hide = { _memory.update { list -> list.filterNot { it.id == id } } },
+            restore = { _memory.update { list -> list.toMutableList().apply { add(index.coerceAtMost(size), choice) } } },
+        ) { basket.queued(nl.baskt.data.PendingOp(type = "memoryDelete", itemId = id), {
+            _memory.update { list -> list.filterNot { it.id == id } }; container.offline.save("memory", _memory.value)
+        }) }
+    }
 
     private val _allDeals = MutableStateFlow<AllDealsResponse?>(null)
     val allDeals: StateFlow<AllDealsResponse?> = _allDeals
@@ -931,14 +1017,37 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     /** Adds a store-wide deal to the basket: known products are pinned, promotion groups become an idea. */
     fun addDeal(card: DealCard) = viewModelScope.launch {
         val product = card.product ?: card.productId?.let { id -> runCatching { container.api.searchProducts(card.title, card.store) }.getOrNull()?.results?.firstOrNull()?.products?.firstOrNull { it.id == id } }
-        if (product != null) basket.addFromProduct(product) else basket.add(card.title, 1)
+        addedWithUndo(card.title) { if (product != null) basket.addFromProduct(product) else basket.add(card.title, 1) }
     }
 
-    /** Switches the item at that store to the promoted product. */
+    /** Adds a product to the basket and says so, with Undo (deal and Bonus Box product rows). */
+    fun addProductWithUndo(product: Product) = viewModelScope.launch { addedWithUndo(product.title) { basket.addFromProduct(product) } }
+
+    /** Runs an add and reports it with an Undo that deletes the item the add created. */
+    private suspend fun addedWithUndo(title: String, add: suspend () -> Unit) {
+        val before = basket.items.value.map { it.id }.toSet()
+        add()
+        val created = basket.items.value.lastOrNull { it.id !in before && !it.isGroup }
+        if (created == null) { notify("Added “$title” to your basket"); return }
+        notifyUndo("Added “$title” to your basket") {
+            // The item gets a new id once the server has it, so fall back to the newest open item with the same text.
+            val current = basket.items.value.firstOrNull { it.id == created.id } ?: basket.items.value.lastOrNull { !it.isGroup && it.isOpen && it.text == created.text }
+            if (current != null) delete(current)
+        }
+    }
+
+    /** Switches the item at that store to the promoted product; Undo goes back to the product it had. */
     fun takeDeal(deal: Deal) = viewModelScope.launch {
         val item = basket.items.value.firstOrNull { it.id == deal.itemId } ?: return@launch
+        val shown = _deals.value
         basket.choose(item, deal.store, deal.product.id)
         _deals.value = _deals.value?.let { current -> current.copy(deals = current.deals.filterNot { it.itemId == deal.itemId && it.store == deal.store }) }
+        notifyUndo("Switched “${deal.itemText}” to ${deal.product.title}") {
+            viewModelScope.launch {
+                basket.items.value.firstOrNull { it.id == deal.itemId }?.let { basket.choose(it, deal.store, deal.currentProductId) }
+                _deals.value = shown
+            }
+        }
     }
 
     /** Adds a recipe folder; with [items] the selected ingredients, otherwise the server looks the recipe up. */
@@ -990,7 +1099,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     /** The whole code goes to the server: a weighed product's label also carries its weight and price. */
     /** [format] is set when the code should be kept, as read, for the checkout screen (the till relay). */
     fun scanItem(store: String, code: String, format: Int? = null) = viewModelScope.launch {
-        if (nl.baskt.data.productGtin(code) == null) return@launch notify("That is not a product barcode")
+        if (nl.baskt.data.productGtin(code) == null) return@launch notify("That isn’t a product barcode")
         basket.scanItem(store, code.trim(), format = format)
     }
     val tripScans: StateFlow<List<TripScan>> = basket.tripScans
@@ -1012,7 +1121,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun setSelfScanWifi(name: String) = viewModelScope.launch { container.settingsStore.saveSelfScanWifi(name) }
     fun startSelfScan() = viewModelScope.launch {
         val current = container.awaitSettings()
-        val card = current.loyaltyCards["AH"] ?: return@launch notify("Add your Bonuskaart first")
+        val card = current.loyaltyCards["AH"] ?: return@launch notify("Add your AH card in Settings first")
         container.selfScan.start(card, current.selfScanWifi)
     }
     fun stopSelfScan() = container.selfScan.stop()
@@ -1028,7 +1137,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
             return@launch
         }
         val state = container.selfScan.state.value
-        state.issues.lastOrNull { it.barcode == code.trim() }?.let { notify("AH: ${it.title}") } ?: state.notice?.message?.let { notify(it) }
+        state.issues.lastOrNull { it.barcode == code.trim() }?.let { notify("AH didn’t take that code: ${it.title}") } ?: state.notice?.message?.let { notify(it) }
     }
 
     /** Quantity edit on an AH line; at 0 the line leaves the AH basket and baskt takes back what that scan did. */
@@ -1091,10 +1200,17 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         container.settingsStore.saveHiddenDealKinds(if (hidden) current + kind else current - kind)
     }
 
-    fun saveLoyaltyCard(store: String, number: String?) = viewModelScope.launch { container.settingsStore.saveLoyaltyCard(store, number) }
+    /** Saves a card number, or removes the card with null; a removal can be undone, since the number is tedious to retype. */
+    fun saveLoyaltyCard(store: String, number: String?): Job = viewModelScope.launch {
+        val previous = settings.value?.loyaltyCards?.get(store)
+        container.settingsStore.saveLoyaltyCard(store, number)
+        if (number == null && previous != null) notifyUndo("Removed the ${nl.baskt.ui.common.storeName(store, basket.stores.value)} card") { saveLoyaltyCard(store, previous) }
+    }
     val lastAdded get() = basket.lastAdded
     fun consumeLastAdded() { basket.lastAdded.value = null }
     fun removeStock(item: StockItem) = viewModelScope.launch { basket.removeStock(item) }
+    /** Undo of [removeStock]: the entry comes back with its picture, category and running-low mark. */
+    fun restoreStock(item: StockItem) = viewModelScope.launch { basket.restoreStock(item) }
     fun moveStock(item: StockItem, category: String) = viewModelScope.launch { basket.updateStock(item, category = category) }
     /** Running low puts it on the basket and keeps it in stock until it is bought again. */
     fun setRunningLow(item: StockItem, low: Boolean) = viewModelScope.launch {
@@ -1154,11 +1270,40 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun reject(item: BasketItem, store: String) = busy(item, store) { basket.reject(item, store) }
     fun unskip(item: BasketItem, store: String) = busy(item, store) { basket.unskip(item, store) }
     fun feedback(item: BasketItem, store: String, productId: String, up: Boolean) = viewModelScope.launch { basket.feedback(item, store, productId, up) }
+    /** Thumbs-downs still inside their Undo window, as "itemId:store:productId". The item screen shows these dimmed. */
+    val pendingRejections = MutableStateFlow<Set<String>>(emptySet())
+    /**
+     * Thumbs-down with a way back. A rejection teaches the matching and cannot be taken back afterwards, so it is
+     * only sent once the Undo message has had its time on screen; until then the product just waits in [pendingRejections].
+     */
+    fun rejectWithUndo(item: BasketItem, store: String, product: Product) {
+        val key = "${item.id}:$store:${product.id}"
+        if (key in pendingRejections.value) return
+        pendingRejections.update { it + key }
+        val send = viewModelScope.launch {
+            delay(10_500)
+            basket.feedback(item, store, product.id, false)
+            pendingRejections.update { it - key }
+        }
+        notifyUndo("Removed “${product.title}” from the suggestions") { send.cancel(); pendingRejections.update { it - key } }
+    }
     fun searchMore(item: BasketItem, store: String, query: String) = busy(item, store) { basket.searchMore(item, store, query) }
     fun rematch(item: BasketItem) = viewModelScope.launch { basket.rematch(item) }
     fun setEnabledStores(codes: List<String>) = viewModelScope.launch { basket.setEnabledStores(codes); basket.refresh(false) }
 
     fun assign(mode: String) = viewModelScope.launch { basket.assign(mode); compare(force = true) }
+    /** [assign] with a way back: it moves every open item at once, so Undo puts each one back at the store it had. */
+    fun assignWithUndo(mode: String, message: String) = viewModelScope.launch {
+        val before = basket.items.value.filter { !it.isGroup }.associate { it.id to it.assignedStore }
+        basket.assign(mode)
+        compare(force = true)
+        notifyUndo(message) {
+            viewModelScope.launch {
+                for (item in basket.items.value) if (item.id in before && item.assignedStore != before[item.id]) basket.assignItem(item, before[item.id])
+                compare(force = true)
+            }
+        }
+    }
     fun assignItem(item: BasketItem, store: String?) = viewModelScope.launch { basket.assignItem(item, store); compare(force = true) }
 
     /** Fingerprint of everything the comparison depends on; unchanged basket = no reload. */
@@ -1172,7 +1317,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         if (!refreshPrices && !force && comparedFor == key && _comparison.value != null) return@launch
         // Only show the bar when there is nothing to look at yet; otherwise update quietly.
         if (_comparison.value == null) _comparing.value = true
-        if (refreshPrices) { attempt("Refreshing prices") { container.api.refreshPrices() }; basket.refresh(false) }
+        if (refreshPrices) { attempt("Couldn’t refresh prices") { container.api.refreshPrices() }; basket.refresh(false) }
         basket.compare().let { _comparison.value = it; comparedFor = key }
         _comparing.value = false
     }
@@ -1180,19 +1325,30 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     suspend fun saveSettings(baseUrl: String, token: String) {
         basket.withSyncPaused {
             val changed = container.currentSettings.baseUrl != baseUrl || container.currentSettings.token != token
-            require(!changed || pending.value.isEmpty()) { "Sync or discard pending changes before changing servers" }
+            require(!changed || pending.value.isEmpty()) { "Changes are still waiting to sync. Sync or discard them before changing the server." }
             container.settingsStore.save(baseUrl, token)
             container.awaitSettings()
             if (changed) { _chat.value = emptyList(); _purchases.value = emptyList(); _memory.value = emptyList(); _recipeDetail.value = null; _comparison.value = null; _spend.value = null; _purchaseDetail.value = null }
         }
     }
 
-    suspend fun testConnection(): Result<String> = runCatching {
+    /** The outcome of "Save and test": one plain line, plus a [note] when the server works but something is limited. */
+    data class ConnectionCheck(val connected: Boolean, val message: String, val note: String? = null)
+
+    /** Asks the saved server whether it is there and whether this token is accepted. */
+    suspend fun testConnection(): ConnectionCheck = try {
         val health = container.api.health()
-        val ai = health.ai?.get("configured")?.toString() == "true"
-        val stt = (health.ai?.get("stt") as? kotlinx.serialization.json.JsonObject)?.get("configured")?.toString() == "true"
-        "Connected to baskt ${health.version}" + (if (ai) " · AI ready" else " · AI not configured (text matching only)") +
-            if (stt) " · dictation on the server" else " · dictation on this phone"
+        val smart = health.ai?.get("configured")?.toString() == "true"
+        ConnectionCheck(true, "Connected", if (smart) null else "Smart matching is off on this server")
+    } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+    catch (e: Exception) {
+        val reason = when {
+            e is nl.baskt.data.ApiException && (e.status == 401 || e.status == 403) -> "the access token wasn’t accepted"
+            e is java.net.UnknownHostException -> "that address wasn’t found"
+            e is io.ktor.client.plugins.HttpRequestTimeoutException || e is io.ktor.client.network.sockets.ConnectTimeoutException || e is java.net.SocketTimeoutException -> "the server didn’t answer"
+            else -> e.message?.takeIf { it.isNotBlank() }
+        }
+        ConnectionCheck(false, if (reason == null) "Couldn’t connect" else "Couldn’t connect: $reason")
     }
     override fun onCleared() { stopSpeaking(); super.onCleared() }
 
