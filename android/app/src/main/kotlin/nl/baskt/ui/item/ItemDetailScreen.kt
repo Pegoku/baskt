@@ -72,6 +72,7 @@ import nl.baskt.data.PricePoint
 import nl.baskt.data.Product
 import nl.baskt.data.StoreInfo
 import nl.baskt.data.StoreMatch
+import nl.baskt.data.euros
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.ConfirmDialog
 import nl.baskt.ui.common.EmptyState
@@ -86,10 +87,12 @@ import nl.baskt.ui.common.Spacing
 import nl.baskt.ui.common.Stepper
 import nl.baskt.ui.common.StoreBadge
 import nl.baskt.ui.common.Tag
+import nl.baskt.ui.common.counted
 import nl.baskt.ui.common.TransferMenuItems
 import nl.baskt.ui.common.rememberTransferPicker
 import nl.baskt.ui.common.TranslatedText
 import nl.baskt.ui.common.storeName
+import kotlin.math.roundToInt
 
 /**
  * One item: how many, what it is being searched as, and per store the product chosen for it or the options to
@@ -341,6 +344,7 @@ private fun StoreCard(
                 ProductRow(chosen, modifier = if (leaving) Modifier.alpha(0.5f) else Modifier, showOriginal = showOriginal, openable = !leaving) {
                     if (!leaving) TooltipIconButton(text = "Not a match", icon = Icons.Default.ThumbDown, onClick = { onThumbDown(chosen) })
                 }
+                if (!leaving) VolumeDeals(chosen, match.packs[chosen.id].orEmpty(), enabled = !busy, onChoose = onChoose)
                 PriceSparkline(chosen.id, loadHistory)
                 if (match.reason != null && match.chosenBy != "USER") Reason(match.reason, showOriginal)
             }
@@ -359,6 +363,8 @@ private fun StoreCard(
                             showOriginal = showOriginal,
                             onChoose = { onChoose(product.id) },
                             onThumbDown = { onThumbDown(product) },
+                            packs = match.packs[product.id].orEmpty(),
+                            onChoosePack = { onChoose(it) },
                         )
                     }
                     if (match.reason != null && match.status == "PENDING") Reason(match.reason, showOriginal)
@@ -406,9 +412,21 @@ private fun BusyDot() = CircularProgressIndicator(Modifier.size(18.dp), strokeWi
  * labelled button; the thumb only says "not a match" (as in the similar products sheet) and can be undone.
  */
 @Composable
-private fun OptionRow(product: Product, equivalence: String?, selected: Boolean, leaving: Boolean, enabled: Boolean, showOriginal: Boolean, onChoose: () -> Unit, onThumbDown: () -> Unit) {
+private fun OptionRow(
+    product: Product,
+    equivalence: String?,
+    selected: Boolean,
+    leaving: Boolean,
+    enabled: Boolean,
+    showOriginal: Boolean,
+    onChoose: () -> Unit,
+    onThumbDown: () -> Unit,
+    packs: List<Product> = emptyList(),
+    onChoosePack: (String) -> Unit = {},
+) {
     Column(modifier = if (leaving) Modifier.alpha(0.5f) else Modifier) {
         ProductRow(product, showOriginal = showOriginal, openable = !leaving)
+        if (!leaving) VolumeDeals(product, packs, enabled, onChoosePack)
         Row(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             val quality = when (equivalence) {
                 null -> null
@@ -428,6 +446,54 @@ private fun OptionRow(product: Product, equivalence: String?, selected: Boolean,
             }
         }
     }
+}
+
+private val PACK_COUNT = Regex("""(\d+)\s*-?\s*(?:pack|pck|pk)$""", RegexOption.IGNORE_CASE)
+
+/** How many of the single item a multi-pack holds: from its "3-pack" title, else its piece count. */
+private fun Product.packCount(): Int? =
+    PACK_COUNT.find(title.trim())?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it >= 2 }
+        ?: unitAmount?.takeIf { unit == "piece" && it >= 2 }?.toInt()
+
+/**
+ * The multi-packs of a single item, folded away behind one line ("2 volume deals · from €2,17 each") so the
+ * options stay single items. Opened, each pack shows its price per item against the single and can be chosen
+ * instead; tapping a pack's line opens its product sheet.
+ */
+@Composable
+private fun VolumeDeals(single: Product, packs: List<Product>, enabled: Boolean, onChoose: (String) -> Unit) {
+    if (packs.isEmpty()) return
+    var expanded by rememberSaveable(single.id) { mutableStateOf(false) }
+    var viewing by remember { mutableStateOf<Product?>(null) }
+    val each = packs.associateWith { pack -> pack.packCount()?.let { pack.priceCents / it } }
+    val cheapest = each.values.filterNotNull().minOrNull()
+    nl.baskt.ui.deals.Expander(
+        counted(packs.size, "volume deal") + (cheapest?.let { " · from ${it.euros()} each" } ?: ""),
+        expanded,
+    ) { expanded = !expanded }
+    if (expanded) Column(modifier = Modifier.padding(start = 12.dp)) {
+        for (pack in packs) {
+            val count = pack.packCount()
+            val perItem = each[pack]
+            val off = perItem?.takeIf { single.priceCents > 0 }?.let { ((single.priceCents - it) * 100.0 / single.priceCents).roundToInt() }?.takeIf { it > 0 }
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(MaterialTheme.shapes.small).clickable(role = Role.Button, onClickLabel = "Product details") { viewing = pack },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(listOfNotNull(count?.let { "$it-pack" } ?: pack.title, off?.let { "-$it%" }).joinToString(" · "), style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        listOfNotNull(pack.priceCents.euros(), perItem?.let { "${it.euros()} each" }).joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                FilledTonalButton(onClick = { onChoose(pack.id) }, enabled = enabled) { Text("Choose") }
+            }
+        }
+    }
+    viewing?.let { nl.baskt.ui.common.ProductSheet(it) { viewing = null } }
 }
 
 @Composable

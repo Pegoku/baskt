@@ -105,6 +105,8 @@ data class StoreMatch(
     val chosen: Product? = null,
     val provisional: Product? = null,
     val options: List<Product> = emptyList(),
+    /** Multi-packs of the options and the pick, by product id: what the item costs bought as a 2-, 3- or 4-pack. */
+    val packs: Map<String, List<Product>> = emptyMap(),
     val equivalences: Map<String, String> = emptyMap(),
     val hasMore: Boolean = true,
     val hasRejectedSuggestions: Boolean = false,
