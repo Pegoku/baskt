@@ -3,7 +3,7 @@ import { rankBy } from "@/db/settings";
 import type { Equivalence, ParsedIdea, ProductRow } from "@/db/schema";
 import { normalizeText, sha256 } from "@/lib/text";
 
-export const PICK_PROMPT_VERSION = "v1";
+export const PICK_PROMPT_VERSION = "v2";
 
 const EQUIVALENCES: Equivalence[] = ["EXACT", "EQUIVALENT", "SUBSTITUTE"];
 
@@ -18,7 +18,8 @@ const SYSTEM = `You help a shopper in the Netherlands pick concrete supermarket 
 Rank ALL candidate products from best to worst match for the idea. Consider: product type, the attributes the user asked for (e.g. halfvol, houdbaar, bio), pack size vs the size hint, price for money, and above all the user's remembered preferences when given (repeat what they chose before, avoid what they rejected).
 Return ONLY a JSON object:
 {"ranking":[{"idx": candidate index, "equivalence": "EXACT"|"EQUIVALENT"|"SUBSTITUTE"} ...all candidates...], "confidence": 0..1 for the top pick, "reason": max 12 words}
-EXACT = exactly what was asked, EQUIVALENT = same product type with minor differences, SUBSTITUTE = different product that could stand in.`;
+EXACT = exactly what was asked, EQUIVALENT = same product type with minor differences, SUBSTITUTE = different product that could stand in.
+The product type always comes first: a size hint in pieces counts the item itself ("2 carrots" = 2 piece), so a 2-pack of another product never beats the right product sold by weight. Products that merely share a word with the idea (carrot wraps or carrot puree for carrots, cooked sausage for cooked peas) are SUBSTITUTE at best and rank below every real match.`;
 
 function formatCandidate(index: number, product: ProductRow) {
   const price = `€${(product.priceCents / 100).toFixed(2)}`;

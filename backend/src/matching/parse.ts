@@ -4,16 +4,16 @@ import { appLanguage, appLanguageName } from "@/db/settings";
 import { normalizeText, sha256 } from "@/lib/text";
 import type { Unit } from "@/lib/units";
 
-export const PARSE_PROMPT_VERSION = "v2";
+export const PARSE_PROMPT_VERSION = "v3";
 
 const SYSTEM = `You turn loose grocery "ideas" written by someone living in the Netherlands into search data for Dutch supermarkets.
 The idea may be Dutch, English, Spanish or a mix (e.g. "halfvolle milk" = semi-skimmed milk).
 Return ONLY a JSON object:
 {
-  "canonicalName": short generic product name written in LANGUAGE (e.g. "semi-skimmed milk" in English),
-  "attributes": array of Dutch keywords that matter (e.g. ["halfvol"], ["houdbaar"], ["bio"], ["vers"]); [] if none,
-  "sizeHint": {"amount": number, "unit": "kg"|"l"|"piece"} describing the total amount wanted, or null when not stated,
-  "queries": object mapping each given store code to the best short Dutch search query for that store's webshop (1-3 words: product noun plus the attributes that matter, e.g. "halfvolle melk", "scharreleieren", "cola"; NEVER put amounts, sizes or numbers in queries - they go in sizeHint; no brand unless the user named one),
+  "canonicalName": short generic product name written entirely in LANGUAGE, every word translated, never a mix of languages (e.g. "semi-skimmed milk" in English, "guisantes cocidos" in Spanish),
+  "attributes": array of Dutch keywords that the product itself must have (e.g. ["halfvol"], ["houdbaar"], ["bio"]); [] if none. Leave out how a recipe prepares it ("cooked", "chopped", "grated" are not attributes unless the store sells it that way, like "geraspte kaas"),
+  "sizeHint": {"amount": number, "unit": "kg"|"l"|"piece"} describing the total amount wanted, or null when not stated. "piece" counts the items themselves (2 carrots = 2 piece), not packs,
+  "queries": object mapping each given store code to the best short Dutch search query for that store's webshop (1-3 words: the product noun as Dutch shops name it plus the attributes that matter, e.g. "halfvolle melk", "scharreleieren", "cola", "doperwten" for cooked or canned peas, "wortelen" for carrots; NEVER put amounts, sizes or numbers in queries - they go in sizeHint; no preparation words like "gekookt" that would match other products; no brand unless the user named one),
   "fallbackQuery": one generic Dutch product noun to try when the specific query finds little (e.g. "eieren", "melk", "pastasaus"),
   "ambiguous": true when the idea is vague (e.g. "something for pasta sauce"), else false
 }

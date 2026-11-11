@@ -1,6 +1,7 @@
 import type { ParsedIdea, ProductRow } from "@/db/schema";
 import { rankBy } from "@/db/settings";
 import { expandTokens, tokenize, tokenSimilarity } from "@/lib/text";
+import { multipackOf } from "@/matching/packs";
 
 const POSITION_BONUS = 0.3;
 
@@ -11,6 +12,8 @@ function sizeScore(parsed: ParsedIdea, product: ProductRow) {
     product.unit !== parsed.sizeHint.unit
   )
     return 0;
+  // "2 stuks" of a 2-pack counts packs, not the items a hint in pieces asks for.
+  if (parsed.sizeHint.unit === "piece" && multipackOf(product)) return 0;
   const ratio = product.unitAmount / parsed.sizeHint.amount;
   // Perfect when the pack equals the hint; decays as the pack becomes much larger or smaller.
   return Math.max(0, 1 - Math.abs(Math.log(ratio)));
@@ -21,27 +24,35 @@ export function lexicalScore(
   parsed: ParsedIdea,
   product: ProductRow,
 ) {
-  const queryTokens = Array.from(
-    new Set([...tokenize(text), ...tokenize(parsed.canonicalName)]),
-  );
   const productTokens = tokenize(
     [product.title, product.brand ?? "", product.category ?? ""].join(" "),
   );
-  if (!queryTokens.length || !productTokens.length) return 0;
-
-  let score = 0;
-  let matched = 0;
-  for (const token of queryTokens) {
-    // A token matches if it or any of its NL/EN synonyms resembles a product token.
-    let best = 0;
-    for (const alternative of expandTokens([token])) {
-      for (const candidate of productTokens)
-        best = Math.max(best, tokenSimilarity(alternative, candidate));
-    }
-    if (best >= 0.75) matched += 1;
-    score += best;
-  }
-  score = (score / queryTokens.length) * 2 + matched;
+  // The idea in the user's words ("2 zanahorias") and the Dutch search terms for this store ("wortelen"):
+  // titles are Dutch, so a Spanish or English idea alone would match nothing. The better reading counts.
+  const wordings = [
+    [...tokenize(text), ...tokenize(parsed.canonicalName)],
+    [...tokenize(parsed.queries[product.store] ?? ""), ...tokenize(parsed.fallbackQuery ?? "")],
+  ]
+    .map((tokens) => Array.from(new Set(tokens)))
+    .filter((tokens) => tokens.length);
+  if (!wordings.length || !productTokens.length) return 0;
+  let score = Math.max(
+    ...wordings.map((queryTokens) => {
+      let sum = 0;
+      let matched = 0;
+      for (const token of queryTokens) {
+        // A token matches if it or any of its NL/EN synonyms resembles a product token.
+        let best = 0;
+        for (const alternative of expandTokens([token])) {
+          for (const candidate of productTokens)
+            best = Math.max(best, tokenSimilarity(alternative, candidate));
+        }
+        if (best >= 0.75) matched += 1;
+        sum += best;
+      }
+      return (sum / queryTokens.length) * 2 + matched;
+    }),
+  );
 
   const titleTokens = tokenize(product.title);
   for (const attribute of parsed.attributes) {
@@ -57,9 +68,10 @@ export function lexicalScore(
   }
 
   score += sizeScore(parsed, product);
-  // Without an explicit size hint, plain single packs beat multipacks / bulk packs.
+  // Plain single packs beat multipacks / bulk packs unless a size in kg or l asks for more. A size in pieces
+  // ("2 zanahorias") counts the item itself, so a 2-pack of something else does not answer it.
   if (
-    !parsed.sizeHint &&
+    (!parsed.sizeHint || parsed.sizeHint.unit === "piece") &&
     /\b(\d+-pack|voordeel\w*|multipack|\d+\s*x\s*\d)/i.test(
       `${product.title} ${product.quantityText}`,
     )
