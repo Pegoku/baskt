@@ -2,6 +2,10 @@
 
 A basket of *ideas*, not products. Type "halfvolle milk" and baskt finds the matching products at Albert Heijn and Jumbo, lets you pick which one you mean (3 suggestions at a time, "none of these fit" shows the next 3), remembers your picks, and at checkout compares what the basket costs per supermarket.
 
+| Basket | Choose a product | Plan | In store | Deals |
+| :---: | :---: | :---: | :---: | :---: |
+| <img src="docs/screenshots/basket.webp" width="180" alt="Basket of ideas with prices per store"> | <img src="docs/screenshots/choose.webp" width="180" alt="Choosing the product for an idea at each store"> | <img src="docs/screenshots/plan.webp" width="180" alt="Plan comparing the basket total per supermarket"> | <img src="docs/screenshots/trip.webp" width="180" alt="In-store shopping list grouped by aisle"> | <img src="docs/screenshots/deals.webp" width="180" alt="Deals on the items in the basket"> |
+
 ```
 backend/   Bun + Hono + SQLite API: store adapters, AI parsing/ranking, preference memory, comparison
 android/   Kotlin + Jetpack Compose (Material 3 Expressive) client
