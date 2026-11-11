@@ -1161,7 +1161,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun dismissSelfScanIssue(id: Long) = container.selfScan.dismissIssue(id)
     fun dismissSelfScanNotice() = container.selfScan.dismissNotice()
     fun refreshSelfScan() { container.selfScan.refresh() }
-    fun selfScanCheckout() = container.selfScan.checkout()
+    fun selfScanCheckout() {
+        basket.endTrip("AH")
+        container.selfScan.checkout()
+    }
     fun closeSelfScanCheckout() = container.selfScan.closeCheckout()
 
     val tillCodes: StateFlow<List<nl.baskt.data.TillCode>> = basket.tillCodes
@@ -1170,6 +1173,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun linkScan(scan: TripScan, item: BasketItem, store: String) = viewModelScope.launch { basket.linkScan(scan, item, store) }
     fun reportNoBarcode(store: String, item: BasketItem) = viewModelScope.launch { basket.reportBarcodeKind(store, item, code = null, kind = "none") }
     fun clearTillCodes(store: String) = basket.clearTillCodes(store)
+    val tripEnds: StateFlow<Map<String, Long>> = basket.tripEnds
+    fun endTrip(store: String) = basket.endTrip(store)
     fun setTillRelay(enabled: Boolean) = viewModelScope.launch { container.settingsStore.saveTillRelay(enabled) }
     fun setTillRelayInterval(ms: Int) = viewModelScope.launch { container.settingsStore.saveTillRelayInterval(ms) }
 

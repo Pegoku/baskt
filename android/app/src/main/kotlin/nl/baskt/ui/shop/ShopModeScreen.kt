@@ -108,6 +108,9 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
     val tripScans by viewModel.tripScans.collectAsState()
     val tillCodes by viewModel.tillCodes.collectAsState()
     val barcodeKinds by viewModel.barcodeKinds.collectAsState()
+    val tripEnds by viewModel.tripEnds.collectAsState()
+    val history by viewModel.history.collectAsState()
+    LaunchedEffect(Unit) { viewModel.loadHistory() }
     val context = LocalContext.current
     DisposableEffect(Unit) {
         val window = (context as? android.app.Activity)?.window
@@ -140,11 +143,17 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
     // A scan the phone already put on a basket item is shown on that item, not again as an extra.
     val scansHere = tripScans.filter { scan -> scan.store == store && System.currentTimeMillis() - scan.at < tripWindow && codesHere.none { it.scanId == scan.id && it.itemId != null } }
     // Items ticked off on an earlier visit still show here (bought at this store), but nothing about them is owed to
-    // this trip's till: they are "previously bought", not "not scanned".
-    val tripStart = tripStartedAt(
-        shopping.mapNotNull { it.first.boughtAt } + tripScans.filter { it.store == store }.map { it.at } + tillCodes.filter { it.store == store }.map { it.at },
-    )
-    fun earlier(item: BasketItem) = item.isBought && (item.boughtAt ?: 0) < tripStart
+    // this trip's till: they are "previously bought", not "not scanned". A visit ends when it is paid for (Paid,
+    // self-scan checkout, or a receipt that lists the item) or after a long pause.
+    val paidAt = tripEnds[store] ?: 0L
+    val paidItems = history?.purchases.orEmpty()
+        .filter { it.purchase.store == store && it.purchase.source != "shop" }
+        .flatMap { entry -> entry.lines.mapNotNull { it.itemId } }.toSet()
+    val tripStart = maxOf(
+        paidAt + 1,
+        tripStartedAt(shopping.mapNotNull { it.first.boughtAt } + tripScans.filter { it.store == store }.map { it.at } + tillCodes.filter { it.store == store }.map { it.at }),
+    ).coerceAtMost(System.currentTimeMillis())
+    fun earlier(item: BasketItem) = item.isBought && (item.id in paidItems || (item.boughtAt ?: 0) < tripStart)
     fun kindOf(item: BasketItem, product: Product?) = barcodeKinds.firstOrNull { it.store == store && product != null && it.productId == product.id }?.kind
         ?: barcodeKinds.firstOrNull { it.store == store && it.itemText.equals(item.text, ignoreCase = true) }?.kind
     // Everything that is open on top of the list is saved, so turning the phone at the till keeps the barcode up.
@@ -157,7 +166,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
         intervalMs = settings?.tillRelayIntervalMs ?: 1200,
         onInterval = { viewModel.setTillRelayInterval(it) },
         onNoBarcode = { viewModel.reportNoBarcode(store, it) },
-        onPaid = { viewModel.clearTillCodes(store); showTill = false },
+        onPaid = { viewModel.clearTillCodes(store); viewModel.endTrip(store); showTill = false },
         onDismiss = { showTill = false },
     )
     scansHere.firstOrNull { it.id == linkingId }?.let { scan ->

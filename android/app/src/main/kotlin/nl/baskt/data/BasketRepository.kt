@@ -651,6 +651,15 @@ class BasketRepository(
     /** After paying: the codes for [store] are done with. */
     fun clearTillCodes(store: String) = updateTillCodes { list -> list.filterNot { it.store == store } }
 
+    /** When the last trip at each store was paid for (till relay's Paid, AH self-scan checkout). Phone only. */
+    val tripEnds = MutableStateFlow<Map<String, Long>>(offline?.load<Map<String, Long>>("trip-ends") ?: emptyMap())
+
+    /** Paid at [store]: whatever was ticked off there so far belongs to a finished trip. */
+    fun endTrip(store: String) {
+        tripEnds.update { it + (store to System.currentTimeMillis()) }
+        offline?.save("trip-ends", tripEnds.value)
+    }
+
     /** What each product carries at the till, learnt from earlier scans (server map plus what this phone saw since). */
     val barcodeKinds = MutableStateFlow<List<BarcodeKindEntry>>(offline?.load<List<BarcodeKindEntry>>("barcode-kinds") ?: emptyList())
 
