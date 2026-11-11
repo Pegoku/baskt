@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { products, type ProductRow } from "@/db/schema";
 import { dealKind, packOf, sameItem, titleTokens } from "@/stores/promotions";
-import { productsByIds, searchStore } from "@/stores/search";
+import { productsByIds, productsVersion, searchStore } from "@/stores/search";
 import { like, or } from "drizzle-orm";
 
 /**
@@ -72,12 +72,15 @@ export async function foldMultipacks(store: string, list: ProductRow[], options:
 }
 
 type PackEntry = { id: string; store: string; tokens: string[] };
-let packIndex: { at: number; entries: PackEntry[] } | null = null;
+let packIndex: { at: number; version: number; entries: PackEntry[] } | null = null;
 const PACK_INDEX_TTL_MS = 30_000;
 
-/** Every known multi-pack, by the words of the item it is made of (rebuilt every half minute; a few thousand rows). */
+/**
+ * Every known multi-pack, by the words of the item it is made of (a few thousand rows): rebuilt every half minute,
+ * and straight away when new products were stored, so a pack just fetched is never missing from it.
+ */
 function knownPacks() {
-  if (packIndex && Date.now() - packIndex.at < PACK_INDEX_TTL_MS) return packIndex.entries;
+  if (packIndex && packIndex.version === productsVersion() && Date.now() - packIndex.at < PACK_INDEX_TTL_MS) return packIndex.entries;
   const rows = db()
     .select({ id: products.id, store: products.store, title: products.title, dealText: products.dealText, unit: products.unit, unitAmount: products.unitAmount, quantityText: products.quantityText })
     .from(products)
@@ -88,7 +91,7 @@ function knownPacks() {
     const pack = multipackOf(row);
     if (pack) entries.push({ id: row.id, store: row.store, tokens: titleTokens(pack.base) });
   }
-  packIndex = { at: Date.now(), entries };
+  packIndex = { at: Date.now(), version: productsVersion(), entries };
   return entries;
 }
 

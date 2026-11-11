@@ -18,6 +18,10 @@ export function toRow(product: StoreProduct, fetchedAt = now()): ProductRow {
 }
 
 /** Upserts products and appends a price-history point whenever the price changed. */
+/** Bumped whenever the catalogue gains products, so indexes built from it (see knownPacks) know to rebuild. */
+let catalogueVersion = 0;
+export const productsVersion = () => catalogueVersion;
+
 export function upsertProducts(list: StoreProduct[]): ProductRow[] {
   if (!list.length) return [];
   const database = db();
@@ -39,6 +43,7 @@ export function upsertProducts(list: StoreProduct[]): ProductRow[] {
       }
     }
   });
+  if (rows.some((row) => !existing.has(row.id))) catalogueVersion++;
   return rows;
 }
 
