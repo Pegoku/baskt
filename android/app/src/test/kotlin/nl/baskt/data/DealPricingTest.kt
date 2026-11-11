@@ -158,4 +158,12 @@ class DealSavingTest {
         assertNull(Product("AH:1", "AH", "1", "Tissues", quantityText = "10 st", priceCents = 300, dealText = "2+1 gratis").freeExtra(1))
         assertNull(Product("AH:1", "AH", "1", "Tissues", quantityText = "10 st", priceCents = 300, dealText = "3 voor 7.00").freeExtra(1))
     }
+
+    @Test fun chipDealTextIsShort() {
+        assertEquals("-35%", shortDealText("35% Op=Op korting"))
+        assertEquals("-10%", shortDealText("10% volume voordeel"))
+        assertEquals("-30%", shortDealText("30% korting • M.u.v. Grootverpakkingen • wo 30 sep t/m di 6 okt"))
+        assertEquals("2 voor 5,00", shortDealText("2 voor 5,00 • wo 11 mrt t/m di 1 dec"))
+        assertEquals("1 + 1 gratis", shortDealText("1 + 1 gratis"))
+    }
 }

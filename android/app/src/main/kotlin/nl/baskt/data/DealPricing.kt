@@ -48,6 +48,19 @@ fun Product.freeExtra(quantity: Int): Int? {
     return if (leftover >= paid) paid + free - leftover else null
 }
 
+private val PERCENT_DEAL = Regex("""(?i)(\d+)\s*%.*\b(korting|voordeel)\b""")
+private val CHIP_NOISE = Regex("""(?i)\s*\b(op\s*=\s*op|alleen online)\b\s*""")
+
+/**
+ * A deal label short enough for a one-line chip: "35% Op=Op korting" and "10% volume voordeel" become "-35%" and
+ * "-10%", the date range after "•" and stock notes go; mechanisms like "2 voor 3,50" or "1+1 gratis" stay as written.
+ */
+fun shortDealText(text: String): String {
+    val clean = text.substringBefore("•").trim()
+    PERCENT_DEAL.find(clean)?.let { return "-${it.groupValues[1]}%" }
+    return clean.replace(CHIP_NOISE, " ").trim()
+}
+
 fun String.shortUnit(): String = if (this == "piece") "st" else this
 
 /**

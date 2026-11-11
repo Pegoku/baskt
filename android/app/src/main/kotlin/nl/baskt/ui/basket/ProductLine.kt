@@ -22,13 +22,14 @@ import nl.baskt.ui.common.rememberTranslation
 /**
  * A product as a plain fact: photo, name, size, deal and price, with nothing in it that takes a tap. It is for
  * places where the row around it owns the tap (choosing a deal) or where the product already sits in a sheet,
- * so no second sheet opens on top of the first.
+ * so no second sheet opens on top of the first. With [openableImage] the picture alone opens the product sheet,
+ * for rows whose tap chooses something but where the shopper still wants a closer look.
  */
 @Composable
-fun ProductLine(product: Product, modifier: Modifier = Modifier, dealMath: Boolean = true) {
+fun ProductLine(product: Product, modifier: Modifier = Modifier, dealMath: Boolean = true, openableImage: Boolean = false) {
     val shown = rememberTranslation(listOf(product.title, product.quantityText, product.dealText.orEmpty()))?.takeIf { it.translated }?.texts
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        ItemThumb(product.imageUrl, null, size = 56)
+        if (openableImage) nl.baskt.ui.common.ProductThumb(product, size = 56) else ItemThumb(product.imageUrl, null, size = 56)
         Column(modifier = Modifier.weight(1f)) {
             Text(shown?.getOrNull(0) ?: product.title, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(

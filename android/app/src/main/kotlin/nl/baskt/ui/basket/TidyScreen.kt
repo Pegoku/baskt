@@ -313,7 +313,7 @@ fun TidyScreen(viewModel: AppViewModel, onBack: () -> Unit) {
 /**
  * "3 deals available" for one item, most relevant first. Tapping the line expands the options: "No deal"
  * (the default) and one row per deal. They are radio buttons, so exactly one is always chosen and tapping
- * anywhere on a row chooses it; nothing in a row opens another sheet.
+ * anywhere on a row chooses it, except the product picture, which opens the product sheet.
  */
 @Composable
 private fun DealPicker(
@@ -371,7 +371,7 @@ private fun DealPicker(
                         RadioButton(selected = selected, onClick = null)
                         Column(modifier = Modifier.weight(1f)) {
                             StoreBadge(deal.store, stores)
-                            ProductLine(deal.product, modifier = Modifier.padding(top = 4.dp), dealMath = false)
+                            ProductLine(deal.product, modifier = Modifier.padding(top = 4.dp), dealMath = false, openableImage = true)
                             val saving = savings.getValue(deal.product.id)
                             if (saving.worthShowing()) SavingStrip(saving, quantity)
                         }

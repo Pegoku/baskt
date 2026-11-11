@@ -79,6 +79,7 @@ import nl.baskt.data.TripScan
 import nl.baskt.data.dealPricing
 import nl.baskt.data.euros
 import nl.baskt.data.freeExtra
+import nl.baskt.data.shortDealText
 import nl.baskt.ui.AppViewModel
 import nl.baskt.ui.common.ConfirmDialog
 import nl.baskt.ui.common.EmptyState
@@ -355,9 +356,10 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                             .semantics { customActions = actions.map { (label, action) -> CustomAccessibilityAction(label) { action(); true } } },
                                         tags = {
                                             // The deal on the shelf label (1+1 gratis, 15% korting), so it is taken at the till: one line, in the app's language.
-                                            val dealText = product?.dealText?.substringBefore("•")?.trim()?.takeIf { it.isNotEmpty() && !item.isBought && !it.matches(PRICE_ONLY_DEAL) }
+                                            val dealText = product?.dealText?.let(::shortDealText)?.takeIf { it.isNotEmpty() && !item.isBought && !it.matches(PRICE_ONLY_DEAL) }
                                             if (dealText != null) {
-                                                val shown = rememberTranslation(listOf(dealText))?.takeIf { it.translated }?.texts?.firstOrNull() ?: dealText
+                                                // "-35%" has no words to translate; "2 voor 3,50" and "1+1 gratis" do.
+                                                val shown = rememberTranslation(listOf(dealText), enabled = dealText.any(Char::isLetter))?.takeIf { it.translated }?.texts?.firstOrNull() ?: dealText
                                                 val free = product.freeExtra(item.quantity)
                                                 val extra = if (free != null) "+$free free" else product.dealPricing()?.let { "${it.eachCents.euros()} each" }
                                                 Tag(listOfNotNull(shown, extra).joinToString(" · "), color = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer)
