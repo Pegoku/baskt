@@ -238,13 +238,15 @@ function settleItems(lines: Array<{ itemId?: string | null; productId: string | 
   for (const item of items) {
     const product = wanted.get(item.id) ? products.get(wanted.get(item.id)!) ?? null : null;
     addStock({ text: product?.title ?? item.parsedJson?.canonicalName ?? item.text, quantityText: product?.quantityText ?? null, productId: product?.id ?? null, imageUrl: product?.imageUrl ?? null });
-    database.update(basketItems).set({ checked: true, boughtAt: at, assignedStore: store, updatedAt: now() }).where(eq(basketItems.id, item.id)).run();
+    // An item ticked in the store keeps the moment it was picked: the receipt only confirms it was paid for.
+    database.update(basketItems).set({ checked: true, boughtAt: item.boughtAt ?? at, assignedStore: store, updatedAt: now() }).where(eq(basketItems.id, item.id)).run();
   }
 }
 
-export function savePurchase(input: { store: string; purchasedAt: string | null; totalCents: number; source: string; lines: Array<ReceiptLine & { productId: string | null }> }): PurchaseRow {
+/** [purchasedAt] is a receipt's day ("YYYY-MM-DD", read at noon) or, when the exact moment is known, a timestamp. */
+export function savePurchase(input: { store: string; purchasedAt: string | number | null; totalCents: number; source: string; lines: Array<ReceiptLine & { productId: string | null }> }): PurchaseRow {
   const database = db();
-  const purchasedAt = input.purchasedAt ? Date.parse(`${input.purchasedAt}T12:00:00`) || now() : now();
+  const purchasedAt = typeof input.purchasedAt === "number" ? input.purchasedAt : input.purchasedAt ? Date.parse(`${input.purchasedAt}T12:00:00`) || now() : now();
   const row: PurchaseRow = { id: newId(), store: input.store, purchasedAt, totalCents: input.totalCents, source: input.source, createdAt: now() };
   database.insert(purchases).values(row).run();
   for (const [index, line] of input.lines.entries()) {

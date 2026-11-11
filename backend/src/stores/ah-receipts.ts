@@ -167,8 +167,7 @@ async function runImport(): Promise<ReceiptImport> {
         open.splice(open.indexOf(item), 1);
       }
     }
-    const row = savePurchase({ store: "AH", purchasedAt: null, totalCents, source: "ah", lines });
-    db().update(purchases).set({ purchasedAt: at }).where(eq(purchases.id, row.id)).run();
+    const row = savePurchase({ store: "AH", purchasedAt: at, totalCents, source: "ah", lines });
     for (const trip of trips) deletePurchase(trip.id);
     result.replacedTrips += trips.length;
     imported[summary.id] = row.id;
