@@ -139,6 +139,12 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
     val codedItems = codesHere.mapNotNull { it.itemId }.toSet()
     // A scan the phone already put on a basket item is shown on that item, not again as an extra.
     val scansHere = tripScans.filter { scan -> scan.store == store && System.currentTimeMillis() - scan.at < tripWindow && codesHere.none { it.scanId == scan.id && it.itemId != null } }
+    // Items ticked off on an earlier visit still show here (bought at this store), but nothing about them is owed to
+    // this trip's till: they are "previously bought", not "not scanned".
+    val tripStart = tripStartedAt(
+        shopping.mapNotNull { it.first.boughtAt } + tripScans.filter { it.store == store }.map { it.at } + tillCodes.filter { it.store == store }.map { it.at },
+    )
+    fun earlier(item: BasketItem) = item.isBought && (item.boughtAt ?: 0) < tripStart
     fun kindOf(item: BasketItem, product: Product?) = barcodeKinds.firstOrNull { it.store == store && product != null && it.productId == product.id }?.kind
         ?: barcodeKinds.firstOrNull { it.store == store && it.itemText.equals(item.text, ignoreCase = true) }?.kind
     // Everything that is open on top of the list is saved, so turning the phone at the till keeps the barcode up.
@@ -147,7 +153,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
     if (showTill) TillRelayDialog(
         card = card,
         codes = nl.baskt.data.tillSequence(codesHere, items),
-        unscanned = shopping.map { it.first }.filter { it.isBought && it.id !in codedItems && (it.boughtAt ?: 0) > System.currentTimeMillis() - tripWindow },
+        unscanned = shopping.map { it.first }.filter { it.isBought && it.id !in codedItems && !earlier(it) },
         intervalMs = settings?.tillRelayIntervalMs ?: 1200,
         onInterval = { viewModel.setTillRelayInterval(it) },
         onNoBarcode = { viewModel.reportNoBarcode(store, it) },
@@ -341,6 +347,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                         imageUrl = product?.imageUrl,
                                         title = (if (item.quantity > 1) "${item.quantity}× " else "") + (product?.title ?: item.text),
                                         subtitle = when {
+                                            earlier(item) -> "Previously bought"
                                             item.isBought -> "Bought"
                                             product == null -> null
                                             differs(product.title, item.text) -> "${product.quantityText} · for “${item.text}”"
@@ -364,7 +371,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                                 val extra = if (free != null) "+$free free" else product.dealPricing()?.let { "${it.eachCents.euros()} each" }
                                                 Tag(listOfNotNull(shown, extra).joinToString(" · "), color = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer)
                                             }
-                                            if (relay) TillTag(item, coded = item.id in codedItems, kind = kindOf(item, product))
+                                            if (relay) TillTag(item, coded = item.id in codedItems, earlier = earlier(item), kind = kindOf(item, product))
                                         },
                                         trailing = if (actions.isEmpty()) null else ({ RowMenu("More for ${item.text}", actions) }),
                                     )
@@ -520,14 +527,29 @@ private fun differs(productTitle: String, itemText: String): Boolean {
  * instruction to scan is given once above the list.
  */
 @Composable
-private fun TillTag(item: BasketItem, coded: Boolean, kind: String?) {
+private fun TillTag(item: BasketItem, coded: Boolean, earlier: Boolean, kind: String?) {
     val colors = MaterialTheme.colorScheme
     when {
         coded -> Tag("Scanned", color = colors.primaryContainer, contentColor = colors.onPrimaryContainer)
+        earlier -> {}
         item.isBought -> Tag("Not scanned", color = colors.errorContainer, contentColor = colors.onErrorContainer)
         kind == "label" -> Tag("Weigh it, then scan the label")
         kind == "none" -> Tag("No barcode")
     }
+}
+
+/**
+ * When the trip at this store began: the start of the latest run of activity (ticks, scans, till codes) with no
+ * gap longer than [gap] in it, reaching up to now. With nothing recent the trip begins now, so everything bought
+ * before counts as an earlier visit. Leaving the screen and coming back mid-trip keeps the same start.
+ */
+internal fun tripStartedAt(times: List<Long>, now: Long = System.currentTimeMillis(), gap: Long = 2 * 60 * 60 * 1000L): Long {
+    var start = now
+    for (t in times.filter { it <= now }.sortedDescending()) {
+        if (start - t > gap) break
+        start = t
+    }
+    return start
 }
 
 /** Says which basket item a scan stands for, typically a weighed label no store can look up. */
