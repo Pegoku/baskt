@@ -41,6 +41,15 @@ export type AhSearchResponse = {
 
 type Token = { accessToken: string; refreshToken: string; expiresAt: number };
 
+/** AH's multi-pack listings repeat the brand ("Unox Unox Pittige erwtensoep 2-pack"); one is enough. */
+export function cleanAhTitle(title: string, brand: string | null | undefined) {
+  const clean = title.trim().replace(/\s+/g, " ");
+  const name = brand?.trim();
+  if (!name) return clean;
+  const doubled = `${name} ${name} `;
+  return clean.toLowerCase().startsWith(doubled.toLowerCase()) ? clean.slice(name.length + 1) : clean;
+}
+
 export function mapAhProduct(product: AhProduct): StoreProduct | null {
   const priceEuros = product.currentPrice ?? product.priceBeforeBonus;
   const priceCents = eurosToCents(priceEuros);
@@ -60,7 +69,7 @@ export function mapAhProduct(product: AhProduct): StoreProduct | null {
   return {
     store: "AH",
     sourceId: String(product.webshopId),
-    title: product.title.trim(),
+    title: cleanAhTitle(product.title, product.brand),
     brand: product.brand?.trim() || null,
     quantityText,
     unitAmount: quantity?.amount ?? null,

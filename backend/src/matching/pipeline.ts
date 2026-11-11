@@ -21,6 +21,7 @@ import {
 } from "@/matching/memory";
 import { alternativeQuery, parseIdea } from "@/matching/parse";
 import { aiRankCandidates } from "@/matching/pick";
+import { foldMultipacks } from "@/matching/packs";
 import { lexicalRank, sortByReference } from "@/matching/rank";
 import { productsByIds, searchStore } from "@/stores/search";
 
@@ -131,7 +132,8 @@ async function collectCandidates(
       }
     }
   }
-  return { candidates, queries };
+  // Options are single items; their multi-packs show as volume deals on the item (see packsFor).
+  return { candidates: await foldMultipacks(store, candidates), queries };
 }
 
 async function rankCandidates(
@@ -636,8 +638,9 @@ async function findMoreCandidates(
     }
     if (fresh.length >= 6) break;
   }
+  const singles = await foldMultipacks(store, fresh, { known: productsByIds(known) });
   return {
-    ids: lexicalRank(item.text, parsed, fresh, reference).map(
+    ids: lexicalRank(item.text, parsed, singles.filter((product) => !known.includes(product.id)), reference).map(
       (entry) => entry.product.id,
     ),
     tried: attempts,

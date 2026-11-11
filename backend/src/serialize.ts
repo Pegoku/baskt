@@ -1,4 +1,5 @@
 import type { BasketItemRow, BasketMatchRow, ProductRow } from "@/db/schema";
+import { packsFor } from "@/matching/packs";
 import { OPTIONS_PER_PAGE, shownWindow } from "@/matching/pipeline";
 
 export type ProductView = ProductRow;
@@ -11,6 +12,8 @@ export type MatchView = {
   /** Provisional product used by the comparison while the user has not chosen yet. */
   provisional: ProductView | null;
   options: ProductView[];
+  /** Multi-packs of the shown options and the pick, by product id: the item's volume deals. */
+  packs: Record<string, ProductView[]>;
   equivalences: Record<string, string>;
   hasMore: boolean;
   hasRejectedSuggestions: boolean;
@@ -47,13 +50,15 @@ export function matchView(match: BasketMatchRow, products: Map<string, ProductRo
   const optionIds = shownWindow(match);
   const chosen = match.chosenProductId ? products.get(match.chosenProductId) ?? null : null;
   const provisional = match.status === "PENDING" ? products.get(match.candidateIds[0] ?? "") ?? null : chosen;
+  const options = optionIds.map((id) => products.get(id)).filter((product): product is ProductRow => Boolean(product));
   return {
     store: match.store,
     status: match.status,
     chosenBy: match.chosenBy,
     chosen,
     provisional,
-    options: optionIds.map((id) => products.get(id)).filter((product): product is ProductRow => Boolean(product)),
+    options,
+    packs: packsFor([...options, ...(chosen && !options.includes(chosen) ? [chosen] : [])]),
     equivalences: Object.fromEntries(optionIds.map((id) => [id, match.equivalences[id] ?? "EQUIVALENT"])),
     hasRejectedSuggestions: match.hasRejectedSuggestions,
     hasMore: match.status !== "EXHAUSTED",

@@ -146,7 +146,7 @@ export function realDate(value: string | null | undefined) {
   return /^2[89]\d\d-|^9\d{3}-/.test(value) ? null : value;
 }
 
-const PACK_SUFFIX = /\s+(\d+)\s*-?\s*(?:pack|pk)$/i;
+const PACK_SUFFIX = /\s+(\d+)\s*-?\s*(?:pack|pck|pk)$/i;
 
 /** "AH Scharrel kipschnitzel 2 stuks 3-pack" → { base: "AH Scharrel kipschnitzel 2 stuks", count: 3 }. */
 export function packOf(title: string): { base: string; count: number } | null {
@@ -155,15 +155,23 @@ export function packOf(title: string): { base: string; count: number } | null {
   return match && count >= 2 ? { base: title.slice(0, match.index).trim(), count } : null;
 }
 
-function titleTokens(title: string) {
-  return title.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z0-9]+/).filter(Boolean).map((token) => (token === "st" ? "stuks" : token));
+/** Lower-case words of a title; a doubled word ("unox unox", from AH's multi-pack listings) counts once. */
+export function titleTokens(title: string) {
+  return title
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .map((token) => (token === "st" ? "stuks" : token))
+    .filter((token, index, all) => token !== all[index - 1]);
 }
 
 /**
  * Same item despite the store's abbreviations ("krokant kipfiletburger 2 st" = "krokante kipfiletburger 2 stuks"),
  * word order ("smokey kipburger" = "kipburger smokey") and spacing ("kipsateschnitzel" = "kip sate schnitzel").
  */
-function sameItem(a: string[], b: string[]) {
+export function sameItem(a: string[], b: string[]) {
   if (a.join("") === b.join("")) return true;
   const sortedA = a.slice().sort();
   const sortedB = b.slice().sort();
