@@ -16,6 +16,8 @@ let calls = 0;
 let failures = 0;
 let promptTokens = 0;
 let completionTokens = 0;
+/** Wall time of successful calls, so output tokens per second can be derived. */
+let generationMs = 0;
 
 export function aiStats() {
   return {
@@ -25,6 +27,7 @@ export function aiStats() {
     failures,
     promptTokens,
     completionTokens,
+    generationMs,
     /** Speech-to-text on the server; when this is off the app dictates on-device. */
     stt: { configured: env.ai.stt.length > 0, model: env.ai.stt[0]?.model ?? null },
     providers: poolStats(),
@@ -37,6 +40,7 @@ export function resetAiStats() {
   failures = 0;
   promptTokens = 0;
   completionTokens = 0;
+  generationMs = 0;
   resetPoolStats();
 }
 
@@ -146,6 +150,7 @@ export async function chatJson<T>(
       const cached = usage?.prompt_tokens_details?.cached_tokens ?? 0;
       promptTokens += usage?.prompt_tokens ?? 0;
       completionTokens += usage?.completion_tokens ?? 0;
+      generationMs += performance.now() - started;
       noteUsage(target.id, usage?.prompt_tokens ?? 0, usage?.completion_tokens ?? 0);
       console.log(
         `[ai] ${target.id} ${target.model} ${usage?.prompt_tokens ?? "?"}+${usage?.completion_tokens ?? "?"} tokens${cached ? ` (${cached} cached)` : ""}, ${Math.round(performance.now() - started)} ms`,

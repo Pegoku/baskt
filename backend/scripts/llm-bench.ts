@@ -6,6 +6,8 @@
  *   bun scripts/llm-bench.ts                              # default model list
  *   bun scripts/llm-bench.ts --models openai/gpt-oss-20b,openai/gpt-oss-120b
  *   bun scripts/llm-bench.ts --only assistant --runs 2    # a subset, repeated
+ *   bun scripts/llm-bench.ts --only tasks                 # just the end-to-end tasks
+ *   bun scripts/llm-bench.ts --no-tasks                   # skip the end-to-end tasks
  *
  * Uses an in-memory database so nothing is cached between models and your real data is untouched.
  * Needs AI_API_KEY (and AI_BASE_URL) in backend/.env like the server.
@@ -395,11 +397,111 @@ const cases: Case[] = [
   },
 ];
 
-const selected = only ? cases.filter((c) => c.group === only || c.name.includes(only)) : cases;
+const selected = only === "tasks" ? [] : only ? cases.filter((c) => c.group === only || c.name.includes(only)) : cases;
+
+// ---------- end-to-end tasks ----------
+// Each one chains the calls a real user action triggers, cold (answer cache cleared), and is timed as a whole.
+// Store searches are simulated with fixture candidates so only the model is measured.
+const CATALOG: Record<string, ProductRow[]> = {
+  melk: [
+    product("AH", "m1", "AH Volle melk", "1 l", 129, "l", 1),
+    product("AH", "m2", "AH Halfvolle melk", "1 l", 119, "l", 1),
+    product("AH", "m3", "AH Chocolademelk", "1 l", 199, "l", 1),
+  ],
+  eieren: [
+    product("AH", "e1", "AH Gevulde eieren kerrie 4 stuks", "105 g", 299, "kg", 0.105),
+    product("AH", "e2", "AH Scharreleieren M 6 stuks", "6 stuks", 255, "piece", 6),
+    product("AH", "e3", "AH Kwarteleieren 12 stuks", "12 stuks", 349, "piece", 12),
+  ],
+  olijfolie: [
+    product("AH", "o1", "AH Zonnebloemolie", "1 l", 279, "l", 1),
+    product("AH", "o2", "AH Olijfolie extra vierge", "500 ml", 549, "l", 0.5),
+    product("AH", "o3", "AH Groene olijven", "200 g", 199, "kg", 0.2),
+  ],
+  kipfilet: [
+    product("AH", "k1", "AH Kipdijfilet", "500 g", 549, "kg", 0.5),
+    product("AH", "k2", "AH Kipfilet", "1 kg", 1099, "kg", 1),
+    product("AH", "k3", "AH Kipfilet vleeswaren", "150 g", 249, "kg", 0.15),
+  ],
+  brood: [
+    product("AH", "b1", "AH Volkoren brood heel", "800 g", 249, "kg", 0.8),
+    product("AH", "b2", "AH Broodkruim", "200 g", 129, "kg", 0.2),
+    product("AH", "b3", "AH Krentenbollen 6 stuks", "6 stuks", 199, "piece", 6),
+  ],
+};
+type Task = { name: string; run: () => Promise<string | null> };
+const tasks: Task[] = [
+  {
+    name: "typed list: 5 items parsed and matched",
+    run: async () => {
+      const items: Array<[string, keyof typeof CATALOG, string[]]> = [
+        ["halfvolle melk", "melk", ["AH:m2"]],
+        ["eieren 6", "eieren", ["AH:e2"]],
+        ["olijfolie", "olijfolie", ["AH:o2"]],
+        ["kipfilet 1kg", "kipfilet", ["AH:k2"]],
+        ["volkoren brood", "brood", ["AH:b1"]],
+      ];
+      // The app resolves added items concurrently.
+      const picks = await Promise.all(
+        items.map(async ([text, key, expected]) => {
+          const parsed = await parseIdea(text, ["AH"]);
+          if (!parsed) return `${text}: parse failed`;
+          const ranked = await aiRankCandidates({ text, parsed, store: "AH", memory: "", candidates: CATALOG[key] });
+          const top = ranked?.orderedIds?.[0];
+          return top && expected.includes(top) ? null : `${text}: picked ${top ?? "nothing"}`;
+        }),
+      );
+      const wrong = picks.filter(Boolean);
+      return wrong.length ? wrong.join("; ") : null;
+    },
+  },
+  {
+    name: "recipe to basket: localize, ask what is missing, parse the adds",
+    run: async () => {
+      const recipe = await localizeRecipe({
+        title: "Pannenkoeken",
+        sourceUrl: null,
+        servings: "4 personen",
+        ingredientLines: ["250 g tarwebloem", "2 eieren", "500 ml halfvolle melk", "snufje zout", "boter om in te bakken"],
+        steps: [
+          { text: "Meng de bloem met het zout in een kom.", imageUrl: null },
+          { text: "Klop de eieren en de melk erdoor tot een glad beslag.", imageUrl: null },
+          { text: "Bak de pannenkoeken in een hete pan met boter, ongeveer 2 minuten per kant.", imageUrl: null },
+        ],
+      });
+      if (!recipe?.ingredientLines?.length) return "localize failed";
+      clearHistory(DEFAULT_BASKET_ID);
+      const messages = (await chat(DEFAULT_BASKET_ID, `Add what I'm missing for this recipe: ${recipe.ingredientLines.join(", ")}`)) as Array<{ proposalJson: { changes: Array<{ type: string; text?: string }> } | null }>;
+      const adds = (messages[1]?.proposalJson?.changes ?? []).filter((change) => change.type === "add" && change.text);
+      if (!adds.length) return "no adds proposed";
+      const parsed = await Promise.all(adds.map((add) => parseIdea(add.text!, ["AH", "JUMBO"])));
+      if (parsed.some((p) => !p)) return "parsing a proposed add failed";
+      return has(adds, /flour|bloem/) ? "proposed flour, which is in stock" : null;
+    },
+  },
+  {
+    name: "conversation: 3 assistant turns in a row",
+    run: async () => {
+      clearHistory(DEFAULT_BASKET_ID);
+      const turn = async (text: string) => ((await chat(DEFAULT_BASKET_ID, text)) as Array<{ proposalJson: { changes: Array<{ type: string; itemId?: string }> } | null }>)[1]?.proposalJson?.changes ?? [];
+      const first = await turn("Remove the ham from my list");
+      const second = await turn("Also rename cherry tomatoes to tomatoes");
+      const third = await turn("What am I missing for pancakes?");
+      const problems = [
+        first.some((c) => c.type === "delete" && c.itemId === "item-ham") ? null : "turn 1: no ham delete",
+        second.some((c) => c.type === "rename" && c.itemId === "item-tomatoes") ? null : "turn 2: no tomato rename",
+        third.some((c) => c.type === "add") ? null : "turn 3: no adds",
+      ].filter(Boolean);
+      return problems.length ? problems.join("; ") : null;
+    },
+  },
+];
+const selectedTasks = args.has("no-tasks") || (only && only !== "tasks") ? [] : tasks;
 
 // ---------- runner ----------
 type CaseResult = { name: string; group: string; ok: boolean; ms: number; calls: number; detail: string | null };
-type ModelResult = { model: string; results: CaseResult[]; promptTokens: number; completionTokens: number; failures: number; wallMs: number };
+type TaskResult = { name: string; ok: boolean; ms: number; calls: number; completionTokens: number; detail: string | null };
+type ModelResult = { model: string; results: CaseResult[]; tasks: TaskResult[]; promptTokens: number; completionTokens: number; generationMs: number; failures: number; wallMs: number };
 
 async function pool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
   let next = 0;
@@ -454,8 +556,27 @@ async function runModel(model: string, meta: ModelMeta | undefined): Promise<Mod
   };
   await pool(parallel, concurrency, runCase);
   for (const c of serial) await runCase(c);
+  // Tasks run one at a time and cold, so each time is what a user would wait for that action.
+  const taskResults: TaskResult[] = [];
+  for (const t of selectedTasks) {
+    for (let run = 0; run < runs; run += 1) {
+      db().delete(aiCache).run();
+      const before = aiStats();
+      const t0 = performance.now();
+      let detail: string | null = null;
+      try {
+        detail = await t.run();
+      } catch (error) {
+        detail = `threw: ${error instanceof Error ? error.message : String(error)}`;
+      }
+      const ms = performance.now() - t0;
+      const after = aiStats();
+      taskResults.push({ name: t.name, ok: detail === null, ms, calls: after.calls - before.calls, completionTokens: after.completionTokens - before.completionTokens, detail });
+      process.stdout.write(`  ${detail === null ? "✓" : "✗"} task: ${t.name} (${(ms / 1000).toFixed(1)}s, ${after.calls - before.calls} calls)${detail ? `\n      ${detail}` : ""}\n`);
+    }
+  }
   const stats = aiStats();
-  return { model, results, promptTokens: stats.promptTokens, completionTokens: stats.completionTokens, failures: stats.failures, wallMs: performance.now() - started };
+  return { model, results, tasks: taskResults, promptTokens: stats.promptTokens, completionTokens: stats.completionTokens, generationMs: stats.generationMs, failures: stats.failures, wallMs: performance.now() - started };
 }
 
 function median(values: number[]) {
@@ -473,23 +594,28 @@ function report(all: ModelResult[], meta: Map<string, ModelMeta>) {
   const lines: string[] = [];
   lines.push(`# baskt LLM benchmark — ${new Date().toISOString().slice(0, 16).replace("T", " ")}`);
   lines.push("");
-  lines.push(`${selected.length} checks × ${runs} run(s) per model; latency is per check (an assistant check is a whole tool-using turn). Cost = tokens actually used in this run at the proxy's list price.`);
+  lines.push(`${selected.length} checks × ${runs} run(s) per model; latency is per check (an assistant check is a whole tool-using turn). Cost = tokens actually used in this run at the proxy's list price. tok/s = output tokens (reasoning included) per second of successful call time, so it also counts prompt processing and the network round trip (calls are not streamed).`);
   lines.push("");
-  lines.push("| model | pass | parse | alt | rank | deals | l10n | assistant | median s | p90 s | total s | tokens in/out | cost |");
-  lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
-  const sorted = [...all].sort((a, b) => b.results.filter((r) => r.ok).length / b.results.length - a.results.filter((r) => r.ok).length / a.results.length || a.wallMs - b.wallMs);
+  lines.push("| model | pass | parse | alt | rank | deals | l10n | assistant | median s | p90 s | total s | tok/s | tokens in/out | cost |");
+  lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+  const passRate = (m: ModelResult) => {
+    const rows = [...m.results, ...m.tasks];
+    return rows.length ? rows.filter((r) => r.ok).length / rows.length : 0;
+  };
+  const sorted = [...all].sort((a, b) => passRate(b) - passRate(a) || a.wallMs - b.wallMs);
   const groupScore = (m: ModelResult, group: string) => {
     const rows = m.results.filter((r) => r.group === group);
     return rows.length ? `${rows.filter((r) => r.ok).length}/${rows.length}` : "–";
   };
   for (const m of sorted) {
     const passed = m.results.filter((r) => r.ok).length;
-    const pct = Math.round((passed / m.results.length) * 100);
+    const pct = m.results.length ? Math.round((passed / m.results.length) * 100) : 0;
+    const tps = m.generationMs ? m.completionTokens / (m.generationMs / 1000) : 0;
     const times = m.results.map((r) => r.ms / 1000);
     const price = meta.get(m.model);
     const cost = price ? (m.promptTokens / 1e6) * price.promptUsd + (m.completionTokens / 1e6) * price.completionUsd : null;
     lines.push(
-      `| ${m.model} | **${pct}%** (${passed}/${m.results.length}) | ${groupScore(m, "parse")} | ${groupScore(m, "alternatives")} | ${groupScore(m, "rank")} | ${groupScore(m, "deals")} | ${groupScore(m, "localize")} | ${groupScore(m, "assistant")} | ${median(times).toFixed(1)} | ${percentile(times, 0.9).toFixed(1)} | ${(m.wallMs / 1000).toFixed(0)} | ${m.promptTokens}/${m.completionTokens} | ${cost === null ? "?" : `$${cost.toFixed(4)}`} |`,
+      `| ${m.model} | **${pct}%** (${passed}/${m.results.length}) | ${groupScore(m, "parse")} | ${groupScore(m, "alternatives")} | ${groupScore(m, "rank")} | ${groupScore(m, "deals")} | ${groupScore(m, "localize")} | ${groupScore(m, "assistant")} | ${median(times).toFixed(1)} | ${percentile(times, 0.9).toFixed(1)} | ${(m.wallMs / 1000).toFixed(0)} | ${tps.toFixed(0)} | ${m.promptTokens}/${m.completionTokens} | ${cost === null ? "?" : `$${cost.toFixed(4)}`} |`,
     );
   }
   lines.push("");
@@ -505,11 +631,28 @@ function report(all: ModelResult[], meta: Map<string, ModelMeta>) {
     });
     lines.push(`| ${c.name} | ${cells.join(" | ")} |`);
   }
+  if (selectedTasks.length) {
+    lines.push("");
+    lines.push("## End-to-end tasks");
+    lines.push("");
+    lines.push("Cold (answer cache cleared), one at a time; the time is what a user waits for the whole action. Cells: pass count, median seconds, AI calls.");
+    lines.push("");
+    lines.push(`| task | ${sorted.map((m) => m.model.split("/").pop()).join(" | ")} |`);
+    lines.push(`|---|${sorted.map(() => "---").join("|")}|`);
+    for (const t of selectedTasks) {
+      const cells = sorted.map((m) => {
+        const rows = m.tasks.filter((r) => r.name === t.name);
+        const ok = rows.filter((r) => r.ok).length;
+        return `${ok === rows.length ? "✓" : ok === 0 ? "✗" : `${ok}/${rows.length}`} ${median(rows.map((r) => r.ms / 1000)).toFixed(1)}s · ${median(rows.map((r) => r.calls))} calls`;
+      });
+      lines.push(`| ${t.name} | ${cells.join(" | ")} |`);
+    }
+  }
   lines.push("");
   lines.push("## Failures");
   lines.push("");
   for (const m of sorted) {
-    const failed = m.results.filter((r) => !r.ok);
+    const failed = [...m.results, ...m.tasks.map((t) => ({ ...t, name: `task: ${t.name}` }))].filter((r) => !r.ok);
     if (!failed.length) continue;
     lines.push(`### ${m.model}`);
     for (const r of failed) lines.push(`- ${r.name}: ${r.detail}`);
@@ -524,7 +667,8 @@ for (const model of models) {
   console.log(`\n=== ${model}`);
   all.push(await runModel(model, meta.get(model)));
   const last = all[all.length - 1];
-  console.log(`  → ${last.results.filter((r) => r.ok).length}/${last.results.length} passed in ${(last.wallMs / 1000).toFixed(0)}s, ${last.failures} failed AI calls`);
+  const lastTps = last.generationMs ? last.completionTokens / (last.generationMs / 1000) : 0;
+  console.log(`  → ${last.results.filter((r) => r.ok).length}/${last.results.length} checks, ${last.tasks.filter((t) => t.ok).length}/${last.tasks.length} tasks passed in ${(last.wallMs / 1000).toFixed(0)}s, ${lastTps.toFixed(0)} tok/s, ${last.failures} failed AI calls`);
 }
 const markdown = report(all, meta);
 const dir = resolve(import.meta.dir, "../bench");
