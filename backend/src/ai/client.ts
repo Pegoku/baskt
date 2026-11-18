@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db, now } from "@/db";
 import { aiCache } from "@/db/schema";
 import { attemptOrder, cooldownFor, cooldownLeft, noteCall, noteFailure, noteUsage, poolStats, resetPoolStats } from "@/ai/pool";
+import { codexChat, codexStats, resetCodexStats } from "@/ai/codex";
 import { aiConfigured, aiVendor, env, type AiProfile, type AiTarget } from "@/env";
 
 export type ChatPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
@@ -31,6 +32,8 @@ export function aiStats() {
     /** Speech-to-text on the server; when this is off the app dictates on-device. */
     stt: { configured: env.ai.stt.length > 0, model: env.ai.stt[0]?.model ?? null },
     providers: poolStats(),
+    /** The Codex CLI fallback, null when it is off. */
+    codex: codexStats(),
   };
 }
 
@@ -42,6 +45,7 @@ export function resetAiStats() {
   completionTokens = 0;
   generationMs = 0;
   resetPoolStats();
+  resetCodexStats();
 }
 
 /** Calls an OpenAI-compatible chat-completions endpoint and parses the JSON object it returns. */
@@ -56,7 +60,7 @@ export async function chatJson<T>(
 ): Promise<T | null> {
   // The attempt order balances the pool: best priority first, round-robin between equal ones.
   const order = attemptOrder(options.profile ?? "default");
-  if (!order.length) return null;
+  if (!order.length) return codexJson<T>(messages);
   const retries = options.retries ?? 2;
   let maxTokens = options.maxTokens ?? 1500;
   let rateLimitWaits = 0;
@@ -217,7 +221,19 @@ export async function chatJson<T>(
       console.warn(`[ai] ${target.id} attempt ${attempt}/${attempts} failed: ${message}`);
     }
   }
-  return null;
+  // Every provider failed: the Codex CLI is the last resort (no-op unless AI_CODEX is set).
+  return codexJson<T>(messages);
+}
+
+async function codexJson<T>(messages: ChatMessage[]): Promise<T | null> {
+  const answer = await codexChat(messages);
+  if (!answer) return null;
+  try {
+    return JSON.parse(stripFences(answer)) as T;
+  } catch {
+    console.warn(`[ai] codex reply was not JSON: ${answer.slice(0, 160).replace(/\s+/g, " ")}`);
+    return null;
+  }
 }
 
 function reasoningField(target: AiTarget, vendor: ReturnType<typeof aiVendor>) {

@@ -196,6 +196,12 @@ export const env = {
      * account has its own daily spending cap, so a second token is a second budget: `REPLICATE_2=...`.
      * The model is part of every request, not of the provider.
      */
+    /**
+     * Last-resort fallback through the Codex CLI (`codex exec`) on the server's own ChatGPT login, used
+     * when every provider of a pool failed (or a pool is empty). Off unless `AI_CODEX` is set: `on`, or a
+     * model name (default gpt-6.1-terra). `AI_CODEX_BIN` points at the launcher when it is not on PATH.
+     */
+    codex: codexConfig(),
     replicate: readPool(
       "REPLICATE",
       {
@@ -237,13 +243,26 @@ function sttPool(): AiProvider[] {
     .map((provider) => ({ ...provider, id: `${provider.id}_STT`, model }));
 }
 
-export function aiConfigured() {
-  return env.ai.chat.length > 0;
+function codexConfig() {
+  const value = process.env.AI_CODEX?.trim() ?? "";
+  const enabled = Boolean(value) && !/^(off|false|0|no)$/i.test(value);
+  const named = enabled && !/^(on|true|1|yes)$/i.test(value) ? value : "";
+  return {
+    enabled,
+    model: process.env.AI_CODEX_MODEL?.trim() || named || "gpt-6.1-terra",
+    reasoning: process.env.AI_CODEX_REASONING?.trim() || "low",
+    bin: process.env.AI_CODEX_BIN?.trim() || "",
+    timeoutMs: num(process.env.AI_CODEX_TIMEOUT_SECONDS, 180) * 1000,
+  };
 }
 
-/** An image-capable pool is set up (receipt photos, product pictures). */
+export function aiConfigured() {
+  return env.ai.chat.length > 0 || env.ai.codex.enabled;
+}
+
+/** An image-capable pool is set up (receipt photos, product pictures); Codex reads images too. */
 export function visionConfigured() {
-  return env.ai.vision.length > 0;
+  return env.ai.vision.length > 0 || env.ai.codex.enabled;
 }
 
 /** The providers to try for a purpose, best first; the assistant falls back to the chat pool. */

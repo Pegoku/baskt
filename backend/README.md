@@ -13,6 +13,7 @@ bun test
 
 Docker: `docker compose up -d --build` (data lives in the `baskt-data` volume).
 
+With `AI_CODEX=on`, calls that every provider failed fall back to the Codex CLI (`codex exec`, gpt-6.1-terra by default).
 Without `AI_API_KEY`/`AI_MODEL` the API still works: ideas are searched as typed and ranked by text similarity.
 
 ### Run with systemd
