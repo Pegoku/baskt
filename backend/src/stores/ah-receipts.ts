@@ -103,7 +103,12 @@ export function receiptLines(detail: ReceiptDetail, products: Map<number, Produc
       extra.push({ name: discount.name ? `${label}: ${discount.name}` : label, quantity: 1, unitPriceCents: cents, totalPriceCents: cents, dealText: label, productId: null });
     }
   }
-  return [...lines.map(({ receiptName: _, ...line }) => line), ...extra];
+  const result = [...lines.map(({ receiptName: _, ...line }) => line), ...extra];
+  // AH leaves koopzegels (savings stamps) out of the product list but counts them in the total.
+  const totalCents = eurosToCents(detail.total?.amount);
+  const missing = totalCents == null ? 0 : totalCents - result.reduce((sum, line) => sum + line.totalPriceCents, 0);
+  if (missing > 0) result.push({ name: "Koopzegels", quantity: 1, unitPriceCents: missing, totalPriceCents: missing, dealText: null, productId: null });
+  return result;
 }
 
 function sameDay(a: number, b: number) {

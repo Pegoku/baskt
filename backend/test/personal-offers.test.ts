@@ -104,4 +104,13 @@ describe("ah receipts", () => {
       ["Bonus: MBSPECIALITE", -58, "Bonus", null],
     ]);
   });
+
+  test("adds the koopzegels AH counts in the total but leaves off the product list", async () => {
+    const { receiptLines } = await import("@/stores/ah-receipts");
+    const lines = receiptLines({ products: [{ id: 1, quantity: 1, name: "STOKBROOD", price: null, amount: { amount: 1.39 } }], discounts: [], total: { amount: 3.49 } }, new Map());
+    expect(lines.map((line) => [line.name, line.totalPriceCents])).toEqual([
+      ["STOKBROOD", 139],
+      ["Koopzegels", 210],
+    ]);
+  });
 });
