@@ -43,7 +43,7 @@ import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.PlainTooltip
-import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -98,11 +98,12 @@ import nl.baskt.ui.common.Tag
 import nl.baskt.ui.common.counted
 import nl.baskt.ui.common.storeName
 
-private val TABS = listOf("My items", "All", "My Bonus", "Prices")
+private val TABS = listOf("My items", "All", "My Bonus", "Last chance", "Prices")
 
 /**
- * Deals in four views: the ones for the items in this basket (with one-tap switching), every deal at the
- * stores, the AH account's Bonus Box, and what got cheaper or more expensive. Every view reloads with a pull.
+ * Deals in five views: the ones for the items in this basket (with one-tap switching), every deal at the
+ * stores, the AH account's Bonus Box, AH's last chance markdowns at the favourite store, and what got cheaper
+ * or more expensive. Every view reloads with a pull.
  */
 @Composable
 fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String) -> Unit, onAhLogin: () -> Unit = {}) {
@@ -125,7 +126,8 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             OfflineBanner(viewModel)
-            PrimaryTabRow(selectedTabIndex = tab) {
+            // Five tabs no longer fit a phone's width with readable labels, so the row scrolls.
+            PrimaryScrollableTabRow(selectedTabIndex = tab, edgePadding = 0.dp) {
                 TABS.forEachIndexed { index, label ->
                     Tab(selected = tab == index, onClick = { tab = index }, text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) })
                 }
@@ -135,6 +137,7 @@ fun DealsScreen(viewModel: AppViewModel, onBack: () -> Unit, onOpenItem: (String
                     0 -> MyItemsTab(viewModel, stores, onOpenItem)
                     1 -> AllDealsTab(viewModel, stores)
                     2 -> MyBonusTab(viewModel, onLogin = onAhLogin)
+                    3 -> LastChanceTab(viewModel, onLogin = onAhLogin)
                     else -> PriceChangesTab(viewModel, stores)
                 }
             }

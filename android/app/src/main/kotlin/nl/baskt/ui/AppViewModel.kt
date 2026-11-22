@@ -653,10 +653,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     /** Called by the login WebView with the appie://login-exit URL it intercepted. */
     suspend fun connectAh(redirect: String): Result<nl.baskt.data.AhAccountStatus> =
-        runCatching { container.api.ahConnect(redirect) }.onSuccess { _ahAccount.value = it; _ahOffers.value = null; loadAhOffers(force = true) }
+        runCatching { container.api.ahConnect(redirect) }.onSuccess { _ahAccount.value = it; _ahOffers.value = null; _lastChance.value = null; loadAhOffers(force = true) }
 
     fun disconnectAh() = viewModelScope.launch {
-        runCatching { container.api.ahDisconnect() }.onSuccess { _ahAccount.value = it; _ahOffers.value = null }.onFailure { notify(failure("Couldn’t log out", it)) }
+        runCatching { container.api.ahDisconnect() }.onSuccess { _ahAccount.value = it; _ahOffers.value = null; _lastChance.value = null }.onFailure { notify(failure("Couldn’t log out", it)) }
     }
 
     fun setAhAutoActivate(enabled: Boolean) = viewModelScope.launch {
@@ -668,6 +668,19 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         _ahOffers.value = cachedLoad<nl.baskt.data.PersonalOffersResponse?>("ah-offers", _ahOffers.value) { container.api.ahOffers(force) }
         if (_ahAccount.value == null) loadAhAccount()
         _loadingAhOffers.value = false
+    }
+
+    private val _lastChance = MutableStateFlow<nl.baskt.data.LastChanceResponse?>(null)
+    val lastChance: StateFlow<nl.baskt.data.LastChanceResponse?> = _lastChance
+    private val _loadingLastChance = MutableStateFlow(false)
+    val loadingLastChance: StateFlow<Boolean> = _loadingLastChance
+
+    /** AH "Laatste Kans Koopjes" at the account's favourite store. */
+    fun loadLastChance(force: Boolean = false) = viewModelScope.launch {
+        _loadingLastChance.value = true
+        _lastChance.value = cachedLoad<nl.baskt.data.LastChanceResponse?>("ah-last-chance", _lastChance.value) { container.api.ahLastChance(force) }
+        if (_ahAccount.value == null) loadAhAccount()
+        _loadingLastChance.value = false
     }
 
     private val _importingReceipts = MutableStateFlow(false)

@@ -79,6 +79,39 @@ data class PersonalOffersResponse(
     val fetchedAt: Long = 0,
 )
 
+/** One AH "Laatste Kans Koopje": a store-only markdown of a product near its date or leaving the range. */
+@Serializable
+data class LastChanceItem(
+    val productId: String,
+    val title: String,
+    val brand: String? = null,
+    val quantityText: String? = null,
+    val imageUrl: String? = null,
+    val category: String? = null,
+    /** EXPIRATION, OUT_OF_ASSORTMENT or OTHER. */
+    val reason: String = "OTHER",
+    /** Best-before date, or the day it leaves the range (YYYY-MM-DD). */
+    val date: String? = null,
+    val discountPercent: Int? = null,
+    val discountText: String? = null,
+    /** Marked-down packs the store still had, when AH says. */
+    val left: Int? = null,
+    val priceCents: Int? = null,
+    val regularPriceCents: Int? = null,
+)
+
+@Serializable
+data class LastChanceStore(val id: String, val name: String)
+
+@Serializable
+data class LastChanceResponse(
+    val connected: Boolean = false,
+    val store: LastChanceStore? = null,
+    val items: List<LastChanceItem> = emptyList(),
+    val products: Map<String, Product> = emptyMap(),
+    val fetchedAt: Long = 0,
+)
+
 @Serializable
 data class ReceiptImportResult(val imported: Int = 0, val replacedTrips: Int = 0)
 

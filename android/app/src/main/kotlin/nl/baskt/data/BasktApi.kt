@@ -486,6 +486,9 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
     suspend fun ahOffers(force: Boolean): PersonalOffersResponse =
         client.get(url("/ah/offers")) { auth(); if (force) parameter("force", "true") }.expect()
 
+    suspend fun ahLastChance(force: Boolean): LastChanceResponse =
+        client.get(url("/ah/last-chance")) { auth(); if (force) parameter("force", "true") }.expect()
+
     suspend fun ahImportReceipts(): ReceiptImportResult = client.post(url("/ah/receipts/import")) { auth() }.expect()
 
     suspend fun ahActivate(offerId: String): ActivateOfferResponse =
