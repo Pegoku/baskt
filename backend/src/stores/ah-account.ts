@@ -66,6 +66,11 @@ export function setAutoActivate(enabled: boolean) {
   setSetting(AUTO_KEY, enabled);
 }
 
+/** An account is stored (its login may still have expired; calls then fail with LOGIN_EXPIRED). */
+export function isConnected() {
+  return Boolean(account());
+}
+
 export function accountStatus() {
   const current = account();
   return {

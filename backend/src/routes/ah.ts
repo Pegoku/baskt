@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import { autoActivate } from "@/matching/personal-deals";
 import { HttpError } from "@/lib/http";
 import { accountStatus, activateOffer, AhAccountError, connect, disconnect, personalOffers, setAutoActivate, type PersonalOffersView } from "@/stores/ah-account";
+import { clearLastChance, lastChance } from "@/stores/ah-last-chance";
 import { importAhReceipts } from "@/stores/ah-receipts";
 import { productsByIds } from "@/stores/search";
 
@@ -27,6 +28,7 @@ ahRoute.post("/account/connect", async (c) => {
   if (!body.code?.trim()) return c.json({ error: { code: "BAD_REQUEST", message: "code is required" } }, 400);
   try {
     const status = await connect(body.code);
+    clearLastChance();
     void personalOffers({ force: true }).then(() => autoActivate({ force: true })).catch(() => {});
     void importAhReceipts().catch((error) => console.warn(`[ah-receipts] import after login failed: ${error instanceof Error ? error.message : error}`));
     return c.json(status);
@@ -44,12 +46,22 @@ ahRoute.patch("/account", async (c) => {
 
 ahRoute.delete("/account", (c) => {
   disconnect();
+  clearLastChance();
   return c.json(accountStatus());
 });
 
 ahRoute.get("/offers", async (c) => {
   try {
     return c.json(offersBody(await personalOffers({ force: c.req.query("force") === "true" })));
+  } catch (error) {
+    return failure(c, error);
+  }
+});
+
+/** "Laatste Kans Koopjes": marked-down products at the account's favourite store (in store only). */
+ahRoute.get("/last-chance", async (c) => {
+  try {
+    return c.json(await lastChance({ force: c.req.query("force") === "true" }));
   } catch (error) {
     return failure(c, error);
   }
