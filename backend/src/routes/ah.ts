@@ -61,7 +61,9 @@ ahRoute.get("/offers", async (c) => {
 /** "Laatste Kans Koopjes": marked-down products at the account's favourite store (in store only). */
 ahRoute.get("/last-chance", async (c) => {
   try {
-    return c.json(await lastChance({ force: c.req.query("force") === "true" }));
+    const view = await lastChance({ force: c.req.query("force") === "true" });
+    const products = productsByIds(view.items.map((item) => item.productId));
+    return c.json({ ...view, products: Object.fromEntries(products.map((row) => [row.id, row])) });
   } catch (error) {
     return failure(c, error);
   }
