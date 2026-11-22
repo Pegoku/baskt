@@ -233,6 +233,24 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
         onDismiss = { confirmStopSelfScan = false },
         onConfirm = { viewModel.stopSelfScan() },
     )
+    // What this trip already scanned, as codes AH can take: the code as read when the till relay kept it, else the
+    // GTIN of an extra or of a scan that ticked a list item. Items ticked by hand carry no code and stay behind.
+    val tripCodes = tillCodes.filter { it.store == store && it.at >= tripStart }
+    val tickedHere = items.filter { it.isBought && it.assignedStore == store && !earlier(it) }
+    val tickedIds = tickedHere.map { it.id }.toSet()
+    val transferCodes = tripCodes.map { it.raw } +
+        tripScans.filter { scan -> scan.store == store && scan.at >= tripStart && tripCodes.none { it.scanId == scan.id } }.map { it.barcode } +
+        tickedByBarcode.filter { (_, id) -> id in tickedIds && tripCodes.none { it.itemId == id } }.keys
+    val byHand = tickedHere.count { item -> item.id !in tickedByBarcode.values && tripCodes.none { it.itemId == item.id } }
+    var offerTransfer by rememberSaveable { mutableStateOf(false) }
+    if (offerTransfer) SelfScanTransferDialog(
+        count = transferCodes.size,
+        byHand = byHand,
+        onTransfer = { offerTransfer = false; viewModel.startSelfScanWith(transferCodes) },
+        onStartEmpty = { offerTransfer = false; viewModel.startSelfScan() },
+        onDismiss = { offerTransfer = false },
+    )
+
     if (selfScanOn) selfScan.checkout?.let { checkout ->
         SelfScanCheckoutDialog(checkout, card, onRetry = { viewModel.selfScanCheckout() }, onClose = { showSelfScanBasket = false; viewModel.closeSelfScanCheckout() })
     }
@@ -282,7 +300,8 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
             if (selfScanOn) SelfScanBar(
                 state = selfScan,
                 hasCard = card != null,
-                onStart = { viewModel.startSelfScan() },
+                // Only a fresh start asks; "Try again" after a failed connect keeps the answer already given.
+                onStart = { if (selfScan.phase == nl.baskt.data.SelfScanPhase.OFF && transferCodes.isNotEmpty()) offerTransfer = true else viewModel.startSelfScan() },
                 onAddCard = { editCard = true },
                 onStop = { viewModel.stopSelfScan() },
                 onWifiSettings = {

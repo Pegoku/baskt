@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.ShoppingCartCheckout
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -161,6 +162,25 @@ fun SelfScanBar(
     }
     if (active) Surface(onClick = onOpenBasket, color = colors.primaryContainer, shape = BottomSheetDefaults.ExpandedShape, modifier = Modifier.fillMaxWidth().semantics { role = Role.Button }, content = content)
     else Surface(color = colors.surfaceContainerHigh, shape = BottomSheetDefaults.ExpandedShape, modifier = Modifier.fillMaxWidth(), content = content)
+}
+
+/**
+ * Asked when self-scan starts partway through a trip: send the [count] codes already scanned to the AH basket, or
+ * start it empty. [byHand] items were ticked without a scan, so they have no code to send.
+ */
+@Composable
+fun SelfScanTransferDialog(count: Int, byHand: Int, onTransfer: () -> Unit, onStartEmpty: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.ShoppingCartCheckout, contentDescription = null) },
+        title = { Text("Bring your scans along?") },
+        text = {
+            val handNote = if (byHand > 0) " ${counted(byHand, "item")} you ticked by hand still need${if (byHand == 1) "s" else ""} a scan." else ""
+            Text("You already scanned ${counted(count, "item")} on this trip. Add ${if (count == 1) "it" else "them"} to the AH basket once self-scan connects, so you don’t scan ${if (count == 1) "it" else "them"} twice.$handNote")
+        },
+        confirmButton = { TextButton(onClick = onTransfer) { Text("Add ${counted(count, "item")}") } },
+        dismissButton = { TextButton(onClick = onStartEmpty) { Text("Start empty") } },
+    )
 }
 
 /** Where a line of the AH basket stands against the baskt basket. */

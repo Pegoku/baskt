@@ -6,6 +6,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import nl.baskt.AppContainer
 import nl.baskt.data.AppSettings
@@ -1147,6 +1149,40 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         container.selfScan.start(card, current.selfScanWifi)
     }
     fun stopSelfScan() = container.selfScan.stop()
+
+    private var transferJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Starts self-scan and, once the AH basket is live, sends it [codes] already scanned on this trip, so the shopper
+     * does not scan them twice. Lines AH already holds (a basket kept from an earlier start) are not sent again. Only
+     * AH is told: baskt recorded these scans when they were made. Stopping before it connects drops the transfer.
+     */
+    fun startSelfScanWith(codes: List<String>) {
+        startSelfScan()
+        transferJob?.cancel()
+        transferJob = viewModelScope.launch {
+            val ready = container.selfScan.state.dropWhile { it.phase == nl.baskt.data.SelfScanPhase.OFF }.first { it.active || it.phase == nl.baskt.data.SelfScanPhase.OFF }
+            if (!ready.active) return@launch
+            val held = ready.basket?.products.orEmpty()
+                .groupBy { nl.baskt.data.productGtin(it.barcode) ?: it.barcode }
+                .mapValues { (_, lines) -> lines.sumOf { it.quantity ?: 1 } }.toMutableMap()
+            var sent = 0
+            var added = 0
+            for (code in codes) {
+                val gtin = nl.baskt.data.productGtin(code) ?: code.trim()
+                val left = held[gtin] ?: 0
+                if (left > 0) { held[gtin] = left - 1; continue }
+                if (!container.selfScan.state.value.active) break
+                sent++
+                if (container.selfScan.add(code)) added++
+            }
+            when {
+                sent == 0 -> notify("Your scanned items are already in the AH basket")
+                added == sent -> notify("Moved ${nl.baskt.ui.common.counted(added, "item")} to the AH basket")
+                else -> notify("Moved $added of $sent items; open the AH basket to see what AH didn’t take")
+            }
+        }
+    }
 
     /**
      * A scan in AH shop mode while self-scan runs: AH gets it first, and only a code AH took goes on to baskt (ticking
