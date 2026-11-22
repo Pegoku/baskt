@@ -45,7 +45,7 @@ async function run(): Promise<AutoActivation[]> {
     if (slots <= 0) break;
     const title = view.offers.find((offer) => offer.id === offerId)?.title ?? offerId;
     try {
-      await activateOffer(offerId, { auto: true });
+      await activateOffer(offerId, { auto: true, itemText: match.itemText });
       slots -= 1;
       results.push({ offerId, title, itemText: match.itemText, ok: true, error: null });
     } catch (error) {

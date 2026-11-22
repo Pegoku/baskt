@@ -19,6 +19,8 @@ export type PersonalOffer = {
   /** Product keys ("AH:123") the offer applies to. */
   productIds: string[];
   autoActivated: boolean;
+  /** The list item that auto-activation matched this offer to. */
+  autoActivatedFor?: string;
 };
 
 export type PersonalTag = { offerId: string; status: string; source: PersonalOffer["source"]; dealText: string | null };

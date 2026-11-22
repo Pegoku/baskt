@@ -31,6 +31,8 @@ const ACCOUNT_KEY = "ahAccount";
 const OFFERS_KEY = "ahPersonalOffers";
 const AUTO_KEY = "ahAutoActivate";
 const AUTO_LOG_KEY = "ahAutoActivated";
+/** offer id -> the list item text that made auto-activation pick it. */
+const AUTO_FOR_KEY = "ahAutoActivatedFor";
 
 export class AhAccountError extends Error {
   constructor(
@@ -319,6 +321,8 @@ async function fetchOffers(): Promise<PersonalOffersView> {
   const bundle = box.bonusPersonalPromotionBundles?.[0] ?? null;
   const period = { start: bundle?.validityPeriod?.start?.slice(0, 10) || week.start, end: bundle?.validityPeriod?.end?.slice(0, 10) || week.end };
   const offers = (box.bonusPromotions ?? []).map((promotion) => mapPromotion(promotion, autoLog)).filter((offer): offer is PersonalOffer => offer !== null);
+  const autoFor = getSetting<Record<string, string>>(AUTO_FOR_KEY, {});
+  for (const offer of offers) if (autoFor[offer.id]) offer.autoActivatedFor = autoFor[offer.id];
   try {
     const rest = await authorized<RestPersonal>(`/mobile-services/bonuspage/v1/personal?bonusStartDate=${period.start}`);
     const section = mapPersonalSection(rest, period);
@@ -368,7 +372,7 @@ const ACTIVATE_MUTATION = `mutation ActivatePersonalPromotion($externalId: Int!,
   bonusActivatePersonalPromotion(externalId: $externalId, startDate: $startDate) { status message }
 }`;
 
-export async function activateOffer(offerId: string, options: { auto?: boolean } = {}) {
+export async function activateOffer(offerId: string, options: { auto?: boolean; itemText?: string } = {}) {
   const view = await personalOffers();
   const offer = view.offers.find((entry) => entry.id === offerId);
   if (!offer) throw new AhAccountError("AH_ERROR", "offer not found");
@@ -381,6 +385,10 @@ export async function activateOffer(offerId: string, options: { auto?: boolean }
   const result = data.bonusActivatePersonalPromotion ?? {};
   console.log(`[ah-account] activate ${offer.id} (${offer.title})${options.auto ? " [auto]" : ""}: ${result.status ?? "?"} ${result.message ?? ""}`);
   if (options.auto) setSetting(AUTO_LOG_KEY, [...getSetting<string[]>(AUTO_LOG_KEY, []), offer.id].slice(-100));
+  if (options.auto && options.itemText) {
+    const entries = Object.entries({ ...getSetting<Record<string, string>>(AUTO_FOR_KEY, {}), [offer.id]: options.itemText }).slice(-100);
+    setSetting(AUTO_FOR_KEY, Object.fromEntries(entries));
+  }
   const refreshed = await personalOffers({ force: true });
   const ok = refreshed.offers.find((entry) => entry.id === offerId)?.status === "ACTIVATED";
   if (!ok && result.status !== "SUCCESS") throw new AhAccountError("AH_ERROR", `AH refused the activation (${result.status ?? "no status"}${result.message ? `: ${result.message}` : ""})`);
