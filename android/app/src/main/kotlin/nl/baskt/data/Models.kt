@@ -62,6 +62,8 @@ data class PersonalOffer(
     val periodEnd: String? = null,
     val productIds: List<String> = emptyList(),
     val autoActivated: Boolean = false,
+    /** The list item auto-activation matched this offer to. */
+    val autoActivatedFor: String? = null,
 )
 
 @Serializable

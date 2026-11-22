@@ -55,6 +55,25 @@ class MainActivity : ComponentActivity() {
         else -> emptyList()
     }
 
+    override fun onStop() {
+        super.onStop()
+        nl.baskt.data.AutoActivationWorker.checkSoon(this)
+    }
+
+    /** Auto-activation notifications need the permission (Android 13+): ask once AH auto-activation is on. */
+    @androidx.compose.runtime.Composable
+    private fun NotificationPermission(viewModel: AppViewModel) {
+        if (android.os.Build.VERSION.SDK_INT < 33) return
+        val account by viewModel.ahAccount.collectAsState()
+        val launcher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {}
+        androidx.compose.runtime.LaunchedEffect(Unit) { if (account == null) viewModel.loadAhAccount() }
+        val wanted = account?.connected == true && account?.autoActivate == true
+        androidx.compose.runtime.LaunchedEffect(wanted) {
+            val granted = androidx.core.content.ContextCompat.checkSelfPermission(this@MainActivity, android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (wanted && !granted) launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -63,6 +82,7 @@ class MainActivity : ComponentActivity() {
             val viewModel: AppViewModel = viewModel { AppViewModel(container) }
             androidx.compose.runtime.LaunchedEffect(viewModel) { viewModelRef = viewModel; handleIntent(intent) }
             val settings by viewModel.settings.collectAsState()
+            NotificationPermission(viewModel)
             // Count the restored screen, rather than the empty frame before settings arrive.
             ReportDrawnWhen { settings != null }
             BasktTheme {

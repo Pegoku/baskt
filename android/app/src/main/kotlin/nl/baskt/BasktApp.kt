@@ -92,6 +92,7 @@ class BasktApp : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        nl.baskt.data.AutoActivationWorker.schedule(this)
     }
 
     /** Jumbo's CDN rejects the default "okhttp/x" user agent, so product images are fetched with a browser UA. */
