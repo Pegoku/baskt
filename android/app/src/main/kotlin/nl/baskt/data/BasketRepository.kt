@@ -758,6 +758,13 @@ class BasketRepository(
         })
     }
 
+    /** Names a scan after its AH self-scan line (a weighed label no store lookup knows); AH's answer replaces a guess. */
+    fun labelScanFromTill(id: String, label: ScannedLabel) {
+        var changed = false
+        tripScans.update { list -> list.map { if (it.id == id && it.product == null && it.label != label) { changed = true; it.copy(label = label) } else it } }
+        if (changed) offline?.save("trip-scans", tripScans.value)
+    }
+
     /** Fills in a scan's name and picture from Open Food Facts when the backend is unreachable. */
     private suspend fun labelScan(id: String, gtin: String) {
         val label = runCatching { barcodes.resolve(gtin, _stock.value) }.getOrNull() ?: return

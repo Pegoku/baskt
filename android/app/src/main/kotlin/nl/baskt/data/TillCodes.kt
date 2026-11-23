@@ -73,3 +73,15 @@ fun selfScanCodes(raw: String): List<String> {
     val gtin = if (gs1Ais(text) != null && tillCodeKind(text) == "pack") productGtin(text) else null
     return listOfNotNull(text, gtin).distinct()
 }
+
+/**
+ * True when an AH self-scan line's [line] barcode stands for a trip scan's [scanned] code. A store scale's label
+ * (EAN-13 starting with 2) is matched on its first seven digits, the prefix and article: the rest is price and
+ * check digits, which AH need not hand back as they were sent.
+ */
+fun sameTillCode(line: String, scanned: String): Boolean {
+    val a = productGtin(line) ?: line.trim()
+    val b = productGtin(scanned) ?: scanned.trim()
+    if (a == b) return true
+    return a.length == 13 && b.length == 13 && a.startsWith("2") && b.startsWith("2") && a.take(7) == b.take(7)
+}

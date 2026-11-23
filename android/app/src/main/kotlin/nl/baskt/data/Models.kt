@@ -862,3 +862,9 @@ data class SpeechModel(val id: String, val name: String, val description: String
 data class SpeechModels(val configured: Boolean = false, val models: List<SpeechModel> = emptyList())
 @Serializable
 data class SpeechRequest(val text: String, val model: String, val voice: String, val language: String, val preview: Boolean = false)
+
+@Serializable
+data class TillProductsRequest(val nasaNrs: List<String>)
+
+@Serializable
+data class TillProductsResponse(val products: Map<String, Product> = emptyMap())

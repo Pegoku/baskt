@@ -19,8 +19,10 @@ data class ScannedLabel(
     val title: String,
     val quantityText: String? = null,
     val imageUrl: String? = null,
-    /** Where it came from: "cache" (an earlier server answer), "stock", or "openfoodfacts". */
+    /** Where it came from: "cache" (an earlier server answer), "stock", "openfoodfacts", or "ah" (the AH self-scan line). */
     val source: String,
+    /** What this one scan costs, when known: AH's price for a weighed label. */
+    val priceCents: Int? = null,
 )
 
 /**

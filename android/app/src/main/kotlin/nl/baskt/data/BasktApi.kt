@@ -489,6 +489,10 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
     suspend fun ahLastChance(force: Boolean): LastChanceResponse =
         client.get(url("/ah/last-chance")) { auth(); if (force) parameter("force", "true") }.expect()
 
+    /** Catalogue products for AH till numbers (`nasaNr` on self-scan lines); numbers AH sells nothing online for are left out. */
+    suspend fun ahTillProducts(nasaNrs: List<String>): TillProductsResponse =
+        client.post(url("/ah/till-products")) { auth(); contentType(ContentType.Application.Json); setBody(TillProductsRequest(nasaNrs)) }.expect()
+
     suspend fun ahImportReceipts(): ReceiptImportResult = client.post(url("/ah/receipts/import")) { auth() }.expect()
 
     suspend fun ahActivate(offerId: String): ActivateOfferResponse =

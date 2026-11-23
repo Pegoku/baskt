@@ -1,6 +1,8 @@
 package nl.baskt.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -28,5 +30,14 @@ class TillCodesTest {
         )
         val sequence = tillSequence(codes, listOf(item, other))
         assertEquals(listOf("1", "1", "1", "2", "3"), sequence.map { it.id })
+    }
+
+    @Test fun selfScanLineMatchesItsScan() {
+        assertTrue(sameTillCode("8710400200857", "8710400200857"))
+        assertTrue(sameTillCode("08710400200857", "8710400200857"))
+        // A scale label: same article, AH may hand it back with other price or check digits.
+        assertTrue(sameTillCode("2326500000004", "2326500804275"))
+        assertFalse(sameTillCode("2326501804275", "2326500804275"))
+        assertFalse(sameTillCode("8710400200857", "8710400200864"))
     }
 }

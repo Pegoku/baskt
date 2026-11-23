@@ -203,6 +203,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
     // AH self-scan (experimental): while a trip runs, every scan goes to the AH basket first, then to the baskt basket.
     val selfScanOn = store == "AH" && settings?.selfScan == true
     val selfScan by viewModel.selfScan.collectAsState()
+    val tillProducts by viewModel.tillProducts.collectAsState()
     val tickedByBarcode by viewModel.tickedByBarcode.collectAsState()
     var showSelfScanBasket by rememberSaveable { mutableStateOf(false) }
     var confirmStopSelfScan by rememberSaveable { mutableStateOf(false) }
@@ -216,6 +217,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
         remaining = remaining.map { it.first },
         tripScans = tripScans.filter { it.store == store && System.currentTimeMillis() - it.at < tripWindow },
         tickedByBarcode = tickedByBarcode,
+        tillProducts = tillProducts,
         onQuantity = { barcode, quantity -> viewModel.setSelfScanQuantity(store, barcode, quantity) },
         onRescan = { openScanner() },
         onDismissIssue = { viewModel.dismissSelfScanIssue(it) },
@@ -439,12 +441,13 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
                                     title = title,
                                     subtitle = when {
                                         product != null -> product.quantityText
+                                        label?.priceCents != null -> label.quantityText
                                         label != null && !scan.synced -> listOfNotNull(label.quantityText, "No price until you’re online").joinToString(" · ")
                                         label != null -> listOfNotNull(label.quantityText, "No price at this store").joinToString(" · ")
                                         scan.synced -> "Unknown product"
                                         else -> "Waiting for connection"
                                     },
-                                    price = product?.priceCents?.euros(),
+                                    price = (product?.priceCents ?: label?.priceCents)?.euros(),
                                     onOpen = product?.let { { viewing = it } },
                                     modifier = Modifier.semantics { customActions = actions.map { (label, action) -> CustomAccessibilityAction(label) { action(); true } } },
                                     trailing = { RowMenu("More for $title", actions) },

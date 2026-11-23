@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import nl.baskt.data.BasketItem
+import nl.baskt.data.Product
 import nl.baskt.data.SelfScanCheckout
 import nl.baskt.data.SelfScanPhase
 import nl.baskt.data.SelfScanState
@@ -70,6 +71,7 @@ import nl.baskt.data.SsItem
 import nl.baskt.data.TripScan
 import nl.baskt.data.euros
 import nl.baskt.data.productGtin
+import nl.baskt.data.sameTillCode
 import nl.baskt.data.tags
 import nl.baskt.data.weightText
 import nl.baskt.ui.common.EmptyState
@@ -203,6 +205,7 @@ fun SelfScanBasketSheet(
     remaining: List<BasketItem>,
     tripScans: List<TripScan>,
     tickedByBarcode: Map<String, String>,
+    tillProducts: Map<String, Product>,
     onQuantity: (String, Int) -> Unit,
     onRescan: () -> Unit,
     onDismissIssue: (Long) -> Unit,
@@ -217,7 +220,7 @@ fun SelfScanBasketSheet(
     fun linkOf(line: SsItem): ListLink {
         val gtin = productGtin(line.barcode) ?: line.barcode
         tickedByBarcode[gtin]?.let { id -> listItems.firstOrNull { it.id == id }?.let { return ListLink.OnList(it) } }
-        tripScans.lastOrNull { it.barcode == gtin }?.let { return if (it.synced) ListLink.Extra(it) else ListLink.Unknown }
+        tripScans.lastOrNull { sameTillCode(line.barcode, it.barcode) }?.let { return if (it.synced) ListLink.Extra(it) else ListLink.Unknown }
         return ListLink.Unknown
     }
     val lines = basket?.products.orEmpty()
@@ -270,7 +273,7 @@ fun SelfScanBasketSheet(
                     SwipeToDismissBox(state = dismiss, backgroundContent = { RemoveLineBackground(dismiss.dismissDirection) }) {
                         Surface(color = BottomSheetDefaults.ContainerColor) {
                             SelfScanLine(
-                                line, linkOf(line),
+                                line, linkOf(line), line.nasaNr?.let { tillProducts[it.trim()] },
                                 sending = line.barcode in state.sending,
                                 removing = removing == line.barcode,
                                 onQuantity = { quantity -> if (quantity <= 0) removing = line.barcode else onQuantity(line.barcode, quantity) },
@@ -310,14 +313,14 @@ fun SelfScanBasketSheet(
  * them. With [removing] the bottom line becomes the question whether to take it out.
  */
 @Composable
-private fun SelfScanLine(line: SsItem, link: ListLink, sending: Boolean, removing: Boolean, onQuantity: (Int) -> Unit, onKeep: () -> Unit, onRemove: () -> Unit) {
+private fun SelfScanLine(line: SsItem, link: ListLink, tillProduct: Product?, sending: Boolean, removing: Boolean, onQuantity: (Int) -> Unit, onKeep: () -> Unit, onRemove: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val quantity = line.quantity ?: 1
     val product = when (link) {
         is ListLink.OnList -> link.item.match("AH")?.effective
         is ListLink.Extra -> link.scan.product
         ListLink.Unknown -> null
-    }
+    } ?: tillProduct
     val title = line.description?.trim()?.ifBlank { null } ?: line.barcode
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {

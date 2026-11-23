@@ -8,6 +8,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import nl.baskt.AppContainer
 import nl.baskt.data.AppSettings
@@ -31,6 +34,7 @@ import nl.baskt.data.DealCard
 import nl.baskt.data.Deal
 import nl.baskt.data.DealsResponse
 import nl.baskt.data.Product
+import nl.baskt.data.weightText
 import nl.baskt.data.PurchaseLine
 import nl.baskt.data.ProductSearchResponse
 import nl.baskt.data.PriceChangesResponse
@@ -1128,14 +1132,65 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
     val tripScans: StateFlow<List<TripScan>> = basket.tripScans
     private val removedTillCodes = mutableMapOf<String, nl.baskt.data.TillCode>()
+    /** Scans whose removal also took one off the AH basket, so undo puts it back there too. */
+    private val removedFromAh = mutableSetOf<String>()
+    /** Takes a scan back from the trip and, while AH self-scan runs, one of it off the AH basket too. */
     fun removeScan(scan: TripScan) = viewModelScope.launch {
+        dropScan(scan)
+        takeOffAh(scan)
+    }
+    private suspend fun dropScan(scan: TripScan) {
         basket.tillCodes.value.firstOrNull { it.scanId == scan.id }?.let { removedTillCodes[scan.id] = it }
         basket.removeScan(scan)
+    }
+    private suspend fun takeOffAh(scan: TripScan) {
+        val state = container.selfScan.state.value
+        if (scan.store != "AH" || !state.active) return
+        val line = state.basket?.products.orEmpty().lastOrNull { nl.baskt.data.sameTillCode(it.barcode, scan.barcode) } ?: return
+        if (container.selfScan.setQuantity(line.barcode, (line.quantity ?: 1) - 1)) removedFromAh += scan.id
+        else notify("Couldn’t take it off the AH basket; remove it there too")
     }
     /** Undo of [removeScan]: the same code, recorded at the time it was first scanned (and kept for the till again). */
     fun restoreScan(scan: TripScan) = viewModelScope.launch {
         val code = removedTillCodes.remove(scan.id)
+        if (removedFromAh.remove(scan.id)) container.selfScan.add(code?.raw ?: scan.barcode)
         basket.scanItem(scan.store, code?.raw ?: scan.barcode, scan.at, code?.format)
+    }
+
+    /**
+     * AH till numbers (`nasaNr` on each self-scan line) to catalogue products. A label from a store scale is a code no
+     * product lookup knows, but AH's line for it has the till number, which names it and gives it a picture.
+     */
+    private val _tillProducts = MutableStateFlow<Map<String, Product>>(emptyMap())
+    val tillProducts: StateFlow<Map<String, Product>> = _tillProducts
+    private val askedTill = mutableSetOf<String>()
+
+    init {
+        viewModelScope.launch {
+            container.selfScan.state.map { it.basket?.products.orEmpty() }.distinctUntilChanged().collect { lines ->
+                val wanted = lines.mapNotNull { it.nasaNr?.trim()?.ifBlank { null } }.filter { it !in askedTill }.distinct()
+                if (wanted.isEmpty()) return@collect
+                askedTill += wanted
+                runCatching { container.api.ahTillProducts(wanted) }
+                    .onSuccess { result -> _tillProducts.update { it + result.products } }
+                    .onFailure { askedTill -= wanted.toSet() }
+            }
+        }
+        // A trip scan nothing could name takes its AH line's name, picture, weight and price.
+        viewModelScope.launch {
+            combine(container.selfScan.state.map { it.basket?.products.orEmpty() }.distinctUntilChanged(), _tillProducts, basket.tripScans) { lines, products, scans -> Triple(lines, products, scans) }
+                .collect { (lines, products, scans) ->
+                    for (scan in scans) {
+                        if (scan.store != "AH" || scan.product != null || !scan.synced) continue
+                        val line = lines.lastOrNull { nl.baskt.data.sameTillCode(it.barcode, scan.barcode) } ?: continue
+                        val product = line.nasaNr?.let { products[it.trim()] }
+                        val title = product?.title ?: line.description?.trim()?.ifBlank { null } ?: continue
+                        val each = line.price?.let { it / (line.quantity ?: 1).coerceAtLeast(1) }
+                        val label = nl.baskt.data.ScannedLabel(title, line.weightText() ?: product?.quantityText, product?.imageUrl, "ah", each)
+                        basket.labelScanFromTill(scan.id, label)
+                    }
+                }
+        }
     }
 
     /** AH in-store self-scan: the live AH basket for this trip (store Wi-Fi only). */
@@ -1200,10 +1255,14 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     /** Quantity edit on an AH line; at 0 the line leaves the AH basket and baskt takes back what that scan did. */
     fun setSelfScanQuantity(store: String, barcode: String, quantity: Int) = viewModelScope.launch {
-        if (!container.selfScan.setQuantity(barcode, quantity) || quantity > 0) return@launch
+        val before = container.selfScan.state.value.basket?.item(barcode)?.quantity ?: 1
+        if (!container.selfScan.setQuantity(barcode, quantity)) return@launch
+        // Each one fewer on AH takes back one extra scan of it, so both baskets keep the same count.
+        val extras = basket.tripScans.value.filter { it.store == store && nl.baskt.data.sameTillCode(barcode, it.barcode) }
+        val taken = extras.takeLast((before - quantity).coerceAtLeast(0))
+        for (extra in taken) dropScan(extra)
+        if (quantity > 0 || taken.isNotEmpty()) return@launch
         val gtin = nl.baskt.data.productGtin(barcode) ?: barcode
-        val extra = basket.tripScans.value.lastOrNull { it.store == store && it.barcode == gtin }
-        if (extra != null) { removeScan(extra); return@launch }
         val ticked = basket.tickedByBarcode.value[gtin]?.let { id -> basket.items.value.firstOrNull { it.id == id && it.isBought } }
         if (ticked != null) { basket.unbuy(ticked); basket.tickedByBarcode.update { it - gtin } }
     }
