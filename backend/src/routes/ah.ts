@@ -4,6 +4,7 @@ import { HttpError } from "@/lib/http";
 import { accountStatus, activateOffer, AhAccountError, connect, disconnect, personalOffers, setAutoActivate, type PersonalOffersView } from "@/stores/ah-account";
 import { clearLastChance, lastChance } from "@/stores/ah-last-chance";
 import { importAhReceipts } from "@/stores/ah-receipts";
+import { tillProducts } from "@/stores/ah-till";
 import { productsByIds } from "@/stores/search";
 
 /** The user's Albert Heijn account: login, personal Bonus offers and their activation. */
@@ -64,6 +65,20 @@ ahRoute.get("/last-chance", async (c) => {
     const view = await lastChance({ force: c.req.query("force") === "true" });
     const products = productsByIds(view.items.map((item) => item.productId));
     return c.json({ ...view, products: Object.fromEntries(products.map((row) => [row.id, row])) });
+  } catch (error) {
+    return failure(c, error);
+  }
+});
+
+/**
+ * Catalogue products for AH till article numbers (`nasaNr` on self-scan lines), so a weighed label scanned in the
+ * store shows a name and a picture: `{"nasaNrs":["805097"]}` → `{"products":{"805097":{...}}}`.
+ */
+ahRoute.post("/till-products", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { nasaNrs?: unknown };
+  const nasaNrs = Array.isArray(body.nasaNrs) ? body.nasaNrs.filter((nr): nr is string => typeof nr === "string") : [];
+  try {
+    return c.json({ products: await tillProducts(nasaNrs) });
   } catch (error) {
     return failure(c, error);
   }

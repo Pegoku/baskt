@@ -37,7 +37,7 @@ const DETAIL_QUERY = `query($id: String!) { posReceiptDetails(id: $id) {
 } }`;
 
 /** Till product ids to webshop ids (AH answers -1 or null for products not sold online). */
-async function webshopIds(posIds: number[]): Promise<Map<number, number>> {
+export async function webshopIds(posIds: number[]): Promise<Map<number, number>> {
   const unique = [...new Set(posIds)];
   const result = new Map<number, number>();
   for (let start = 0; start < unique.length; start += 40) {
