@@ -16,6 +16,8 @@ export type MatchView = {
   packs: Record<string, ProductView[]>;
   equivalences: Record<string, string>;
   hasMore: boolean;
+  /** Earlier options sit before the shown page, so "Back" can bring them back. */
+  hasPrevious: boolean;
   hasRejectedSuggestions: boolean;
   totalCandidates: number;
   page: number;
@@ -62,6 +64,7 @@ export function matchView(match: BasketMatchRow, products: Map<string, ProductRo
     equivalences: Object.fromEntries(optionIds.map((id) => [id, match.equivalences[id] ?? "EQUIVALENT"])),
     hasRejectedSuggestions: match.hasRejectedSuggestions,
     hasMore: match.status !== "EXHAUSTED",
+    hasPrevious: match.windowStart > 0 && match.candidateIds.length > 0,
     totalCandidates: match.candidateIds.length,
     page: Math.max(1, Math.floor(match.windowStart / OPTIONS_PER_PAGE) + 1),
     confidence: match.confidence,

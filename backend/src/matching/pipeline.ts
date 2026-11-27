@@ -465,7 +465,7 @@ export function resetRejections(itemId: string, store: string) {
   });
 }
 
-/** "None of them fit": remember the rejection and show the next options, searching wider when needed. */
+/** "Next" (none of these fit): remember the rejection and show the next options, searching wider when needed. */
 export async function rejectShown(itemId: string, store: string) {
   const item = getItem(itemId);
   const match = getMatch(itemId, store);
@@ -548,6 +548,27 @@ export async function rejectShown(itemId: string, store: string) {
     status: "PENDING",
     chosenProductId: null,
     chosenBy: "AI",
+    updatedAt: now(),
+  });
+}
+
+/** "Back": show the previous page of options again, without touching what was learned from "Next". */
+export function previousPage(itemId: string, store: string) {
+  const match = getMatch(itemId, store);
+  if (!match) return null;
+  if (match.windowStart <= 0 || !match.candidateIds.length) return match;
+  // Pages line up on OPTIONS_PER_PAGE (as the page number does), so going back from "Nothing found" or from
+  // the short tail of a page lands on the start of the page before.
+  const current = Math.min(match.windowStart, match.candidateIds.length);
+  const windowStart = Math.max(0, (Math.ceil(current / OPTIONS_PER_PAGE) - 1) * OPTIONS_PER_PAGE);
+  return saveMatch({
+    ...match,
+    windowStart,
+    shownCount: Math.min(windowStart + OPTIONS_PER_PAGE, match.candidateIds.length),
+    status: "PENDING",
+    chosenProductId: null,
+    chosenBy: "AI",
+    reason: match.status === "EXHAUSTED" ? null : match.reason,
     updatedAt: now(),
   });
 }

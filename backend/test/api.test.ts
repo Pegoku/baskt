@@ -129,6 +129,7 @@ describe("api", () => {
     expect(match.status).toBe("PENDING");
     expect(match.page).toBe(2);
     expect(match.hasRejectedSuggestions).toBe(true);
+    expect(match.hasPrevious).toBe(true);
     expect(match.options.map((option: any) => option.id)).toEqual(["AH:4"]);
     const memory = (await (await api("/memory")).json()) as any;
     expect(memory.choices).toHaveLength(1);
@@ -141,6 +142,19 @@ describe("api", () => {
     const match = item.matches.find((entry: any) => entry.store === "AH");
     expect(match.status).toBe("EXHAUSTED");
     expect(match.options).toEqual([]);
+  });
+
+  test("back from nothing found shows the last page, then the first", async () => {
+    let item = (await (await api(`/basket/items/${itemId}/matches/AH/back`, { method: "POST" })).json()) as any;
+    let match = item.matches.find((entry: any) => entry.store === "AH");
+    expect(match.status).toBe("PENDING");
+    expect(match.page).toBe(2);
+    expect(match.options.map((option: any) => option.id)).toEqual(["AH:4"]);
+    item = (await (await api(`/basket/items/${itemId}/matches/AH/back`, { method: "POST" })).json()) as any;
+    match = item.matches.find((entry: any) => entry.store === "AH");
+    expect(match.page).toBe(1);
+    expect(match.hasPrevious).toBe(false);
+    expect(match.options).toHaveLength(3);
   });
 
   test("manual search adds new options", async () => {
