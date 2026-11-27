@@ -142,6 +142,7 @@ fun ShopModeScreen(viewModel: AppViewModel, store: String, onBack: () -> Unit) {
     val codedItems = codesHere.mapNotNull { it.itemId }.toSet()
     // A scan the phone already put on a basket item is shown on that item, not again as an extra.
     val scansHere = tripScans.filter { scan -> scan.store == store && System.currentTimeMillis() - scan.at < tripWindow && codesHere.none { it.scanId == scan.id && it.itemId != null } }
+        .sortedByDescending { it.at }
     // Items ticked off on an earlier visit still show here (bought at this store), but nothing about them is owed to
     // this trip's till: they are "previously bought", not "not scanned". A visit ends when it is paid for (Paid,
     // self-scan checkout, or a receipt that lists the item) or after a long pause.

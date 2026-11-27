@@ -223,7 +223,8 @@ fun SelfScanBasketSheet(
         tripScans.lastOrNull { sameTillCode(line.barcode, it.barcode) }?.let { return if (it.synced) ListLink.Extra(it) else ListLink.Unknown }
         return ListLink.Unknown
     }
-    val lines = basket?.products.orEmpty()
+    // AH appends each new scan at the end; the latest one goes on top, where it is checked right after scanning.
+    val lines = basket?.products.orEmpty().asReversed()
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         SheetBody(
             title = "AH basket",
