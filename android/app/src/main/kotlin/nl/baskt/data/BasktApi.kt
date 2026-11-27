@@ -248,6 +248,9 @@ class BasktApi(private val settingsProvider: () -> AppSettings, private val oper
     suspend fun reject(id: String, store: String): BasketItem =
         client.post(url("/basket/items/$id/matches/$store/reject")) { auth() }.expect()
 
+    suspend fun previousPage(id: String, store: String): BasketItem =
+        client.post(url("/basket/items/$id/matches/$store/back")) { auth() }.expect()
+
     suspend fun searchMore(id: String, store: String, query: String): BasketItem =
         client.post(url("/basket/items/$id/matches/$store/search")) {
             auth(); contentType(ContentType.Application.Json); setBody(QueryRequest(query))

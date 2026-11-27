@@ -820,6 +820,7 @@ class BasketRepository(
 
     suspend fun resetRejections(item: BasketItem, store: String) = guard { replace(api.resetRejections(item.id, store)) }
     suspend fun reject(item: BasketItem, store: String) = guard { replace(api.reject(item.id, store)) }
+    suspend fun previousPage(item: BasketItem, store: String) = guard { replace(api.previousPage(item.id, store)) }
     suspend fun unskip(item: BasketItem, store: String) = queued(PendingOp(type = "unskip", itemId = item.id, store = store), {
         patchLocal(item.id) { it.copy(matches = it.matches.map { match -> if (match.store == store) match.copy(status = "PENDING") else match }) }
     })

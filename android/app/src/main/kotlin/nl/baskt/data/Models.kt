@@ -144,6 +144,8 @@ data class StoreMatch(
     val packs: Map<String, List<Product>> = emptyMap(),
     val equivalences: Map<String, String> = emptyMap(),
     val hasMore: Boolean = true,
+    /** Earlier options sit before the shown page, so "Back" can bring them back. */
+    val hasPrevious: Boolean = false,
     val hasRejectedSuggestions: Boolean = false,
     val totalCandidates: Int = 0,
     val page: Int = 1,

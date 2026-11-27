@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +20,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -29,6 +32,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -38,6 +42,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
@@ -205,6 +210,7 @@ fun ItemDetailScreen(viewModel: AppViewModel, itemId: String, onBack: () -> Unit
                             onChoose = { productId -> viewModel.choose(item, store.code, productId) },
                             onReset = { viewModel.resetRejections(item, store.code) },
                             onReject = { viewModel.reject(item, store.code) },
+                            onBack = { viewModel.previousPage(item, store.code) },
                             onSearch = { query -> viewModel.searchMore(item, store.code, query) },
                             onThumbDown = { product -> viewModel.rejectWithUndo(item, store.code, product) },
                             onUnskip = { viewModel.unskip(item, store.code) },
@@ -271,7 +277,8 @@ private fun Header(item: BasketItem, onQuantity: (Int) -> Unit) {
 
 /**
  * One store's side of the item. Chosen: the product, its price history and why it was picked. Otherwise the
- * options, each with a "Choose" button, and the ways out: none fit, search by hand, or not at this store.
+ * options, each with a "Choose" button, Back and Next to page through them, and the ways out: search by hand,
+ * or not at this store.
  */
 @Composable
 private fun StoreCard(
@@ -282,6 +289,7 @@ private fun StoreCard(
     removing: Set<String>,
     onChoose: (String?) -> Unit,
     onReject: () -> Unit,
+    onBack: () -> Unit,
     onReset: () -> Unit,
     onSearch: (String) -> Unit,
     onThumbDown: (Product) -> Unit,
@@ -372,7 +380,9 @@ private fun StoreCard(
                 // Short labels in a row that wraps, so a long store name never squeezes or clips a button.
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), modifier = Modifier.fillMaxWidth()) {
                     TextButton(onClick = { onChoose(null) }, enabled = !busy) { Text("Not at $name") }
-                    if (options.isNotEmpty()) FilledTonalButton(onClick = onReject, enabled = !busy) { Text("None fit") }
+                    if (match.hasPrevious) PageButton(back = true, enabled = !busy, onClick = onBack)
+                    // Next says none of these fit: the server remembers that and searches wider after the last page.
+                    if (options.isNotEmpty()) PageButton(back = false, enabled = !busy, onClick = onReject)
                 }
             }
 
@@ -380,6 +390,7 @@ private fun StoreCard(
                 if (match.reason != null && !busy) Reason(match.reason, showOriginal)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), modifier = Modifier.fillMaxWidth()) {
                     TextButton(onClick = { onChoose(null) }, enabled = !busy) { Text("Not at $name") }
+                    if (match.hasPrevious) PageButton(back = true, enabled = !busy, onClick = onBack)
                     // Asks the server to understand the product and search for substitutes.
                     FilledTonalButton(onClick = onReject, enabled = !busy) { IconLabel(Icons.Default.Search, "Search alternatives") }
                 }
@@ -401,6 +412,20 @@ private fun StoreCard(
 @Composable
 private fun Reason(text: String, showOriginal: Boolean) {
     TranslatedText(text, style = MaterialTheme.typography.bodySmall, showOriginal = showOriginal, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+/** Back (outlined, arrow first) or Next (tonal, arrow last) through the pages of options. */
+@Composable
+private fun PageButton(back: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val padding = if (back) ButtonDefaults.ButtonWithIconContentPadding
+    else PaddingValues(start = 24.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)
+    if (back) OutlinedButton(onClick = onClick, enabled = enabled, contentPadding = padding) {
+        IconLabel(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Back")
+    } else FilledTonalButton(onClick = onClick, enabled = enabled, contentPadding = padding) {
+        Text("Next", maxLines = 1)
+        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+    }
 }
 
 /** Small progress mark for a card header. */
