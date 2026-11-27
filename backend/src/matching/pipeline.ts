@@ -81,6 +81,13 @@ function saveMatch(match: BasketMatchRow) {
 }
 
 /** Runs the parse → search → rank pipeline for an item in the background. */
+/** Recipe ingredients still due a stock check on their first parse; user-typed items never get one. */
+const stockCheckPending = new Set<string>();
+
+export function checkStockOnParse(itemId: string) {
+  stockCheckPending.add(itemId);
+}
+
 export function enqueue(itemId: string) {
   if (running.has(itemId)) return running.get(itemId)!;
   const task = processItem(itemId)
@@ -206,7 +213,7 @@ export async function processItem(
   updateItem(itemId, { status: "MATCHING", parsedJson: parsed });
   // A recipe ingredient whose wording missed the stock check ("sal" vs "Keukenzout") gets a second look on
   // its first parse, with the parsed name and search terms. Later reparses leave a user's untick alone.
-  if (item.parentId && !item.parsedJson && !getItem(itemId)?.checked && skipInStock()) {
+  if (stockCheckPending.delete(itemId) && !item.parsedJson && !getItem(itemId)?.checked && skipInStock()) {
     const have = inStockParsed(parsed);
     if (have) updateItem(itemId, { checked: true, skippedReason: `in stock: ${have.text}` });
   }

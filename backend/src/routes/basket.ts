@@ -8,7 +8,7 @@ import { addStock, inStock, listStock } from "@/stock";
 import { forgetBought, recordBought } from "@/orders";
 import { enabledStoreCodes } from "@/db/settings";
 import { compareBasket, type CompareMatch } from "@/matching/compare";
-import { chooseMatch, enqueue, feedback, getItem, getMatches, isRunning, rejectShown, resetRejections, rematchItem, searchMoreCandidates, unskipMatch } from "@/matching/pipeline";
+import { chooseMatch, enqueue, feedback, getItem, getMatches, isRunning, rejectShown, resetRejections, checkStockOnParse, rematchItem, searchMoreCandidates, unskipMatch } from "@/matching/pipeline";
 import { splitShoppingText } from "@/matching/parse";
 import { suggest } from "@/matching/suggest";
 import { buildRecipeGroup, itemsForServings, looksLikeRecipe, type RecipeItem } from "@/matching/recipes";
@@ -72,8 +72,6 @@ function viewOf(itemId: string) {
 export function createItem(text: string, quantity: number, parentId: string | null = null, kind: BasketItemRow["kind"] = "item", basketId = DEFAULT_BASKET_ID) {
   const database = db();
   const last = database.select({ sortOrder: basketItems.sortOrder }).from(basketItems).orderBy(desc(basketItems.sortOrder)).get();
-  // Ideas you already have at home arrive checked, with the reason, instead of being bought twice.
-  const have = kind === "item" && skipInStock() ? inStock(text) : null;
   const item: BasketItemRow = {
     id: newId(),
     basketId: parentId ? getItem(parentId)?.basketId ?? basketId : basketId,
@@ -81,10 +79,10 @@ export function createItem(text: string, quantity: number, parentId: string | nu
     parentId,
     recipeJson: null,
     assignedStore: null,
-    skippedReason: have ? `in stock: ${have.text}` : null,
+    skippedReason: null,
     text: text.trim(),
     quantity: Math.max(1, Math.floor(quantity || 1)),
-    checked: Boolean(have),
+    checked: false,
     boughtAt: null,
     sortOrder: (last?.sortOrder ?? -1) + 1,
     status: "NEW",
@@ -122,14 +120,17 @@ export function createItemForShare(text: string, basketId: string) {
   return looksLikeRecipe(text) ? createGroup(text, undefined, basketId) : createItem(text, 1, null, "item", basketId);
 }
 
-/** Creates child items, leaving out (and reporting) ingredients already in stock. */
+/**
+ * Creates a recipe's ingredients, leaving out (and reporting) the ones already in stock. Only these get the
+ * stock check: an item the user typed is wanted even when something similar is at home.
+ */
 function createChildren(groupId: string, items: RecipeItem[]) {
   const stockRows = skipInStock() ? listStock() : [];
   const skipped: Array<{ text: string; quantity: number; reason: string }> = [];
   for (const child of items) {
     const have = stockRows.length ? inStock(child.text, stockRows) : null;
     if (have) skipped.push({ text: child.text, quantity: child.quantity, reason: `in stock: ${have.text}` });
-    else createItem(child.text, child.quantity, groupId);
+    else checkStockOnParse(createItem(child.text, child.quantity, groupId).id);
   }
   return skipped;
 }

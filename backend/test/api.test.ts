@@ -694,13 +694,11 @@ describe("api", () => {
     await api(`/basket/items/${copied.id}`, { method: "DELETE" });
   });
 
-  test("an idea already in stock arrives checked with the reason", async () => {
+  test("a typed idea stays wanted even when it is in stock", async () => {
     const zout = (await (await api("/stock", { method: "POST", body: JSON.stringify({ text: "zout" }) })).json()) as any;
     const item = (await (await api("/basket/items", { method: "POST", body: JSON.stringify({ text: "zout" }) })).json()) as any;
-    expect(item.checked).toBe(true);
-    expect(item.skippedReason).toBe("in stock: zout");
-    const unchecked = (await (await api(`/basket/items/${item.id}`, { method: "PATCH", body: JSON.stringify({ checked: false }) })).json()) as any;
-    expect(unchecked.skippedReason).toBeNull();
+    expect(item.checked).toBe(false);
+    expect(item.skippedReason).toBeNull();
     await api(`/basket/items/${item.id}`, { method: "DELETE" });
     await api(`/stock/${zout.id}`, { method: "DELETE" });
   });
